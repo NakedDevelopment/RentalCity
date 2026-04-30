@@ -231,6 +231,7 @@ Use Supabase Cloud unless there is a clear requirement for self-hosting.
 | Browse property matches | `properties` + `tenant_preferences` filter | RLS: public read for active listings |
 | Apply to listings | `applications` insert, Stripe fee | Tenant writes own application; fee via custom backend |
 | Message landlords | `messages` insert, Realtime | RLS: participant can read/write own messages |
+| Report user (safety) | `reports` insert | RLS: reported user must be the other party in a `message_threads` row with reporter |
 | Application profile | `profiles`, `applications` read | Own data only |
 | Notifications | `notifications` read/update | RLS: `user_id = auth.uid()` |
 | Delete account | Auth + cascade delete | Custom endpoint + triggers |
@@ -244,7 +245,7 @@ Use Supabase Cloud unless there is a clear requirement for self-hosting.
 | Review tenant matches | `applications` read, `tenant_preferences` | Landlord sees applications for own properties |
 | Message applicants | `messages` insert, Realtime | RLS: participant can read/write |
 | Account settings | `profiles` update | Own profile only |
-| Report tenants | `reports` insert | Landlord can create reports |
+| Report user (safety) | `reports` insert | Same rule as tenant: only the messaging counterpart can be reported |
 | Tenant ratings (private) | `tenant_ratings` read | Landlord-only view |
 
 ### Admin
@@ -253,7 +254,8 @@ Use Supabase Cloud unless there is a clear requirement for self-hosting.
 |---------------|---------------|--------------------|
 | Dashboard | Aggregation queries | Admin role; `is_admin` check |
 | User management | `profiles` CRUD, suspend/delete | Admin-only RLS policies |
-| Reported issues | `reports` read, moderation actions | Admin can update status, suspend users |
+| Support queue | `support_requests` read/update | Admin Issues → Support tab |
+| Reported issues | `reports` read/update | Admin Issues → Reports tab (Messaging-sourced) |
 | System notifications | `notifications` CRUD | Admin can create platform-wide notifications |
 | Account settings | `profiles` update | Own profile |
 
@@ -286,7 +288,9 @@ auth.users (Supabase managed)
 | `applications` | Tenant → property, status, screening_id, payment_id |
 | `messages` | Thread between tenant and landlord |
 | `notifications` | In-app notifications per user |
-| `reports` | Landlord reports on tenants; admin moderation |
+| `reports` | User-safety reports (Messages → Report user); reporter and reported user must share a thread; admin moderation |
+| `support_requests` | Product/help tickets from `/support` and account settings (signed-in users) |
+| `site_settings` | Key/value rows for public support copy and contact email (no secrets); admin-editable |
 | `tenant_ratings` | Landlord-only ratings of past tenants |
 | `payments` | Stripe payment records linked to applications |
 
@@ -302,7 +306,9 @@ auth.users (Supabase managed)
 | `applications` | Own CRUD | Read for own properties | All |
 | `messages` | Own threads | Own threads | All |
 | `notifications` | Own | Own | All + create system |
-| `reports` | — | Create | Read, update status |
+| `reports` | Create / read own submissions | Create / read own submissions | All |
+| `support_requests` | Create / read own | Create / read own | All |
+| `site_settings` | Read all | Read all | Read all; insert/update |
 | `tenant_ratings` | — | Read/create | All |
 | `payments` | Own | Own properties | All |
 

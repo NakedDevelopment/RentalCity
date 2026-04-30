@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 
-export type ProfileRole = 'tenant' | 'landlord'
+export type ProfileRole = 'tenant' | 'landlord' | 'admin'
 
 export type UseProfileRoleResult = {
   role: ProfileRole | null
@@ -21,6 +21,9 @@ export type UseProfileRoleResult = {
  * so that landlords never see tenant UI while role is loading.
  */
 export function useProfileRole(user: User | null): UseProfileRoleResult {
+  const userRef = useRef(user)
+  userRef.current = user
+
   const [role, setRole] = useState<ProfileRole | null>(null)
   const [displayName, setDisplayName] = useState<string | null>(null)
   const [landlordSurveyCompletedAt, setLandlordSurveyCompletedAt] = useState<string | null>(null)
@@ -36,9 +39,10 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
       .eq('id', user.id)
       .maybeSingle()
 
-    let resolved: ProfileRole = data?.role === 'landlord' ? 'landlord' : 'tenant'
+    let resolved: ProfileRole =
+      data?.role === 'admin' ? 'admin' : data?.role === 'landlord' ? 'landlord' : 'tenant'
     const signedUpAsLandlord = user.user_metadata?.role === 'landlord'
-    if (signedUpAsLandlord && resolved !== 'landlord') {
+    if (resolved !== 'admin' && signedUpAsLandlord && resolved !== 'landlord') {
       await supabase.from('profiles').update({ role: 'landlord' }).eq('id', user.id)
       resolved = 'landlord'
     }
@@ -50,8 +54,12 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
     setLoading(false)
   }, [user])
 
+  // Key off user id only: Supabase often emits new `user` object references (e.g. token refresh) without
+  // the id changing; re-running the full load would set loading=true and flicker admin (and other) shells.
+  const userId = user?.id
+
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setRole(null)
       setDisplayName(null)
       setLandlordSurveyCompletedAt(null)
@@ -64,19 +72,26 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
     setLoading(true)
 
     async function load() {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('role, display_name, landlord_survey_completed_at, tenant_survey_completed_at')
-        .eq('id', user.id)
+        .eq('id', userId)
         .maybeSingle()
 
       if (cancelled) return
 
-      let resolved: ProfileRole = data?.role === 'landlord' ? 'landlord' : 'tenant'
-      const signedUpAsLandlord = user.user_metadata?.role === 'landlord'
+      const currentUserAfter = userRef.current
+      if (!currentUserAfter || currentUserAfter.id !== userId) {
+        setLoading(false)
+        return
+      }
 
-      if (signedUpAsLandlord && resolved !== 'landlord') {
-        await supabase.from('profiles').update({ role: 'landlord' }).eq('id', user.id)
+      let resolved: ProfileRole =
+        data?.role === 'admin' ? 'admin' : data?.role === 'landlord' ? 'landlord' : 'tenant'
+      const signedUpAsLandlord = currentUserAfter.user_metadata?.role === 'landlord'
+
+      if (resolved !== 'admin' && signedUpAsLandlord && resolved !== 'landlord') {
+        await supabase.from('profiles').update({ role: 'landlord' }).eq('id', userId)
         resolved = 'landlord'
       }
 
@@ -91,7 +106,7 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [userId])
 
   return { role, displayName, landlordSurveyCompletedAt, tenantSurveyCompletedAt, loading, refetch }
 }

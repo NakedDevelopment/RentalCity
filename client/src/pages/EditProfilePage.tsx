@@ -44,6 +44,19 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   )
 }
 
+/** Landlord edit uses split name fields; profile stores a single display_name. */
+function splitDisplayName(displayName: string | null | undefined): { firstName: string; lastName: string } {
+  const t = (displayName ?? '').trim()
+  if (!t) return { firstName: '', lastName: '' }
+  const parts = t.split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return { firstName: parts[0]!, lastName: '' }
+  return { firstName: parts[0]!, lastName: parts.slice(1).join(' ') }
+}
+
+function joinDisplayName(firstName: string, lastName: string): string {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(' ').trim()
+}
+
 export function EditProfilePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -83,28 +96,44 @@ export function EditProfilePage() {
 
   useEffect(() => {
     async function loadProfile() {
-      if (!user) return
+      if (!user || profileRole === null) return
 
-      const { data } = await supabase
-        .from('profiles')
-        .select('display_name, avatar_url, phone, bio, city, business_name, landlord_property_count_range, landlord_experience_level')
-        .eq('id', user.id)
-        .maybeSingle()
+      // Use * so older DBs without landlord business columns (migration 20260401113000) don’t get PostgREST 400.
+      const { data, error: loadErr } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
+      if (loadErr) {
+        setError(loadErr.message)
+        return
+      }
+      setError(null)
 
       setProfile(data)
-      setFullName(data?.display_name?.trim() || '')
-      setPhoneNumber(data?.phone || '')
+      const display = data?.display_name?.trim() || ''
+      setFullName(display)
+      const phone = data?.phone || ''
+      setPhoneNumber(phone)
       setBio(data?.bio?.trim() || '')
       setCity(data?.city?.trim() || '')
       setLocation(data?.city?.trim() || '')
       setLandlordBio(data?.bio?.trim() || '')
+
+      if (profileRole === 'landlord') {
+        const { firstName: f, lastName: l } = splitDisplayName(data?.display_name)
+        setFirstName(f)
+        setLastName(l)
+        setPersonalPhone(phone)
+      } else {
+        setFirstName('')
+        setLastName('')
+        setPersonalPhone('')
+      }
+
       setBusinessName((data as any)?.business_name?.trim?.() ? (data as any).business_name.trim() : (data as any)?.business_name || '')
       setPropertyCount((data as any)?.landlord_property_count_range || '')
       setExperienceLevel((data as any)?.landlord_experience_level || '')
     }
 
     loadProfile()
-  }, [user])
+  }, [user, profileRole])
 
   if (roleLoading || profileRole === null) {
     return (
@@ -171,13 +200,27 @@ export function EditProfilePage() {
     setSaving(true)
     setError(null)
 
+    const displayNameOut =
+      profileRole === 'landlord'
+        ? joinDisplayName(firstName, lastName) || null
+        : fullName.trim() || null
+
+    const phoneOut =
+      profileRole === 'landlord'
+        ? (personalPhone.trim() || phoneNumber.trim()) || null
+        : phoneNumber.trim() || null
+
     const payload: Record<string, string | null> = {
-      display_name: fullName.trim() || null,
-      phone: phoneNumber.trim() || null,
+      display_name: displayNameOut,
+      phone: phoneOut,
       bio: (profileRole === 'tenant' ? bio : landlordBio).trim() || null,
       city: (profileRole === 'tenant' ? city : location).trim() || null,
     }
-    if (profileRole === 'landlord') {
+    if (
+      profileRole === 'landlord' &&
+      profile &&
+      'landlord_experience_level' in profile
+    ) {
       payload.business_name = businessName.trim() || null
       payload.landlord_property_count_range = propertyCount || null
       payload.landlord_experience_level = experienceLevel || null
@@ -244,7 +287,11 @@ export function EditProfilePage() {
                           onClick={() => setPhotoPreviewOpen(true)}
                           className="h-14 w-14 overflow-hidden rounded-full focus:outline-none focus:ring-2 focus:ring-gray-400"
                         >
-                          <img src={profile.avatar_url} alt={fullName} className="h-14 w-14 object-cover" />
+                          <img
+                            src={profile.avatar_url}
+                            alt={joinDisplayName(firstName, lastName) || fullName || 'Profile'}
+                            className="h-14 w-14 object-cover"
+                          />
                         </button>
                       ) : (
                         <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -488,7 +535,7 @@ export function EditProfilePage() {
             </button>
             <img
               src={profile.avatar_url}
-              alt={fullName}
+              alt={joinDisplayName(firstName, lastName) || fullName || 'Profile'}
               className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-xl"
               onClick={(e) => e.stopPropagation()}
             />

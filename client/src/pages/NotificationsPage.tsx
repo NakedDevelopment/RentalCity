@@ -44,7 +44,11 @@ function getPrimaryCta(
           : type === 'message'
             ? 'Reply'
             : 'View Details'
-    return { label, to: resolvedLink.startsWith('/') ? resolvedLink : `/${resolvedLink}`, primary: type === 'property_match' || type === 'listing_update' }
+    return {
+      label,
+      to: resolvedLink.startsWith('/') ? resolvedLink : `/${resolvedLink}`,
+      primary: type === 'property_match' || type === 'listing_update',
+    }
   }
   switch (type) {
     case 'property_match':

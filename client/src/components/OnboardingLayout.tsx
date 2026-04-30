@@ -1,7 +1,24 @@
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Navigate, Outlet } from 'react-router-dom'
+import { useAuth } from '../lib/useAuth'
+import { useProfileRole } from '../lib/useProfileRole'
 import { UserMenu } from './UserMenu'
 
 export function OnboardingLayout() {
+  const { user } = useAuth()
+  const { role, loading: roleLoading } = useProfileRole(user)
+
+  if (user && roleLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <span className="text-gray-500">Loading...</span>
+      </div>
+    )
+  }
+
+  if (user && role === 'admin') {
+    return <Navigate to="/admin" replace />
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <header className="border-b border-gray-200 bg-white">

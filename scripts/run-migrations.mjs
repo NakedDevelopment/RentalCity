@@ -129,11 +129,45 @@ const migration24 = readFileSync(
   'utf-8'
 )
 
+const migration25 = readFileSync(
+  join(__dirname, '../supabase/migrations/20260402140000_reports_rls_messaging_counterpart.sql'),
+  'utf-8'
+)
+
+const migration26 = readFileSync(
+  join(__dirname, '../supabase/migrations/20260403100000_site_settings.sql'),
+  'utf-8'
+)
+
 const client = new pg.Client({ connectionString: dbUrl })
+
+const APPLY_SINGLE_HINT = `This project’s Supabase DB already has schema (or you are not on an empty database).
+
+  "${'npm run db:migrate'}" replays the entire migration chain from zero and only succeeds on a fresh database.
+
+  To add new SQL to an existing Supabase project, apply one file at a time, for example:
+
+    npm run db:apply-sql -- supabase/migrations/20260401113000_landlord_profile_business_fields.sql
+
+  Or paste that file into Supabase Dashboard → SQL → New query.`
+
+async function assertEmptyForFullMigrate() {
+  const { rows } = await client.query(`
+    SELECT 1 FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'user_role' AND n.nspname = 'public'
+    LIMIT 1
+  `)
+  if (rows.length > 0) {
+    console.error(APPLY_SINGLE_HINT)
+    process.exit(1)
+  }
+}
 
 async function run() {
   try {
     await client.connect()
+    await assertEmptyForFullMigrate()
     console.log('Running initial schema...')
     await client.query(migration1)
     console.log('Initial schema OK')
@@ -210,9 +244,20 @@ async function run() {
     console.log('Running landlord profile business fields...')
     await client.query(migration24)
     console.log('landlord profile business fields OK')
+    console.log('Running reports RLS (messaging counterpart)...')
+    await client.query(migration25)
+    console.log('reports RLS OK')
+    console.log('Running site_settings...')
+    await client.query(migration26)
+    console.log('site_settings OK')
     console.log('Migrations complete.')
   } catch (err) {
-    console.error('Migration failed:', err.message)
+    const msg = err?.message ?? String(err)
+    console.error('Migration failed:', msg)
+    if (/already exists/i.test(msg)) {
+      console.error('')
+      console.error(APPLY_SINGLE_HINT)
+    }
     process.exit(1)
   } finally {
     await client.end()

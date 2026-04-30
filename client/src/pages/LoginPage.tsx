@@ -22,13 +22,21 @@ export function LoginPage() {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (error) {
       setError(error.message)
       return
     }
-    navigate('/')
+    const uid = data.user?.id
+    if (uid) {
+      const { data: prof } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle()
+      if (prof?.role === 'admin') {
+        navigate('/admin', { replace: true })
+        return
+      }
+    }
+    navigate('/', { replace: true })
   }
 
   return (

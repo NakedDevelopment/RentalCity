@@ -67,6 +67,27 @@ async function authUser(token: string | null) {
   return error || !user ? null : user
 }
 
+/** Resolves authenticated user id if they are an admin (profiles.role = admin); otherwise sends 401/403 and returns null. */
+async function requireAdmin(req: express.Request, res: express.Response): Promise<string | null> {
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return null
+  }
+  const admin = getSupabaseAdmin()
+  if (!admin) {
+    res.status(500).json({ error: 'Server configuration error' })
+    return null
+  }
+  const { data: prof, error } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle()
+  if (error || prof?.role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden' })
+    return null
+  }
+  return user.id
+}
+
 /** 0–100 for UI when overall_score is unset but dimension scores exist */
 function tenantDisplayScoreFromQuestionnaire(t: {
   overall_score?: number | null
@@ -859,6 +880,49 @@ app.get('/api/landlord/tenant-universal-application/:tenantId', async (req, res)
     return res.status(500).json({ error: 'Failed to load universal application' })
   }
   return res.json({ universalApplication: row ?? null })
+})
+
+/** Merged auth users + profiles for admin user management (emails from Auth). */
+app.get('/api/admin/directory', async (req, res) => {
+  const ok = await requireAdmin(req, res)
+  if (ok === null) return
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data: listData, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  if (listErr) {
+    return res.status(500).json({ error: listErr.message })
+  }
+  const users = listData?.users ?? []
+  const ids = users.map((u) => u.id)
+  if (ids.length === 0) {
+    return res.json({ users: [] })
+  }
+
+  const { data: profiles, error: pErr } = await admin
+    .from('profiles')
+    .select('id, role, display_name, is_suspended, created_at, phone')
+    .in('id', ids)
+
+  if (pErr) {
+    return res.status(500).json({ error: pErr.message })
+  }
+
+  const profById = new Map((profiles ?? []).map((p) => [p.id as string, p]))
+  const rows = users.map((u) => {
+    const p = profById.get(u.id)
+    return {
+      id: u.id,
+      email: u.email ?? '',
+      role: (p?.role as string | undefined) ?? 'tenant',
+      display_name: (p?.display_name as string | null | undefined) ?? null,
+      is_suspended: Boolean(p?.is_suspended),
+      phone: (p?.phone as string | null | undefined) ?? null,
+      created_at: (p?.created_at as string | undefined) ?? u.created_at,
+    }
+  })
+
+  return res.json({ users: rows })
 })
 
 app.listen(PORT, () => {

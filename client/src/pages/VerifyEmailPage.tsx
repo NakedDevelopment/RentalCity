@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { fetchSiteSettingsMerged } from '../lib/siteSettings'
 import { supabase } from '../lib/supabase'
 
 type LocationState = {
@@ -115,7 +116,10 @@ export function VerifyEmailPage() {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">Need help?</p>
             <div className="mt-1 flex items-center justify-center gap-3 text-sm text-gray-900">
-              <a href="mailto:support@rentalcity.com" className="underline underline-offset-2 hover:text-gray-700">
+              <a
+                href={`mailto:${encodeURIComponent(supportEmail)}`}
+                className="underline underline-offset-2 hover:text-gray-700"
+              >
                 Contact Support
               </a>
               <Link to="/login" className="underline underline-offset-2 hover:text-gray-700">

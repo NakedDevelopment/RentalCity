@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Seed script for dummy data (properties, applications, payments, notifications).
+ * Seed script for dummy data (properties, applications, payments, notifications,
+ * support_requests + reports for admin Issues, etc.).
  * Requires: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
- * Run: node scripts/seed.mjs
+ * Run: npm run db:seed
  */
 
 import { config } from 'dotenv'
@@ -783,9 +784,141 @@ async function main() {
     console.log('Seeded', mainLandlordRatingSeeds.length, 'reviews from landlord@test.rentalcity.com')
   }
 
+  // Support requests + reports (admin /admin/issues demo — idempotent via [Demo] markers).
+  // Reports use only landlord ↔ main tenant pairs that have a message thread (matches RLS).
+  const demoSupportMarker = '[Demo] Billing question'
+  const { data: demoSupportExisting } = await supabase
+    .from('support_requests')
+    .select('id')
+    .eq('subject', demoSupportMarker)
+    .limit(1)
+  if (!demoSupportExisting?.length) {
+    const supportRows = [
+      {
+        user_id: tenantId,
+        subject: demoSupportMarker,
+        message:
+          'I was charged twice for the application fee on Feb 1. Can you help refund the duplicate? Transaction IDs available on request.',
+        status: 'open',
+      },
+      {
+        user_id: landlordId,
+        subject: '[Demo] Background check timing',
+        message:
+          'How long should I expect a standard background check to complete for an applicant? One has been pending for 5 business days.',
+        status: 'in_progress',
+      },
+      {
+        user_id: tenantId,
+        subject: '[Demo] Mobile: blank applications screen',
+        message:
+          'After logging in on iOS Safari I only see a blank screen on /applications. Desktop Chrome works fine.',
+        status: 'resolved',
+      },
+      {
+        user_id: landlordId,
+        subject: '[Demo] Listing photos out of order',
+        message: 'I reordered photos in the editor but the public listing still shows the old order after saving.',
+        status: 'closed',
+      },
+    ]
+    const { error: supErr } = await supabase.from('support_requests').insert(supportRows)
+    if (supErr) {
+      console.warn('support_requests demo seed:', supErr.message)
+    } else {
+      console.log('Inserted', supportRows.length, 'demo support requests (admin Issues)')
+    }
+  } else {
+    console.log('Demo support requests already present')
+  }
+
+  const demoReportMarker = '[Demo] Noise complaints'
+  const { data: demoReportExisting } = await supabase
+    .from('reports')
+    .select('id')
+    .eq('reason', demoReportMarker)
+    .limit(1)
+  if (!demoReportExisting?.length) {
+    const reportRows = [
+      {
+        reporter_id: landlordId,
+        reported_user_id: tenantId,
+        reason: demoReportMarker,
+        details:
+          'Multiple neighbors contacted me about loud music past quiet hours (11pm–7am) on weekends. Documented dates: Mar 1, Mar 8.',
+        status: 'pending',
+      },
+      {
+        reporter_id: tenantId,
+        reported_user_id: landlordId,
+        reason: '[Demo] Unprofessional messages',
+        details:
+          'Repeated contact outside agreed hours after I asked to keep messages to business hours only.',
+        status: 'reviewed',
+      },
+      {
+        reporter_id: landlordId,
+        reported_user_id: tenantId,
+        reason: '[Demo] Property damage at move-out',
+        details:
+          'Beyond normal wear: large carpet stains in bedroom, hole in drywall behind door. Photos attached to property file.',
+        status: 'pending',
+      },
+      {
+        reporter_id: landlordId,
+        reported_user_id: tenantId,
+        reason: '[Demo] Resolved: payment dispute',
+        details: 'Tenant disputed last month rent; we agreed on a partial credit after walkthrough. No further action needed.',
+        status: 'resolved',
+      },
+    ]
+    const { error: repErr } = await supabase.from('reports').insert(reportRows)
+    if (repErr) {
+      console.warn('reports demo seed:', repErr.message)
+    } else {
+      console.log('Inserted', reportRows.length, 'demo user reports (admin Issues)')
+    }
+  } else {
+    console.log('Demo reports already present')
+  }
+
+  // Admin portal (dev only): auth user + profiles.role = admin
+  const ADMIN_EMAIL = 'admin@test.rentalcity.com'
+  let adminId
+  const adminListRes = await supabase.auth.admin.listUsers({ perPage: 1000 })
+  const adminExisting = adminListRes.data?.users?.find((u) => u.email === ADMIN_EMAIL)
+  if (adminExisting) {
+    adminId = adminExisting.id
+    console.log('Admin user exists:', ADMIN_EMAIL)
+  } else {
+    const { data: ad, error: ae } = await supabase.auth.admin.createUser({
+      email: ADMIN_EMAIL,
+      password: TEST_PASSWORD,
+      email_confirm: true,
+    })
+    if (ae) {
+      console.warn('Could not create admin user:', ae.message)
+    } else if (ad?.user) {
+      adminId = ad.user.id
+      console.log('Created admin:', ADMIN_EMAIL)
+    }
+  }
+  if (adminId) {
+    const { error: arErr } = await supabase
+      .from('profiles')
+      .update({ role: 'admin', display_name: 'System Admin' })
+      .eq('id', adminId)
+    if (arErr) console.warn('Admin profile role update:', arErr.message)
+  }
+
   console.log('Seeding complete.')
   console.log('Match states seeded: Locked (pending), Unlocked (pending+unlocked_at), Accepted (approved), Declined (rejected).')
-  console.log('Test logins: landlord@test.rentalcity.com / tenant@test.rentalcity.com with password:', TEST_PASSWORD)
+  console.log(
+    'Test logins: landlord@test.rentalcity.com / tenant@test.rentalcity.com /',
+    ADMIN_EMAIL,
+    'with password:',
+    TEST_PASSWORD,
+  )
   console.log('Run npm run db:migrate first if you have not applied the application unlocked_at migration.')
 }
 

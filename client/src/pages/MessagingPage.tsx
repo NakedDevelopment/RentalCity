@@ -413,7 +413,9 @@ export function MessagingPage() {
 
       const focus = conv.focusPropertyId
       const focusOk = focus != null && opts.some((o) => o.propertyId === focus)
-      setSelectedMatchPropertyId(focusOk ? focus : opts[0]?.propertyId ?? null)
+      // When thread context is general (null), keep general — do not default to first listing
+      // or choosing "General" in the UI snaps back to a property.
+      setSelectedMatchPropertyId(focusOk ? focus : null)
 
       setLoadingMatchOptions(false)
     }
@@ -538,7 +540,12 @@ export function MessagingPage() {
     setSubmittingReport(false)
 
     if (error) {
-      setError(error.message)
+      const msg = error.message.toLowerCase()
+      setError(
+        msg.includes('row-level security') || msg.includes('violates row-level security')
+          ? 'You can only report someone from this conversation. For anything else, use Support under Account settings.'
+          : error.message,
+      )
       return
     }
 
@@ -823,9 +830,13 @@ export function MessagingPage() {
             </div>
 
             <div className="px-1 pb-1">
-              <h2 className="text-center text-[1.55rem] font-medium text-gray-900">Report User</h2>
-              <p className="mx-auto mt-3 max-w-[255px] text-center text-sm leading-7 text-gray-600">
-                Help us keep our community safer. Tell us why you&apos;re reporting this user
+              <h2 className="text-center text-[1.55rem] font-medium text-gray-900">Report user</h2>
+              <p className="mx-auto mt-3 max-w-[280px] text-center text-sm leading-6 text-gray-600">
+                This sends a report to Rental City staff about <span className="font-medium text-gray-800">the person you are
+                messaging here</span>—not someone else. Misuse may affect your account.
+              </p>
+              <p className="mx-auto mt-2 max-w-[280px] text-center text-xs leading-5 text-gray-500">
+                For billing, bugs, or general help, use Support in Account settings instead.
               </p>
 
               <div className="mt-5 space-y-3.5">

@@ -1,6 +1,7 @@
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { fetchSiteSettingsMerged } from '../lib/siteSettings'
 import { supabase } from '../lib/supabase'
 
 export function PublicSupportPage() {
@@ -10,6 +11,23 @@ export function PublicSupportPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [responseLine, setResponseLine] = useState('')
+  const [hoursLine, setHoursLine] = useState('')
+  const [submitSuccessMessage, setSubmitSuccessMessage] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const s = await fetchSiteSettingsMerged(supabase)
+      if (cancelled) return
+      setResponseLine(s.support_response_time_line)
+      setHoursLine(s.support_hours_line)
+      setSubmitSuccessMessage(s.support_submit_success_message)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -48,7 +66,7 @@ export function PublicSupportPage() {
 
     setSubject('')
     setMessage('')
-    setSuccess('Support request submitted. Our team will follow up within 24 hours.')
+    setSuccess(submitSuccessMessage || 'Support request submitted. Our team will follow up within 24 hours.')
   }
 
   if (user) {
@@ -71,7 +89,8 @@ export function PublicSupportPage() {
             <div className="min-w-0">
               <h2 className="text-lg font-semibold text-gray-900">Contact Support</h2>
               <p className="mt-1 text-sm text-gray-600">
-                Our support team is here to help you with any questions or issues you may have.
+                Signed-in users send a real support ticket to our team. Sign in to continue, or use the links below if you
+                need an account.
               </p>
             </div>
           </div>
@@ -137,8 +156,8 @@ export function PublicSupportPage() {
             </svg>
             <div>
               <h2 className="text-[1.35rem] font-medium text-gray-900">Response Time</h2>
-              <p className="mt-3 text-sm text-gray-600">We typically respond within 24 hours</p>
-              <p className="mt-1 text-sm text-gray-500">Monday - Friday, 9 AM - 6 PM EST</p>
+              <p className="mt-3 text-sm text-gray-600">{responseLine || 'We typically respond within 24 hours'}</p>
+              <p className="mt-1 text-sm text-gray-500">{hoursLine || 'Monday - Friday, 9 AM - 6 PM EST'}</p>
             </div>
           </div>
         </section>

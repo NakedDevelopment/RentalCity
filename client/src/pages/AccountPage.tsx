@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { LandlordInviteTenantsCard } from '../components/LandlordInviteTenantsCard'
 import { LandlordRatingsGivenCard } from '../components/LandlordRatingsGivenCard'
@@ -68,6 +68,20 @@ function Card({
   )
 }
 
+function SectionEditButton({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link
+      to={to}
+      className="mt-4 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
+    >
+      {children}
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
+  )
+}
+
 function AvatarPlaceholder({ initials }: { initials: string }) {
   return (
     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-600">
@@ -95,11 +109,8 @@ export function AccountPage() {
     async function loadProfile() {
       if (!user || profileRole === null) return
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('display_name, avatar_url, phone, bio, city, created_at, business_name, landlord_property_count_range, landlord_experience_level')
-        .eq('id', user.id)
-        .maybeSingle()
+      // * avoids 400 when landlord business columns aren’t migrated yet on the linked Supabase project.
+      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
 
       setProfile(profileData)
 
@@ -201,18 +212,7 @@ export function AccountPage() {
 
     return (
       <div className="space-y-6">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <h1 className="text-[2rem] font-medium text-gray-900">My Profile</h1>
-          <Link
-            to="/account/edit"
-            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.586-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.414-8.586z" />
-            </svg>
-            Edit Profile
-          </Link>
-        </div>
+        <h1 className="mb-6 text-[2rem] font-medium text-gray-900">My Profile</h1>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
           <div className="space-y-5">
@@ -257,6 +257,7 @@ export function AccountPage() {
                   </div>
                 </div>
               </div>
+              <SectionEditButton to="/account/edit">Edit photo & name</SectionEditButton>
             </Card>
 
             <Card title="About Me">
@@ -265,6 +266,7 @@ export function AccountPage() {
                   ? profile.bio
                   : `I'm a professional property manager with over 6 years of experience in the San Francisco rental market. I believe in creating positive, long-term relationships with my tenants and maintaining high-quality living spaces. I'm responsive to maintenance requests and always available for any questions or concerns.`}
               </p>
+              <SectionEditButton to="/account/edit">Edit about me</SectionEditButton>
             </Card>
 
             <Card title="Business Information">
@@ -303,7 +305,9 @@ export function AccountPage() {
                     </svg>
                   </Link>
                 </div>
-              ) : null}
+              ) : (
+                <SectionEditButton to="/account/edit">Edit business information</SectionEditButton>
+              )}
             </Card>
 
             <Card title="Contact Information">
@@ -325,6 +329,7 @@ export function AccountPage() {
                   <p className="mt-1 text-sm text-gray-900">Michael Johnson - (415) 555-0199</p>
                 </div>
               </div>
+              <SectionEditButton to="/account/edit">Edit contact information</SectionEditButton>
             </Card>
 
             <LandlordRatingsGivenCard />

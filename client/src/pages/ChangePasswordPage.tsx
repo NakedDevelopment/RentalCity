@@ -53,7 +53,7 @@ export function ChangePasswordPage() {
       return
     }
 
-    navigate('/account/settings')
+    navigate(profileRole === 'admin' ? '/admin/profile' : '/account/settings')
   }
 
   const requirements = [
@@ -100,12 +100,14 @@ export function ChangePasswordPage() {
     )
   }
 
+  const settingsPath = profileRole === 'admin' ? '/admin/profile' : '/account/settings'
+
   if (profileRole === 'landlord') {
     return (
       <div className="flex min-h-full flex-col py-6">
         <div>
           <div className="mb-6">
-            <Link to="/account/settings" className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-900">
+            <Link to={settingsPath} className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-900">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
@@ -234,7 +236,7 @@ export function ChangePasswordPage() {
     <div className="px-4 py-8">
       <div className="mb-6">
         <Link
-          to="/account/settings"
+          to={settingsPath}
           className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-900"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -347,7 +349,7 @@ export function ChangePasswordPage() {
                 {loading ? 'Updating...' : 'Update Password'}
               </button>
               <Link
-                to="/account/settings"
+                to={settingsPath}
                 className="flex w-full items-center justify-center rounded-xl border border-gray-300 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancel

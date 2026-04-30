@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { useRedeemPendingLandlordInvite } from '../lib/useRedeemPendingLandlordInvite'
@@ -106,6 +106,8 @@ export function TenantLayout() {
   useEffect(() => {
     if (roleLoading) return
 
+    // Admins use <Navigate to="/admin" /> below — avoid navigate() here (double redirect + extra paint).
+
     // Landlord: redirect from / to wizard or matches
     if (profileRole === 'landlord') {
       if (location.pathname !== '/') return
@@ -136,6 +138,10 @@ export function TenantLayout() {
         <span className="text-gray-500">Loading...</span>
       </div>
     )
+  }
+
+  if (profileRole === 'admin') {
+    return <Navigate to="/admin" replace />
   }
 
   return (

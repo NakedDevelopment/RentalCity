@@ -1,7 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/useAuth'
+import { AdminLayout } from './components/AdminLayout'
 import { Layout } from './components/Layout'
 import { OnboardingLayout } from './components/OnboardingLayout'
+import { PostLoginRedirect } from './components/PostLoginRedirect'
 import { TenantLayout } from './components/TenantLayout'
 import { HomePage } from './pages/HomePage'
 import { AccountPage } from './pages/AccountPage'
@@ -61,6 +63,13 @@ import { TenantInviteLandingPage } from './pages/TenantInviteLandingPage'
 import { TenantAccountReviewsPage } from './pages/TenantAccountReviewsPage'
 import { LandlordRatingsGivenPage } from './pages/LandlordRatingsGivenPage'
 import { LandlordRatingsReceivedPage } from './pages/LandlordRatingsReceivedPage'
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'
+import { AdminUsersPage } from './pages/admin/AdminUsersPage'
+import { AdminUserDetailPage } from './pages/admin/AdminUserDetailPage'
+import { AdminIssuesPage } from './pages/admin/AdminIssuesPage'
+import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage'
+import { AdminSettingsPage } from './pages/admin/AdminSettingsPage'
+import { AdminProfilePage } from './pages/admin/AdminProfilePage'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -136,14 +145,14 @@ export default function App() {
         <Route path="property/preview" element={<AddPropertyPreviewPage />} />
       </Route>
       <Route path="/login" element={<Layout />}>
-        <Route index element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-        <Route path="forgot-password" element={user ? <Navigate to="/" replace /> : <ForgotPasswordPage />} />
+        <Route index element={user ? <PostLoginRedirect /> : <LoginPage />} />
+        <Route path="forgot-password" element={user ? <PostLoginRedirect /> : <ForgotPasswordPage />} />
       </Route>
       <Route path="/reset-password" element={<Layout />}>
         <Route index element={<ResetPasswordPage />} />
       </Route>
       <Route path="/signup" element={<Layout />}>
-        <Route index element={user ? <Navigate to="/" replace /> : <SignupPage />} />
+        <Route index element={user ? <PostLoginRedirect /> : <SignupPage />} />
         <Route path="verify" element={<VerifyEmailPage />} />
         <Route path="verified" element={<VerifyEmailSuccessPage />} />
       </Route>
@@ -161,6 +170,16 @@ export default function App() {
       </Route>
       <Route path="/invite" element={<Layout />}>
         <Route path=":token" element={<TenantInviteLandingPage />} />
+      </Route>
+      <Route path="/admin" element={user ? <AdminLayout /> : <Navigate to="/login" replace />}>
+        <Route index element={<AdminDashboardPage />} />
+        <Route path="users" element={<AdminUsersPage />} />
+        <Route path="users/:id" element={<AdminUserDetailPage />} />
+        <Route path="issues" element={<AdminIssuesPage />} />
+        <Route path="notifications" element={<AdminNotificationsPage />} />
+        <Route path="settings" element={<AdminSettingsPage />} />
+        <Route path="profile" element={<AdminProfilePage />} />
+        <Route path="change-password" element={<ChangePasswordPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
