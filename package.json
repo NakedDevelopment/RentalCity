@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "cd client && vite",
     "dev:server": "tsx watch server/index.ts",
-    "build": "cd client && vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "cd client && vite build && cd .. && esbuild ./server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "node dist/index.js",
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",

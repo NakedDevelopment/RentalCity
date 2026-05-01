@@ -4,6 +4,9 @@ config({ path: '.env.local' })
 config()
 import express from 'express'
 import cors from 'cors'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import fs from 'node:fs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   landlordAnswersToPrefs,
@@ -924,6 +927,27 @@ app.get('/api/admin/directory', async (req, res) => {
 
   return res.json({ users: rows })
 })
+
+// In production, serve the built client static assets and SPA fallback
+if (process.env.NODE_ENV === 'production') {
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
+  const candidates = [
+    path.resolve(__dirname, '../client/dist'),
+    path.resolve(__dirname, './client/dist'),
+    path.resolve(process.cwd(), 'client/dist'),
+  ]
+  const clientDist = candidates.find((p) => fs.existsSync(p))
+  if (clientDist) {
+    app.use(express.static(clientDist))
+    app.get(/^\/(?!api\/).*/, (_req, res) => {
+      res.sendFile(path.join(clientDist, 'index.html'))
+    })
+    console.log(`Serving client static assets from ${clientDist}`)
+  } else {
+    console.warn('No client/dist directory found; static assets not served')
+  }
+}
 
 app.listen(PORT, () => {
   console.log(`Rental City API running on http://localhost:${PORT}`)
