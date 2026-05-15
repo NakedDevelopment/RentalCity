@@ -403,7 +403,7 @@ export function CompatibilitySurveyPage() {
               type="button"
               onClick={() => canProceed && setStep((s) => s + 1)}
               disabled={!canProceed}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium ${ canProceed ? 'bg-primary text-white hover:bg-primary/90' : 'bg-gray-300 text-gray-500 cursor-not-allowed' }`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium ${ canProceed ? 'gradient-primary text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed' }`}
             >
               Next
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -415,7 +415,7 @@ export function CompatibilitySurveyPage() {
               type="button"
               disabled={!canProceed}
               onClick={() => canProceed && handleCompleteTenant()}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium ${ canProceed ? 'bg-primary text-white hover:bg-primary/90' : 'bg-gray-300 text-gray-500 cursor-not-allowed' }`}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium ${ canProceed ? 'gradient-primary text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed' }`}
             >
               Complete
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

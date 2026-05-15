@@ -47,3 +47,11 @@
 .btn-primary:hover {
   background: linear-gradient(83.7338deg, #00AAEE 11.921%, #2D68E8 90.638%);
 }
+
+.gradient-primary {
+  background: linear-gradient(83.7338deg, #00BBFF 11.921%, #3A7AFE 90.638%);
+}
+
+.gradient-primary:hover {
+  background: linear-gradient(83.7338deg, #00AAEE 11.921%, #2D68E8 90.638%);
+}

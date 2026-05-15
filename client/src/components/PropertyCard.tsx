@@ -32,7 +32,7 @@ export function PropertyCard({
           className="w-full h-full object-cover"
         />
         {perfectFit && (
-          <span className="absolute top-2 left-2 px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded">
+          <span className="absolute top-2 left-2 px-2 py-1 gradient-primary text-white text-xs font-medium rounded">
             Perfect Fit
           </span>
         )}

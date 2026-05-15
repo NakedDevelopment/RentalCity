@@ -156,7 +156,7 @@ export function SignupPage() {
             isSelected ? 'border-blue-500 bg-white' : 'border-gray-300 bg-white'
           }`}
         >
-          {isSelected ? <span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> : null}
+          {isSelected ? <span className="h-2.5 w-2.5 rounded-full gradient-primary" /> : null}
         </span>
         <span className="flex-1">
           <span className="flex items-center gap-2 text-sm font-medium text-gray-900">

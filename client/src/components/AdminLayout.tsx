@@ -114,7 +114,7 @@ export function AdminLayout() {
                     key={item.path}
                     to={item.path}
                     className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm transition-colors ${
-                      active ? 'bg-primary text-white' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
+                      active ? 'gradient-primary text-white' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
                     }`}
                   >
                     <NavIcon name={icon} />

@@ -174,7 +174,7 @@ export function TenantLayout() {
                     key={item.path}
                     to={item.path}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                      isActive ? 'bg-primary text-white' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
+                      isActive ? 'gradient-primary text-white' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
                     }`}
                   >
                     <NavIcon name={item.icon} />
