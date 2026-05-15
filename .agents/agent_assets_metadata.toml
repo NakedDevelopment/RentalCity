@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "hX366Hf086xdD7SoPKCne"
+uri = "file://docs/visual-spec.md"
+type = "text"
+title = "Rental City — Complete Visual Spec"
