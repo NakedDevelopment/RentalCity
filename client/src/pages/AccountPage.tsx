@@ -72,7 +72,7 @@ function SectionEditButton({ to, children }: { to: string; children: ReactNode }
   return (
     <Link
       to={to}
-      className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+      className="mt-4 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
     >
       {children}
       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -297,7 +297,7 @@ export function AccountPage() {
                   </p>
                   <Link
                     to="/account/edit"
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                   >
                     Complete business info
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -340,7 +340,7 @@ export function AccountPage() {
               </p>
               <Link
                 to="/onboarding/survey?mode=edit"
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
               >
                 Edit survey
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -470,7 +470,7 @@ export function AccountPage() {
             </p>
             <Link
               to="/account/edit/bio"
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
             >
               Edit
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -515,7 +515,7 @@ export function AccountPage() {
                 </div>
                 <Link
                   to="/account/edit/rental-history"
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                  className="inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                 >
                   Edit
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -528,7 +528,7 @@ export function AccountPage() {
                 <p className="text-sm text-gray-500">Add your rental history to help landlords assess your reliability.</p>
                 <Link
                   to="/account/edit/rental-history"
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                 >
                   Add rental history
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -548,7 +548,7 @@ export function AccountPage() {
                 </div>
                 <Link
                   to="/account/edit/employment"
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                 >
                   Edit
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -561,7 +561,7 @@ export function AccountPage() {
                 <p className="text-sm text-gray-500">Add your employment history to help landlords assess stability.</p>
                 <Link
                   to="/account/edit/employment"
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                 >
                   Add employment history
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -585,7 +585,7 @@ export function AccountPage() {
                 </div>
                 <Link
                   to="/account/edit/income"
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                 >
                   Edit
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -600,7 +600,7 @@ export function AccountPage() {
                 </p>
                 <Link
                   to="/account/edit/income"
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                 >
                   Add income
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -617,7 +617,7 @@ export function AccountPage() {
             </p>
             <Link
               to="/tenant-questionnaire"
-              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+              className="mt-3 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
             >
               Edit questionnaire
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -632,7 +632,7 @@ export function AccountPage() {
                 <TenantLeasePreferencesDisplay prefs={tenantPrefs} />
                 <Link
                   to="/account/edit/lease-preferences"
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                  className="inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                 >
                   Edit
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -645,7 +645,7 @@ export function AccountPage() {
                 <p className="text-sm text-gray-500">Add your lease preferences to improve matching.</p>
                 <Link
                   to="/account/edit/lease-preferences"
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
                 >
                   Set lease preferences
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

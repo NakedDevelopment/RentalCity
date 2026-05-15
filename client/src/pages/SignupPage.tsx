@@ -350,7 +350,7 @@ export function SignupPage() {
             <button
               type="submit"
               disabled={loading || !canSubmit}
-              className="w-full rounded-lg bg-primary py-3 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary disabled:opacity-100"
+              className="w-full rounded-lg btn-primary py-3 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:bg-primary disabled:opacity-100"
             >
               {loading ? 'Creating account...' : 'Create Account'}
             </button>

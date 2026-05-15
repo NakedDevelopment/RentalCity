@@ -116,7 +116,7 @@ export function AddPropertyIntroPage() {
 
           <Link
             to="/onboarding/property/basic-info"
-            className="mt-8 inline-flex items-center gap-2 rounded-lg bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
+            className="mt-8 inline-flex items-center gap-2 rounded-lg btn-primary px-8 py-3 text-sm font-medium text-white"
           >
             Add Property
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -203,7 +203,7 @@ export function ChangePasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl btn-primary py-3.5 text-sm font-medium text-white disabled:opacity-50"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c1.657 0 3-1.343 3-3V7a3 3 0 10-6 0v1c0 1.657 1.343 3 3 3zm-7 9h14a2 2 0 002-2v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a2 2 0 002 2z" />
@@ -344,7 +344,7 @@ export function ChangePasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center rounded-xl bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                className="flex w-full items-center justify-center rounded-xl btn-primary py-3 text-sm font-medium text-white disabled:opacity-50"
               >
                 {loading ? 'Updating...' : 'Update Password'}
               </button>

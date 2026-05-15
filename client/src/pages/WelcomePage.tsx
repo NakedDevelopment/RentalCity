@@ -9,7 +9,7 @@ export function WelcomePage() {
       <div className="w-full max-w-sm">
         <Link
           to="/signup"
-          className="block w-full py-3 px-4 bg-primary text-white font-medium text-center rounded-lg hover:bg-primary/90"
+          className="block w-full py-3 px-4 btn-primary text-white font-medium text-center rounded-lg"
         >
           Sign Up with Email
         </Link>

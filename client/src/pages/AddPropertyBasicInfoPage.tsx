@@ -211,7 +211,7 @@ export function AddPropertyBasicInfoPage() {
           <button
             type="button"
             onClick={() => navigate('/onboarding/property/community')}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-medium text-white hover:bg-primary/90"
+            className="inline-flex items-center gap-2 rounded-lg btn-primary px-6 py-3 text-sm font-medium text-white"
           >
             Next: Upload Photos
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

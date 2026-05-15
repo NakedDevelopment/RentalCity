@@ -73,7 +73,7 @@ export function ApplicationFormPage() {
             <button
               type="button"
               onClick={() => navigate('/matches?tab=applied')}
-              className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-base font-medium text-white hover:bg-primary/90"
+              className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl btn-primary px-5 py-3 text-base font-medium text-white"
             >
               Submit application
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -81,7 +81,7 @@ export function LandlordInviteTenantsCard() {
         type="button"
         onClick={() => void createLink()}
         disabled={creating}
-        className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
+        className="mt-4 inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
       >
         {creating ? 'Creating…' : 'Create invite link'}
       </button>

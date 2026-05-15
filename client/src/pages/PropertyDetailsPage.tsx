@@ -356,7 +356,7 @@ export function PropertyDetailsPage() {
           <div className="space-y-2">
             <Link
               to={`/applications/apply?propertyId=${property.id}`}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90"
+              className="flex w-full items-center justify-center gap-2 rounded-lg btn-primary py-3 text-sm font-medium text-white"
             >
               Apply Now
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

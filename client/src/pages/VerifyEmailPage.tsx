@@ -69,7 +69,7 @@ export function VerifyEmailPage() {
           <div className="mt-6 space-y-3">
             <a
               href={`mailto:${email}`}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 text-center text-sm font-medium text-white hover:bg-primary/90"
+              className="flex w-full items-center justify-center gap-2 rounded-lg btn-primary py-3 text-center text-sm font-medium text-white"
             >
               <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M2.94 5.5A2 2 0 014.75 4.5h10.5a2 2 0 011.81 1L10 9.94 2.94 5.5z" />

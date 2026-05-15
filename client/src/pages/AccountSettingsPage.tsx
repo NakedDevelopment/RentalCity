@@ -460,7 +460,7 @@ export function AccountSettingsPage() {
         </div>
         <Link
           to="/account/settings/payment-history"
-          className="inline-flex px-4 py-2.5 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90"
+          className="inline-flex px-4 py-2.5 btn-primary text-white text-sm font-medium rounded-lg"
         >
           View Charges
         </Link>

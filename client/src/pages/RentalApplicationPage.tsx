@@ -254,7 +254,7 @@ export function RentalApplicationPage() {
           )}
           <Link
             to="/applications/apply"
-            className="inline-flex items-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90"
+            className="inline-flex items-center rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
           >
             {isApplicationActive ? 'Renew Application' : 'Start Application'}
           </Link>
@@ -417,7 +417,7 @@ export function RentalApplicationPage() {
                         setStartingScreening(false)
                       }
                     }}
-                    className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                    className="inline-flex items-center justify-center rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
                     disabled={startingScreening}
                   >
                     {screening ? 'Continue screening' : 'Start screening'}
