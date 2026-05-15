@@ -143,7 +143,7 @@ export function ChangeEmailPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="inline-flex min-w-[130px] items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                  className="inline-flex min-w-[130px] items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
                 >
                   {loading ? 'Updating...' : 'Update Email'}
                   {!loading ? (
@@ -268,7 +268,7 @@ export function ChangeEmailPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="inline-flex min-w-[102px] items-center justify-center rounded-xl bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                className="inline-flex min-w-[102px] items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
               >
                 {loading ? 'Updating...' : 'Update Email'}
               </button>

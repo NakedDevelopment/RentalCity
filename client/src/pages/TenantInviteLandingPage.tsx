@@ -124,7 +124,7 @@ export function TenantInviteLandingPage() {
             type="button"
             disabled={redeeming}
             onClick={() => void redeemAndContinue()}
-            className="inline-flex items-center justify-center rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
           >
             {redeeming ? 'Applying…' : 'Continue to listings'}
           </button>
@@ -132,7 +132,7 @@ export function TenantInviteLandingPage() {
           <>
             <Link
               to="/signup"
-              className="inline-flex items-center justify-center rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800"
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90"
             >
               Create account
             </Link>

@@ -227,7 +227,7 @@ export function UniversalApplicationPage() {
                 <button
                   type="submit"
                   disabled={loading || loadingHistory}
-                  className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-gray-900 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading || loadingHistory ? (
                     'Processing…'
@@ -254,7 +254,7 @@ export function UniversalApplicationPage() {
               <>
                 <Link
                   to="/signup"
-                  className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-gray-900 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                  className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c-1.657 0-3 .895-3 2v2h6v-2c0-1.105-1.343-2-3-2zm6 2v2a2 2 0 01-2 2H8a2 2 0 01-2-2v-2a2 2 0 012-2V9a4 4 0 118 0v2a2 2 0 012 2zm-6-8a2 2 0 00-2 2v2h4V7a2 2 0 00-2-2z" />

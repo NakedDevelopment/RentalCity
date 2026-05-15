@@ -79,7 +79,7 @@ export function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
             >
               <span>{loading ? 'Sending...' : 'Send reset link'}</span>
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

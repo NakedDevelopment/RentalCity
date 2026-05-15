@@ -170,7 +170,7 @@ export function AddPropertyPhotosPage() {
 
               <button
                 type="button"
-                className="mt-5 inline-flex gap-2 rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                className="mt-5 inline-flex gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90"
                 onClick={(e) => {
                   e.stopPropagation()
                   fileInputRef.current?.click()
@@ -264,7 +264,7 @@ export function AddPropertyPhotosPage() {
           <button
             type="button"
             onClick={() => navigate('/onboarding/property/preview', { state: { photos: uploadedPhotos } })}
-            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-3 text-sm font-medium text-white hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-medium text-white hover:bg-primary/90"
           >
             Next: Preview Property
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -217,7 +217,7 @@ export function TenantQuestionnairePage() {
               type="button"
               onClick={() => (isBioStep ? handleBioNext() : canProceed && setStep((s) => s + 1))}
               disabled={!canProceed}
-              className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
             >
               Next
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -229,7 +229,7 @@ export function TenantQuestionnairePage() {
               type="button"
               onClick={handleComplete}
               disabled={!canProceed}
-              className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
             >
               Complete
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1,0 +1,56 @@
+We are doing Pass 3 — the final visual pass. Three targeted changes only.
+
+## CHANGE 1 — Sidebar: black → white
+
+In client/src/components/TenantLayout.tsx and client/src/components/AdminLayout.tsx:
+
+Find this class on the sidebar element:
+  bg-gray-900 text-white flex flex-col
+
+Replace with:
+  bg-white text-gray-900 flex flex-col border-r border-gray-100
+
+Then fix the nav item active/inactive states in the template literal:
+  OLD: isActive ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+  NEW: isActive ? 'bg-primary text-white' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
+
+## CHANGE 2 — Primary buttons: black → blue gradient
+
+Find every instance of this exact class pattern (it appears ~127 times as bg-gray-900 + hover:bg-gray-800 on buttons):
+
+  rounded-lg bg-gray-900 ... text-white hover:bg-gray-800
+  rounded-xl bg-gray-900 ... text-white hover:bg-gray-800
+  rounded-2xl bg-gray-900 ... text-white hover:bg-gray-800
+
+Replace bg-gray-900 with bg-primary and hover:bg-gray-800 with hover:bg-primary/90
+
+EXCEPTION — do NOT change bg-gray-900 on these non-button elements:
+  - The user avatar/initials circle (UserMenu.tsx)
+  - Message bubbles (MessagingPage.tsx — "rounded-md bg-gray-900 px-4 py-3")
+  - Step indicator circles ("flex h-7 w-7 ... bg-gray-900")
+  - Progress bar fills ("h-2 w-[95%] rounded-full bg-gray-900")
+  - Icon container squares ("flex h-10 w-10 ... bg-gray-900")
+  - The admin sidebar (AdminLayout.tsx sidebar — leave black)
+  - Tab indicators ("border-gray-900 text-gray-900" on active tab underlines)
+
+Only change bg-gray-900 when it's clearly a CTA button 
+(has py-2 or py-3, has text-white, has hover:bg-gray-800).
+
+## CHANGE 3 — Logo/brand icon: emerald → primary blue
+
+Find all instances of:
+  text-emerald-600
+
+On the home icon / logo mark only (in Layout.tsx, TenantLayout.tsx, AdminLayout.tsx).
+Replace with: text-primary
+
+Leave all other text-emerald-600 instances alone 
+(accepted badges, success states, etc).
+
+## After changes, report:
+1. How many bg-gray-900 buttons were updated
+2. Which files were modified
+3. Any instances you skipped and why
+4. Confirm the sidebar changes in both layout files
+
+DO NOT touch any logic, routing, or non-style code.

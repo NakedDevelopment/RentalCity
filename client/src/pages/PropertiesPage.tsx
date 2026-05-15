@@ -165,7 +165,7 @@ export function PropertiesPage() {
 
           <Link
             to="/onboarding/property/intro"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -219,7 +219,7 @@ export function PropertiesPage() {
             </p>
             <Link
               to="/onboarding/property/intro"
-              className="mt-6 inline-flex items-center justify-center rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800"
+              className="mt-6 inline-flex items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90"
             >
               Add Property
             </Link>
@@ -277,7 +277,7 @@ export function PropertiesPage() {
                 <div className="mt-4 flex items-center gap-3">
                   <Link
                     to={`/properties/${property.id}`}
-                    className="inline-flex flex-1 items-center justify-center rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                    className="inline-flex flex-1 items-center justify-center rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90"
                   >
                     View Property
                   </Link>

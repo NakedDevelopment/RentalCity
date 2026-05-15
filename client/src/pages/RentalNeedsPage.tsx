@@ -77,7 +77,7 @@ export function RentalNeedsPage() {
         type="button"
         onClick={handleSave}
         disabled={!timing || loading}
-        className="w-full py-3 bg-gray-900 text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-800"
+        className="w-full py-3 bg-primary text-white font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90"
       >
         {loading ? 'Saving...' : 'Save'}
       </button>

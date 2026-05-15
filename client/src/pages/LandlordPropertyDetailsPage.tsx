@@ -475,7 +475,7 @@ export function LandlordPropertyDetailsPage() {
                 <button
                   type="button"
                   onClick={() => persistProperty()}
-                  className="inline-flex min-w-[112px] items-center justify-center rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                  className="inline-flex min-w-[112px] items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90"
                 >
                   {saving ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -484,7 +484,7 @@ export function LandlordPropertyDetailsPage() {
               <Link
                 to={{ pathname: `/properties/${property.id}`, search: '?mode=edit' }}
                 state={location.state}
-                className="inline-flex min-w-[108px] items-center justify-center rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                className="inline-flex min-w-[108px] items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90"
               >
                 Edit Property
               </Link>

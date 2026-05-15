@@ -102,7 +102,7 @@ export function VerifyEmailSuccessPage() {
           <div className="mt-5 space-y-4">
             <Link
               to="/applications/apply"
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 py-3 text-center text-sm font-medium text-white hover:bg-gray-800"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 text-center text-sm font-medium text-white hover:bg-primary/90"
             >
               Continue to Application
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

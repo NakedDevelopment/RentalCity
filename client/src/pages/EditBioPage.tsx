@@ -68,7 +68,7 @@ export function EditBioPage() {
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? 'Saving...' : 'Save'}
           </button>

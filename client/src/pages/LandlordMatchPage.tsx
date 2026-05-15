@@ -127,7 +127,7 @@ export function LandlordMatchPage() {
           <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <Link
             to="/onboarding/survey"
-            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-8 py-3 text-sm font-medium text-white hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
           >
             Take the Survey
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

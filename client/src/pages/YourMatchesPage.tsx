@@ -1446,7 +1446,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                           type="button"
                           onClick={() => handleLandlordCardUnlock(match)}
                           disabled={landlordCardBusyId !== null}
-                          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {landlordCardBusyId === match.id ? 'Unlocking…' : 'Unlock profile'}
                         </button>
@@ -1457,7 +1457,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                             type="button"
                             onClick={() => handleLandlordCardApprove(match)}
                             disabled={landlordCardBusyId !== null}
-                            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {landlordCardBusyId === match.id ? (
                               'Approving…'
@@ -1557,7 +1557,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
           </p>
           <Link
             to="/tenant-questionnaire"
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-3 text-sm font-medium text-white hover:bg-gray-800"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-medium text-white hover:bg-primary/90"
           >
             Complete questionnaire
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1622,7 +1622,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             <Link
               to="/lease-preferences"
               state={{ from: 'matches' }}
-              className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-3 text-sm font-medium text-white hover:bg-gray-800"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-medium text-white hover:bg-primary/90"
             >
               Set your preferences
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1915,7 +1915,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                       <button
                         type="button"
                         onClick={() => handleApplyNow(match)}
-                        className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                        className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90"
                       >
                         Apply Now
                       </button>
@@ -1985,7 +1985,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
               <button
                 type="button"
                 onClick={() => commitTenantMatchesTab('all')}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90"
               >
                 Browse Matches
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2009,7 +2009,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
               <button
                 type="button"
                 onClick={() => commitTenantMatchesTab('all')}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90"
               >
                 Browse matches
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2032,7 +2032,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
               </p>
               <Link
                 to="/applications/apply"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90"
               >
                 Complete Application
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2083,7 +2083,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             <button
               type="button"
               onClick={() => setSubmissionModal(null)}
-              className="w-full rounded-lg bg-gray-900 py-3 text-sm font-medium text-white hover:bg-gray-800"
+              className="w-full rounded-lg bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90"
             >
               Got It!
             </button>

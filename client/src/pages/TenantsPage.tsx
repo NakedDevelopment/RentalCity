@@ -346,7 +346,7 @@ export function TenantsPage() {
                         status: 'accepted',
                       }).toString()}`}
                       state={tenantProfileNavState}
-                      className="inline-flex items-center justify-center rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                      className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90"
                     >
                       View Profile
                     </Link>
@@ -355,7 +355,7 @@ export function TenantsPage() {
                   <button
                     type="button"
                     onClick={() => openRatingModal(tenant)}
-                    className="inline-flex items-center justify-center rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                    className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90"
                   >
                     Rate Tenant
                   </button>
@@ -455,7 +455,7 @@ export function TenantsPage() {
                   type="button"
                   onClick={submitRating}
                   disabled={submittingRating}
-                  className="inline-flex items-center justify-center rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                  className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
                 >
                   {submittingRating ? 'Saving...' : ratingModalTenant.ratingStatus === 'Rated' ? 'Save Changes' : 'Submit Review'}
                 </button>
@@ -483,7 +483,7 @@ export function TenantsPage() {
             <button
               type="button"
               onClick={() => setSubmittedTenant(null)}
-              className="mt-6 inline-flex min-w-[120px] items-center justify-center rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800"
+              className="mt-6 inline-flex min-w-[120px] items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90"
             >
               Got It!
             </button>

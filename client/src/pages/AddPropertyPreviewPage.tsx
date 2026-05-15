@@ -307,7 +307,7 @@ export function AddPropertyPreviewPage() {
             type="button"
             disabled={submitting}
             onClick={() => persistProperty('active')}
-            className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-6 py-3 text-sm font-medium text-white hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-medium text-white hover:bg-primary/90"
           >
             {submitting ? 'Publishing...' : 'Publish Property'}
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -305,7 +305,7 @@ export function ProfileCreationPage() {
                   type="button"
                   onClick={handleNext}
                   disabled={loading}
-                  className="w-full rounded-lg bg-gray-900 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                  className="w-full rounded-lg bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
                 >
                   {loading ? 'Saving...' : 'Continue'}
                 </button>
@@ -384,7 +384,7 @@ export function ProfileCreationPage() {
           type="button"
           onClick={handleNext}
           disabled={loading}
-          className="w-full rounded-lg bg-gray-900 py-3 text-sm font-medium text-white disabled:opacity-50 hover:bg-gray-800"
+          className="w-full rounded-lg bg-primary py-3 text-sm font-medium text-white disabled:opacity-50 hover:bg-primary/90"
         >
           {loading ? 'Saving...' : 'Next'}
         </button>

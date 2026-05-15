@@ -907,7 +907,7 @@ export function LandlordTenantProfilePage() {
                           setUnlockPayError(null)
                           setUnlockPayModalOpen(true)
                         }}
-                        className="inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                        className="inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90"
                       >
                         <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c1.657 0 3-1.343 3-3V7a3 3 0 10-6 0v1c0 1.657 1.343 3 3 3zm-7 9h14a2 2 0 002-2v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a2 2 0 002 2z" />
@@ -950,7 +950,7 @@ export function LandlordTenantProfilePage() {
                     type="button"
                     onClick={handleAccept}
                     disabled={accepting}
-                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
                   >
                     {accepting ? (
                       'Accepting…'
@@ -1081,7 +1081,7 @@ export function LandlordTenantProfilePage() {
               <button
                 type="button"
                 onClick={handleAcceptModalGotIt}
-                className="rounded-lg bg-gray-900 px-10 py-3 text-sm font-medium text-white hover:bg-gray-800"
+                className="rounded-lg bg-primary px-10 py-3 text-sm font-medium text-white hover:bg-primary/90"
               >
                 Got it!
               </button>
@@ -1154,7 +1154,7 @@ export function LandlordTenantProfilePage() {
                   type="button"
                   disabled={unlockPayBusy}
                   onClick={() => void handleConfirmProfileUnlock()}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c1.657 0 3-1.343 3-3V7a3 3 0 10-6 0v1c0 1.657 1.343 3 3 3zm-7 9h14a2 2 0 002-2v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a2 2 0 002 2z" />

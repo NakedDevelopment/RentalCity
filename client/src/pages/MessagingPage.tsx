@@ -786,7 +786,7 @@ export function MessagingPage() {
                       type="button"
                       disabled={sendingMessage || !messageInput.trim()}
                       onClick={handleSendMessage}
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-60"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-60"
                       aria-label="Send message"
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -871,7 +871,7 @@ export function MessagingPage() {
                 type="button"
                 disabled={submittingReport || !selectedReason}
                 onClick={handleSubmitReport}
-                className="mt-5 w-full rounded-lg bg-gray-900 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                className="mt-5 w-full rounded-lg bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
               >
                 {submittingReport ? 'Submitting...' : 'Submit'}
               </button>
