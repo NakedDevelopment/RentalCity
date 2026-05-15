@@ -386,7 +386,7 @@ export function AccountSettingsPage() {
                     type="button"
                     onClick={handleDeleteAccount}
                     disabled={deletingAccount}
-                    className="w-full rounded-lg bg-[#ef4444] py-3 text-sm font-medium text-white hover:bg-[#dc2626] disabled:opacity-50"
+                    className="w-full rounded-lg bg-red-500 py-3 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
                   >
                     {deletingAccount ? 'Deleting...' : 'Delete Account'}
                   </button>
