@@ -54,6 +54,72 @@ export default {
           700: 'var(--color-neutral-600)',
           800: 'var(--color-neutral-800)',
           900: 'var(--color-neutral-900)',
+          950: 'var(--color-neutral-900)',
+        },
+
+        emerald: {
+          50:  'var(--color-status-accepted-bg)',
+          100: 'var(--color-status-accepted-bg)',
+          500: 'var(--color-status-accepted-text)',
+          600: 'var(--color-status-accepted-text)',
+          700: 'var(--color-status-accepted-text)',
+          800: 'var(--color-status-accepted-text)',
+          900: 'var(--color-status-accepted-text)',
+        },
+
+        green: {
+          600: 'var(--color-status-accepted-text)',
+          700: 'var(--color-status-accepted-text)',
+        },
+
+        amber: {
+          50:  'var(--color-status-locked-bg)',
+          100: 'var(--color-status-locked-bg)',
+          500: 'var(--color-status-locked-text)',
+          600: 'var(--color-status-locked-text)',
+          700: 'var(--color-status-locked-text)',
+          800: 'var(--color-status-locked-text)',
+          900: 'var(--color-status-locked-text)',
+          950: 'var(--color-status-locked-text)',
+        },
+
+        red: {
+          50:  '#FEF2F2',
+          100: '#FEE2E2',
+          200: '#FECACA',
+          400: 'var(--color-notification)',
+          500: 'var(--color-notification)',
+          600: '#E03E3E',
+          700: '#C53030',
+          800: '#9B2C2C',
+        },
+
+        rose: {
+          100: '#FEE2E2',
+          600: 'var(--color-notification)',
+        },
+
+        sky: {
+          50:  '#EEF4FF',
+          100: '#D9E8FF',
+          200: '#BAD1FF',
+          800: 'var(--color-primary)',
+          900: 'var(--color-primary)',
+        },
+
+        indigo: {
+          100: '#D9E8FF',
+          200: '#BAD1FF',
+          900: 'var(--color-primary)',
+        },
+
+        slate: {
+          800: 'var(--color-neutral-800)',
+          900: 'var(--color-neutral-900)',
+        },
+
+        orange: {
+          500: 'var(--color-score-moderate)',
         },
       },
 
