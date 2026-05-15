@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 /** Shared with tenant Account CTA and landlord read-only notice so both match visually. */
 export const UNIVERSAL_APPLICATION_STATUS_ACTION_CLASS =
-  'flex w-full min-h-[44px] items-center justify-between gap-3 rounded-lg bg-gray-900 px-4 py-3 text-sm font-medium text-white'
+  'flex w-full min-h-[44px] items-center justify-between gap-3 rounded-lg gradient-primary px-4 py-3 text-sm font-medium text-white'
 
 type Props = {
   statusLabel: string

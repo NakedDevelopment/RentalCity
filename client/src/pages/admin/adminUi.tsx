@@ -15,13 +15,13 @@ export const admin = {
   muted: 'text-sm text-gray-500',
   /** Primary CTA — matches landlord/account actions */
   btnPrimary:
-    'inline-flex items-center justify-center rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50',
+    'inline-flex items-center justify-center rounded-lg gradient-primary px-4 py-2.5 text-sm font-medium text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50',
   btnSecondary:
     'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40',
   btnChip:
     'rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-40',
   btnSuccess:
-    'rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50',
+    'rounded-lg gradient-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition disabled:opacity-50',
   btnWarning:
     'rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 shadow-sm transition hover:bg-amber-100 disabled:opacity-50',
   inputSearch:

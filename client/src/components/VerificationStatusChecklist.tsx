@@ -26,7 +26,7 @@ export function VerificationStatusChecklist({ items = DEFAULT_TENANT_VERIFICATIO
         <li key={item.label} className="flex items-start gap-3">
           <span
             className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-              item.complete ? 'bg-green-600 text-white' : 'bg-rose-100 text-rose-600'
+              item.complete ? 'gradient-primary text-white' : 'bg-rose-100 text-rose-600'
             }`}
             aria-hidden
           >

@@ -43,7 +43,7 @@ export function PublicLegalPage({ tab }: { tab: LegalTab }) {
           to="/terms"
           className={`inline-flex min-w-[184px] items-center justify-center rounded-full px-6 py-3 text-sm font-medium transition-colors ${
             tab === 'terms'
-              ? 'bg-gray-900 text-white'
+              ? 'gradient-primary text-white'
               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
           }`}
         >
@@ -53,7 +53,7 @@ export function PublicLegalPage({ tab }: { tab: LegalTab }) {
           to="/privacy"
           className={`inline-flex min-w-[184px] items-center justify-center rounded-full px-6 py-3 text-sm font-medium transition-colors ${
             tab === 'privacy'
-              ? 'bg-gray-900 text-white'
+              ? 'gradient-primary text-white'
               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
           }`}
         >

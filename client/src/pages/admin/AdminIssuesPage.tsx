@@ -285,7 +285,7 @@ export function AdminIssuesPage() {
                                 }}
                                 className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
                                   active
-                                    ? 'cursor-default bg-gray-900 text-white shadow-sm'
+                                    ? 'cursor-default gradient-primary text-white shadow-sm'
                                     : 'text-gray-600 hover:bg-white hover:text-gray-900 hover:shadow-sm'
                                 }`}
                               >
@@ -388,7 +388,7 @@ export function AdminIssuesPage() {
                                 }}
                                 className={`rounded-lg px-3 py-2 text-xs font-medium capitalize transition ${
                                   active
-                                    ? 'cursor-default bg-gray-900 text-white shadow-sm'
+                                    ? 'cursor-default gradient-primary text-white shadow-sm'
                                     : 'text-gray-600 hover:bg-white hover:text-gray-900 hover:shadow-sm'
                                 }`}
                               >

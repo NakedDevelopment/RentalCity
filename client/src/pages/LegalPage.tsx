@@ -50,7 +50,7 @@ export function LegalPage() {
           to="/account/settings/legal/terms"
           className={`inline-flex min-w-[184px] items-center justify-center rounded-full px-6 py-3 text-sm font-medium transition-colors ${
             activeTab === 'terms'
-              ? 'bg-gray-900 text-white'
+              ? 'gradient-primary text-white'
               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
           }`}
         >
@@ -60,7 +60,7 @@ export function LegalPage() {
           to="/account/settings/legal/privacy"
           className={`inline-flex min-w-[184px] items-center justify-center rounded-full px-6 py-3 text-sm font-medium transition-colors ${
             activeTab === 'privacy'
-              ? 'bg-gray-900 text-white'
+              ? 'gradient-primary text-white'
               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
           }`}
         >

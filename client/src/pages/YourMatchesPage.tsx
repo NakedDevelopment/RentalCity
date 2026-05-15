@@ -1905,7 +1905,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                   </div>
                   <div className="mt-auto flex gap-3">
                     {isApplied ? (
-                      <span className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-700 px-4 py-3 text-sm font-medium text-white">
+                      <span className="flex flex-1 items-center justify-center gap-2 rounded-lg gradient-primary px-4 py-3 text-sm font-medium text-white">
                         Applied
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

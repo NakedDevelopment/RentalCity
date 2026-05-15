@@ -43,7 +43,7 @@ export function UserMenu() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-medium text-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+        className="w-9 h-9 rounded-full gradient-primary flex items-center justify-center text-white font-medium text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
         aria-label="Account menu"
         aria-expanded={open}
       >

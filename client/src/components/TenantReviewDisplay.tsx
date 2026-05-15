@@ -5,7 +5,7 @@ export const TENANT_LANDLORD_REVIEWS_PREVIEW_COUNT = 2
 
 /** Primary Edit / Write review actions (matches account section Edit + full reviews page). */
 export const TENANT_REVIEW_PRIMARY_BUTTON_CLASSNAME =
-  'rounded-lg bg-gray-900 px-5 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60'
+  'rounded-lg gradient-primary px-5 py-3 text-sm font-medium text-white disabled:opacity-60'
 
 /** Shown on tenant Account and anywhere we describe the same data to tenants. */
 export const TENANT_REVIEWS_DESCRIPTION_AS_TENANT =
