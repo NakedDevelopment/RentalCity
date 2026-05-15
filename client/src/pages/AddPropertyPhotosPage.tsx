@@ -225,7 +225,7 @@ export function AddPropertyPhotosPage() {
                       onClick={() => makeCover(photo.id)}
                       onKeyDown={(e) => e.key === 'Enter' && makeCover(photo.id)}
                       className={`inline-flex cursor-pointer rounded px-2 py-1 text-[11px] ${
-                        photo.cover ? 'bg-gray-900 text-white' : 'bg-white/90 text-gray-500'
+                        photo.cover ? 'gradient-primary text-white' : 'bg-white/90 text-gray-500'
                       }`}
                     >
                       {photo.cover ? '★ Cover' : 'Make Cover'}

@@ -42,7 +42,7 @@ export function AddPropertyIntroPage() {
               <div className="flex items-center gap-3">
                 <span
                   className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
-                    step.complete || step.active ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-500'
+                    step.complete || step.active ? 'gradient-primary text-white' : 'bg-gray-200 text-gray-500'
                   }`}
                 >
                   {step.complete ? (
@@ -81,7 +81,7 @@ export function AddPropertyIntroPage() {
           <div className="mx-auto mt-7 max-w-[350px] space-y-6 text-left">
             {processSteps.map((item) => (
               <div key={item.number} className="flex items-start gap-4">
-                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-medium text-white">
+                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full gradient-primary text-xs font-medium text-white">
                   {item.number}
                 </span>
                 <div>

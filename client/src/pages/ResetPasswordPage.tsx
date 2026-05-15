@@ -74,7 +74,7 @@ export function ResetPasswordPage() {
       <div className="w-full max-w-[314px]">
         <div className="rounded-2xl border border-gray-200 bg-white px-5 py-6 shadow-sm">
           <div className="mb-5 flex justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-900 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl gradient-primary text-white">
               <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M10.707 1.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 10h1v6a1 1 0 001 1h3a1 1 0 001-1v-3h2v3a1 1 0 001 1h3a1 1 0 001-1v-6h1a1 1 0 00.707-1.707l-7-7z" />
               </svg>

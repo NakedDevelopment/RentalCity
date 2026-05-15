@@ -658,7 +658,7 @@ export function LandlordPropertyDetailsPage() {
                         type="button"
                         onClick={() => makeCover(index)}
                         className={`absolute left-2 top-2 z-10 rounded-md px-2 py-1 text-[10px] font-medium ${
-                          index === 0 ? 'bg-gray-900 text-white' : 'bg-white/85 text-gray-700'
+                          index === 0 ? 'gradient-primary text-white' : 'bg-white/85 text-gray-700'
                         }`}
                       >
                         {index === 0 ? 'Cover' : 'Make Cover'}

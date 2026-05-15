@@ -58,7 +58,7 @@ export function LandlordMatchPage() {
                 <span
                   className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
                     step.complete || step.active
-                      ? 'bg-gray-900 text-white'
+                      ? 'gradient-primary text-white'
                       : 'bg-gray-200 text-gray-500'
                   }`}
                 >
@@ -99,7 +99,7 @@ export function LandlordMatchPage() {
           <div className="mx-auto mt-7 max-w-[330px] space-y-6 text-left">
             {howItWorks.map((item) => (
               <div key={item.number} className="flex items-start gap-4">
-                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-medium text-white">
+                <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full gradient-primary text-xs font-medium text-white">
                   {item.number}
                 </span>
                 <div>

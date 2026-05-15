@@ -134,7 +134,7 @@ export function ProfileCreationPage() {
                   <span
                     className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
                       step.complete || step.active
-                        ? 'bg-gray-900 text-white'
+                        ? 'gradient-primary text-white'
                         : 'bg-gray-200 text-gray-500'
                     }`}
                   >

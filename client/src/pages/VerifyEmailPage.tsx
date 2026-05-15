@@ -38,7 +38,7 @@ export function VerifyEmailPage() {
       <div className="w-full max-w-[322px]">
         <div className="rounded-2xl border border-gray-200 bg-white px-6 py-7 shadow-sm">
           <div className="mb-5 flex justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-900 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl gradient-primary text-white">
               <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
