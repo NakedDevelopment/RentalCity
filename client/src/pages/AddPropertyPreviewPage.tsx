@@ -50,6 +50,15 @@ export function AddPropertyPreviewPage() {
   const [error, setError] = useState<string | null>(null)
 
   const monthlyRentCents = useMemo(() => moneyInputToCents(draft.monthlyRent), [draft.monthlyRent])
+  const customDepositCents = useMemo(
+    () => (draft.securityDeposit.trim() ? moneyInputToCents(draft.securityDeposit) : null),
+    [draft.securityDeposit],
+  )
+  const depositCents = customDepositCents ?? monthlyRentCents
+  const depositLabel =
+    customDepositCents != null
+      ? formatCurrency(customDepositCents)
+      : `${formatCurrency(monthlyRentCents)} (1 month)`
   const bedroomCount = draft.bedrooms === 'studio' ? 0 : Number.parseInt(draft.bedrooms || '0', 10)
   const bathroomCount = Number.parseFloat(draft.bathrooms || '0')
   const propertyType =
@@ -59,7 +68,7 @@ export function AddPropertyPreviewPage() {
 
   const leaseTerms = [
     { label: 'Lease Duration', value: draft.leaseTerm ? `${draft.leaseTerm} months` : 'N/A' },
-    { label: 'Security Deposit', value: `${formatCurrency(monthlyRentCents)} (1 month)` },
+    { label: 'Security Deposit', value: depositLabel },
     { label: 'Available Date', value: 'Available immediately' },
   ]
 
@@ -129,7 +138,7 @@ export function AddPropertyPreviewPage() {
         bedrooms: Number.isNaN(bedroomCount) ? 0 : bedroomCount,
         bathrooms: Number.isNaN(bathroomCount) ? 0 : bathroomCount,
         monthly_rent_cents: monthlyRentCents,
-        deposit_cents: monthlyRentCents,
+        deposit_cents: depositCents,
         application_fee_cents: 5000,
         description: draft.communityDescription || null,
         lease_term: draft.leaseTerm ? `${draft.leaseTerm} months` : null,

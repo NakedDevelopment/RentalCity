@@ -11,6 +11,7 @@ export function AddPropertyBasicInfoPage() {
   const [state, setState] = useState(draft.state)
   const [zipCode, setZipCode] = useState(draft.zipCode)
   const [monthlyRent, setMonthlyRent] = useState(draft.monthlyRent)
+  const [securityDeposit, setSecurityDeposit] = useState(draft.securityDeposit)
   const [leaseTerm, setLeaseTerm] = useState(draft.leaseTerm)
   const [saved, setSaved] = useState(false)
 
@@ -23,9 +24,10 @@ export function AddPropertyBasicInfoPage() {
       state,
       zipCode,
       monthlyRent,
+      securityDeposit,
       leaseTerm,
     })
-  }, [city, leaseTerm, monthlyRent, propertyName, state, streetAddress, zipCode])
+  }, [city, leaseTerm, monthlyRent, propertyName, securityDeposit, state, streetAddress, zipCode])
 
   function handleSaveDraft() {
     setSaved(true)
@@ -172,6 +174,24 @@ export function AddPropertyBasicInfoPage() {
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
               </div>
               <p className="mt-2 text-xs text-gray-500">Enter the monthly rental amount (excluding utilities).</p>
+            </div>
+
+            <div>
+              <label htmlFor="security-deposit" className="mb-2 block text-sm font-medium text-gray-700">
+                Security Deposit <span className="text-gray-400">(optional)</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
+                <input
+                  id="security-deposit"
+                  type="text"
+                  value={securityDeposit}
+                  onChange={(event) => setSecurityDeposit(event.target.value)}
+                  placeholder="2,500"
+                  className="w-full rounded-lg border border-gray-200 py-3 pl-8 pr-4 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
+                />
+              </div>
+              <p className="mt-2 text-xs text-gray-500">Leave blank to default to one month&apos;s rent.</p>
             </div>
 
             <div>

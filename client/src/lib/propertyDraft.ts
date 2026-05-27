@@ -15,6 +15,7 @@ export type PropertyDraft = {
   state: string
   zipCode: string
   monthlyRent: string
+  securityDeposit: string
   leaseTerm: string
   communityDescription: string
   bedrooms: string
@@ -30,6 +31,7 @@ export const DEFAULT_PROPERTY_DRAFT: PropertyDraft = {
   state: '',
   zipCode: '',
   monthlyRent: '',
+  securityDeposit: '',
   leaseTerm: '',
   communityDescription: '',
   bedrooms: '',
