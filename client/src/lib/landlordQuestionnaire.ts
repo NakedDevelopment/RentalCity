@@ -3,6 +3,8 @@ export type LandlordChoiceId = string
 export type LandlordChoice = {
   id: LandlordChoiceId
   label: string
+  /** In a multi-select question, selecting this clears all other choices (and vice versa). */
+  exclusive?: boolean
 }
 
 export type LandlordQuestionId = string
@@ -47,6 +49,7 @@ export const landlordQuestions: LandlordQuestion[] = [
       { id: 'b', label: 'Someone who has a DUI or was caught with drug possession' },
       { id: 'c', label: 'Domestic violence' },
       { id: 'd', label: 'Fraud' },
+      { id: 'none', label: "No, we don't rent to someone with a criminal record", exclusive: true },
     ],
   },
   {

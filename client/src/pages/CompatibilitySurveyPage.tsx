@@ -145,10 +145,20 @@ export function CompatibilitySurveyPage() {
     if (landlordQuestion.type === 'single') {
       setAnswers((prev) => ({ ...prev, [qid]: choiceId }))
     } else {
+      const exclusiveIds = new Set(
+        landlordQuestion.choices.filter((c) => c.exclusive).map((c) => c.id)
+      )
       const arr = Array.isArray(answers[qid]) ? (answers[qid] as string[]) : []
-      const next = arr.includes(choiceId)
-        ? arr.filter((c) => c !== choiceId)
-        : [...arr, choiceId]
+      let next: string[]
+      if (arr.includes(choiceId)) {
+        next = arr.filter((c) => c !== choiceId)
+      } else if (exclusiveIds.has(choiceId)) {
+        // Selecting an exclusive option clears every other choice.
+        next = [choiceId]
+      } else {
+        // Selecting a normal option clears any exclusive choices.
+        next = [...arr.filter((c) => !exclusiveIds.has(c)), choiceId]
+      }
       setAnswers((prev) => ({ ...prev, [qid]: next }))
     }
   }
