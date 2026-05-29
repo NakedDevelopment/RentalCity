@@ -139,11 +139,6 @@ const migration26 = readFileSync(
   'utf-8'
 )
 
-const migration27 = readFileSync(
-  join(__dirname, '../supabase/migrations/20260529000001_landlord_reviews.sql'),
-  'utf-8'
-)
-
 const client = new pg.Client({ connectionString: dbUrl })
 
 const APPLY_SINGLE_HINT = `This project’s Supabase DB already has schema (or you are not on an empty database).
@@ -255,9 +250,6 @@ async function run() {
     console.log('Running site_settings...')
     await client.query(migration26)
     console.log('site_settings OK')
-    console.log('Running landlord_reviews...')
-    await client.query(migration27)
-    console.log('landlord_reviews OK')
     console.log('Migrations complete.')
   } catch (err) {
     const msg = err?.message ?? String(err)
