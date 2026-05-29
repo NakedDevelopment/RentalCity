@@ -1,0 +1,1 @@
+- [Supabase embeds](supabase-embeds.md) — embed landlord via property.landlord_id, NOT landlord:profiles on applications (that resolves to tenant)

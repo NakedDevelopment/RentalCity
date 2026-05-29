@@ -75,7 +75,10 @@ export function ApplicationDetailsPage() {
   const [withdrawing, setWithdrawing] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reviewComment, setReviewComment] = useState('')
-  const reviewRating = 4
+  const [reviewRating, setReviewRating] = useState(0)
+  const [hasReview, setHasReview] = useState(false)
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadApplication() {
@@ -104,9 +107,9 @@ export function ApplicationDetailsPage() {
             sqft,
             monthly_rent_cents,
             amenities,
-            landlord_id
-          ),
-          landlord:profiles(id, display_name, phone)
+            landlord_id,
+            landlord:landlord_id(id, display_name, phone)
+          )
         `)
         .eq('id', id)
         .eq('tenant_id', user.id)
@@ -139,8 +142,9 @@ export function ApplicationDetailsPage() {
           sqft?: number
           monthly_rent_cents?: number
           amenities?: string[]
+          landlord_id?: string
+          landlord?: { id?: string; display_name?: string; phone?: string } | null
         }
-        landlord?: { id?: string; display_name?: string; phone?: string } | null
       }
 
       const p = row.property
@@ -164,12 +168,27 @@ export function ApplicationDetailsPage() {
         status: formatStatus(row.status),
         statusRaw: (row.status ?? 'pending').toLowerCase(),
         features,
-        contactPhone: row.landlord?.phone ?? '—',
+        contactPhone: p?.landlord?.phone ?? '—',
         contactLocation: neighborhood,
-        landlordName: row.landlord?.display_name ?? 'Landlord',
-        landlordId: row.landlord?.id ?? '',
+        landlordName: p?.landlord?.display_name ?? 'Landlord',
+        landlordId: p?.landlord?.id ?? p?.landlord_id ?? '',
         propertyId: p?.id ?? '',
       })
+
+      const { data: reviewRow } = await supabase
+        .from('landlord_reviews')
+        .select('id, rating, comment')
+        .eq('application_id', row.id)
+        .eq('tenant_id', user.id)
+        .maybeSingle()
+
+      if (reviewRow) {
+        setHasReview(true)
+        setReviewRating((reviewRow as { rating?: number }).rating ?? 0)
+        setReviewComment((reviewRow as { comment?: string | null }).comment ?? '')
+      } else {
+        setHasReview(false)
+      }
     }
 
     loadApplication()
@@ -190,6 +209,36 @@ export function ApplicationDetailsPage() {
       return
     }
     navigate('/matches?tab=applied')
+  }
+
+  const handleSubmitReview = async () => {
+    if (!user || !application || reviewRating < 1) return
+    if (!application.landlordId) {
+      setReviewError('Unable to submit review: landlord not found for this application.')
+      return
+    }
+    setSubmittingReview(true)
+    setReviewError(null)
+    const { error: err } = await supabase.from('landlord_reviews').upsert(
+      {
+        application_id: application.id,
+        tenant_id: user.id,
+        landlord_id: application.landlordId,
+        property_id: application.propertyId || null,
+        rating: reviewRating,
+        comment: reviewComment.trim() || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'application_id,tenant_id' },
+    )
+    setSubmittingReview(false)
+    if (err) {
+      setReviewError(err.message)
+      return
+    }
+    setHasReview(true)
+    setReviewModalOpen(false)
+    navigate(`/account/application/${application.id}/review-submitted`)
   }
 
   if (loading) {
@@ -300,26 +349,51 @@ export function ApplicationDetailsPage() {
                 </div>
               </div>
 
-              <div className="mt-6 rounded-lg bg-gray-50 px-4 py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-[1.25rem] font-medium text-gray-900">Leave a Review</p>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Share your experience as {application.landlordName.split(' ')[0]}&apos;s tenant
-                    </p>
+              {application.statusRaw === 'approved' ? (
+                hasReview ? (
+                  <div className="mt-6 rounded-lg bg-gray-50 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <svg className="h-5 w-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <div className="flex-1">
+                        <p className="text-[1.25rem] font-medium text-gray-900">Review Submitted</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Thanks for sharing your experience with {application.landlordName.split(' ')[0]}.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReviewModalOpen(true)}
+                        className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Edit Review
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setReviewModalOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
-                  >
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9.049 2.927C9.349 2.005 10.651 2.005 10.951 2.927l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.922-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.784.57-1.838-.196-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.719c-.783-.57-.38-1.81.588-1.81H7.03a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                    Write Review
-                  </button>
-                </div>
-              </div>
+                ) : (
+                  <div className="mt-6 rounded-lg bg-gray-50 px-4 py-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[1.25rem] font-medium text-gray-900">Leave a Review</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Share your experience as {application.landlordName.split(' ')[0]}&apos;s tenant
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReviewModalOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
+                      >
+                        <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927C9.349 2.005 10.651 2.005 10.951 2.927l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.922-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.176 0l-2.8 2.034c-.784.57-1.838-.196-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.719c-.783-.57-.38-1.81.588-1.81H7.03a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                        Write Review
+                      </button>
+                    </div>
+                  </div>
+                )
+              ) : null}
             </DetailCard>
           </div>
 
@@ -397,6 +471,7 @@ export function ApplicationDetailsPage() {
                         <button
                           key={index}
                           type="button"
+                          onClick={() => setReviewRating(index + 1)}
                           className={`text-lg ${filled ? 'text-gray-900' : 'text-gray-300'}`}
                           aria-label={`Rate ${index + 1} stars`}
                         >
@@ -427,6 +502,10 @@ export function ApplicationDetailsPage() {
               </div>
             </div>
 
+            {reviewError ? (
+              <p className="px-5 pb-1 text-sm text-red-600">{reviewError}</p>
+            ) : null}
+
             <div className="flex items-center gap-3 bg-gray-50 px-5 py-4">
               <button
                 type="button"
@@ -437,13 +516,11 @@ export function ApplicationDetailsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setReviewModalOpen(false)
-                  navigate(`/account/application/${application.id}/review-submitted`)
-                }}
-                className="inline-flex min-w-[106px] items-center justify-center rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
+                onClick={handleSubmitReview}
+                disabled={reviewRating < 1 || submittingReview}
+                className="inline-flex min-w-[106px] items-center justify-center rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
               >
-                Submit Rating
+                {submittingReview ? 'Submitting…' : hasReview ? 'Update Rating' : 'Submit Rating'}
               </button>
             </div>
           </div>
