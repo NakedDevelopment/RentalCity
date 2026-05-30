@@ -1,0 +1,56 @@
+Here it is:
+
+---
+
+```
+List every third-party API, service, and integration wired into this project.
+
+For each one, tell me:
+
+SERVICE: [name of the service]
+PURPOSE: [what it does in this app — one sentence]
+STATUS: [Connected / Placeholder / Not yet wired]
+ENV VAR: [the exact secret/environment variable name used in this project]
+CURRENT VALUE: [tell me if it has a real key, a placeholder, or is empty]
+
+---
+
+Cover everything — do not skip anything. This includes but is not limited to:
+
+- Authentication
+- Database
+- Payments / billing
+- Push notifications
+- Email (transactional)
+- SMS / OTP
+- File storage / media
+- Video hosting / playback
+- Maps
+- Error monitoring / crash reporting
+- Analytics
+- Any other third-party service connected to this project
+
+---
+
+When complete, give me the full list with no grouping — every service on its own block.
+```
+
+---
+
+And here are the signup/login links for every service in the standard Naked Dev stack:
+
+| Service | Purpose | Link |
+|---|---|---|
+| **Supabase** | Database + Auth | [supabase.com](https://supabase.com) |
+| **Stripe** | Payments (web) | [dashboard.stripe.com](https://dashboard.stripe.com) |
+| **RevenueCat** | Payments (mobile IAP) | [app.revenuecat.com](https://app.revenuecat.com) |
+| **OneSignal** | Push notifications | [onesignal.com](https://onesignal.com) |
+| **Resend** | Transactional email | [resend.com](https://resend.com) |
+| **Twilio** | SMS / OTP | [console.twilio.com](https://console.twilio.com) |
+| **Sentry** | Error monitoring | [sentry.io](https://sentry.io) |
+| **Google Cloud** | Maps + other Google APIs | [console.cloud.google.com](https://console.cloud.google.com) |
+| **Mux** | Video hosting/playback | [dashboard.mux.com](https://dashboard.mux.com) |
+| **Cloudinary** | Image/file storage | [cloudinary.com](https://cloudinary.com) |
+| **AWS S3** | File storage (alt) | [aws.amazon.com/s3](https://aws.amazon.com/s3) |
+
+Paste the Replit output back here and I'll flag anything missing, placeholder, or misconfigured.
