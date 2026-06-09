@@ -11,7 +11,7 @@ import {
 import { TenantRentScoreBreakdownDialog } from '../components/TenantRentScoreBreakdownDialog'
 import { UniversalApplicationStatusFields } from '../components/UniversalApplicationStatusFields'
 import { TenantReviewEditDialog } from '../components/TenantReviewEditDialog'
-import { VerificationStatusCard } from '../components/VerificationStatusChecklist'
+import { BankVerificationCard, type PlaidVerificationRow } from '../components/BankVerificationCard'
 import { useAuth } from '../lib/useAuth'
 import { safeInternalPath } from '../lib/safeInternalPath'
 import { supabase } from '../lib/supabase'
@@ -128,6 +128,7 @@ export function LandlordTenantProfilePage() {
     income_pass: boolean | null
     created_at: string
   } | null>(null)
+  const [tenantBankVerification, setTenantBankVerification] = useState<PlaidVerificationRow | null>(null)
   type LandlordTenantApplicationRow = {
     id: string
     status: string
@@ -397,6 +398,15 @@ export function LandlordTenantProfilePage() {
         .limit(1)
         .maybeSingle()
       setTenantScreening((screeningRow as any) ?? null)
+
+      const { data: bankRow } = await supabase
+        .from('plaid_financial_verifications')
+        .select(
+          'institution_name, accounts_count, income_verified, balances_verified, debts_verified, dti_ratio, identity_verified, last_verified_at',
+        )
+        .eq('user_id', id)
+        .maybeSingle()
+      setTenantBankVerification((bankRow as PlaidVerificationRow | null) ?? null)
 
       const rows = (applicationsData ?? []) as LandlordTenantApplicationRow[]
       const forLandlord = rows.filter((r) => r.property?.landlord_id === user.id)
@@ -874,7 +884,7 @@ export function LandlordTenantProfilePage() {
                   </div>
                 </ProfileContentCard>
 
-                <VerificationStatusCard />
+                <BankVerificationCard verification={tenantBankVerification} />
 
                 <div className="space-y-2">
                   {hasUnlockedProfileAccess ? (
