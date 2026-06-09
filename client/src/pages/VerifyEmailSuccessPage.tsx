@@ -22,7 +22,8 @@ export function VerifyEmailSuccessPage() {
     }
     let cancelled = false
     async function checkAndRedirect() {
-      const signedUpAsLandlord = user?.user_metadata?.role === 'landlord'
+      if (!user) return
+      const signedUpAsLandlord = user.user_metadata?.role === 'landlord'
       const { data } = await supabase.from('profiles').select('role, display_name').eq('id', user.id).maybeSingle()
       if (cancelled) return
       let isLandlord = data?.role === 'landlord'

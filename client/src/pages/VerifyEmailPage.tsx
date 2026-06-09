@@ -13,6 +13,19 @@ export function VerifyEmailPage() {
   const email = state?.email ?? 'email@email.com'
   const [resending, setResending] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [supportEmail, setSupportEmail] = useState('support@rentalcity.com')
+
+  useEffect(() => {
+    let cancelled = false
+    fetchSiteSettingsMerged(supabase)
+      .then((settings) => {
+        if (!cancelled) setSupportEmail(settings.support_contact_email)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function handleResend() {
     setMessage(null)

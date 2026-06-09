@@ -51,7 +51,7 @@ export function useLandlordRatingsGiven() {
         setLoadError(error.message)
         setRows([])
       } else {
-        setRows(((data ?? []) as LandlordRatingGivenRow[]).map(normalizeTenantEmbeds))
+        setRows(((data ?? []) as unknown as LandlordRatingGivenRow[]).map(normalizeTenantEmbeds))
       }
       setLoading(false)
     }

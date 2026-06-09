@@ -33,7 +33,7 @@ export function TenantAccountReviewsPage() {
         )
         .eq('tenant_external_id', user.id)
         .order('created_at', { ascending: false })
-      setRows(normalizeLandlordReviewRows((ratingsRaw ?? []) as LandlordReviewAboutTenantRow[]))
+      setRows(normalizeLandlordReviewRows((ratingsRaw ?? []) as unknown as LandlordReviewAboutTenantRow[]))
       setLoading(false)
     }
     void load()

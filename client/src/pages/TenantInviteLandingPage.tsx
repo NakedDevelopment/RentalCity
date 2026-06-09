@@ -10,7 +10,7 @@ type Preview = { ok: true; landlord_name: string } | { ok: false }
 export function TenantInviteLandingPage() {
   const { token } = useParams<{ token: string }>()
   const { user } = useAuth()
-  const { role: profileRole, loading: roleLoading } = useProfileRole(user)
+  const { role: profileRole } = useProfileRole(user)
   const navigate = useNavigate()
   const [preview, setPreview] = useState<Preview | null>(null)
   const [loading, setLoading] = useState(true)

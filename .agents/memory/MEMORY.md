@@ -1,1 +1,2 @@
-- [Plaid sandbox quirks & testing](plaid-sandbox.md) — sandbox has no real payroll income (DTI explodes, guard it); test server-secret code via `npx tsx` from root, not code_execution.
+- [Client TypeScript conventions](tsc-conventions.md) — strict+noUnusedLocals gate; Supabase to-one joins cast `as unknown as X[]`; anonymize unread state instead of deleting features; vite-env.d.ts for import.meta.env.
+- [Plaid sandbox](plaid-sandbox.md) — signals-only / data-minimization decisions for Plaid verification (don't re-add raw figures/PII; cards are signals-only).

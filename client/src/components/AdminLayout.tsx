@@ -1,7 +1,6 @@
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
-import { supabase } from '../lib/supabase'
 import { UserMenu } from './UserMenu'
 
 const navItems = [

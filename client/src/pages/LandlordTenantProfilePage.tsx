@@ -408,7 +408,7 @@ export function LandlordTenantProfilePage() {
         .maybeSingle()
       setTenantBankVerification((bankRow as PlaidVerificationRow | null) ?? null)
 
-      const rows = (applicationsData ?? []) as LandlordTenantApplicationRow[]
+      const rows = (applicationsData ?? []) as unknown as LandlordTenantApplicationRow[]
       const forLandlord = rows.filter((r) => r.property?.landlord_id === user.id)
       setLandlordTenantApplications(forLandlord)
 

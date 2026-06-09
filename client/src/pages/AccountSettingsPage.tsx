@@ -94,8 +94,8 @@ export function AccountSettingsPage() {
   const [suspending, setSuspending] = useState(false)
   const [suspendError, setSuspendError] = useState<string | null>(null)
   const [isSuspended, setIsSuspended] = useState(false)
-  const [applicationHistory, setApplicationHistory] = useState<ApplicationHistoryItem[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(true)
+  const [, setApplicationHistory] = useState<ApplicationHistoryItem[]>([])
+  const [, setLoadingHistory] = useState(true)
 
   async function handleDeleteAccount() {
     if (!user) return
@@ -181,7 +181,12 @@ export function AccountSettingsPage() {
         .order('created_at', { ascending: false })
 
       setApplicationHistory(
-        (data ?? []).map((row: { id: string; status: string; created_at: string; property?: { title?: string; address_line1?: string } }) => ({
+        ((data ?? []) as unknown as Array<{
+          id: string
+          status: string
+          created_at: string
+          property?: { title?: string; address_line1?: string }
+        }>).map((row) => ({
           id: row.id,
           property: row.property?.title || row.property?.address_line1 || 'Property',
           appliedDate: formatDate(row.created_at),

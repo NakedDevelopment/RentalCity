@@ -165,7 +165,7 @@ export function AccountPage() {
         setQuestionnaireAnswers((questionnaireData as { answers?: Record<string, unknown> } | null)?.answers ?? null)
         setUniversalApplication((universalData?.[0] as UniversalApplicationRecord | undefined) ?? null)
         setLandlordReviewsAboutMe(
-          normalizeLandlordReviewRows((ratingsRaw ?? []) as LandlordReviewAboutTenantRow[]),
+          normalizeLandlordReviewRows((ratingsRaw ?? []) as unknown as LandlordReviewAboutTenantRow[]),
         )
         setBankVerification((bankRow as typeof bankVerification) ?? null)
         setTenantScreening((screeningRow as typeof tenantScreening) ?? null)

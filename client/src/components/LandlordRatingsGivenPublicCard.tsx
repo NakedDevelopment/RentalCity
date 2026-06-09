@@ -88,7 +88,7 @@ export function LandlordRatingsGivenPublicCard({
         setLoadError(error.message)
         setRows([])
       } else {
-        setRows(((data ?? []) as Row[]).map(normalizeTenantEmbeds))
+        setRows(((data ?? []) as unknown as Row[]).map(normalizeTenantEmbeds))
       }
       setLoading(false)
     })()

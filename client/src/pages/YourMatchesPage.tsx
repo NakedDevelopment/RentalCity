@@ -34,8 +34,6 @@ type MatchCard = {
   photoAlt: string
 }
 
-type ProfileRole = 'tenant' | 'landlord'
-
 type LandlordMatchStatus = 'locked' | 'unlocked' | 'accepted' | 'declined'
 
 type LandlordMatchFilter =
@@ -356,7 +354,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [landlordMatches, setLandlordMatches] = useState<LandlordMatchCard[]>([])
   const [landlordProperties, setLandlordProperties] = useState<Array<{ id: string; label: string }>>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [, setError] = useState<string | null>(null)
   const MATCHES_PAGE_SIZE = 6
   const TENANT_MATCHES_PAGE_SIZE = 6
   /** Eligible tenant ↔ property matches (questionnaire complete), by match score */

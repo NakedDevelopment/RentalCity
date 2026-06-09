@@ -73,6 +73,10 @@ export function UniversalApplicationPage() {
       setError('Enter cardholder name.')
       return
     }
+    if (!user) {
+      setError('Your session expired. Please sign in again.')
+      return
+    }
     setLoading(true)
     try {
       const { data: session } = await supabase.auth.getSession()

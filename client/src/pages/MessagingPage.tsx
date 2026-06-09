@@ -5,8 +5,6 @@ import { useProfileRole } from '../lib/useProfileRole'
 import { safeInternalPath } from '../lib/safeInternalPath'
 import { supabase } from '../lib/supabase'
 
-type ProfileRole = 'tenant' | 'landlord'
-
 type Conversation = {
   id: string
   tenantId: string
@@ -289,7 +287,7 @@ export function MessagingPage() {
 
       const mapped = ((data ?? []) as unknown as MessageRow[]).map((message) => ({
         id: message.id,
-        from: message.sender_id === user.id ? 'outgoing' : 'incoming',
+        from: (message.sender_id === user.id ? 'outgoing' : 'incoming') as 'incoming' | 'outgoing',
         body: message.body,
         time: formatMessageTime(message.created_at),
         sender:
@@ -492,7 +490,7 @@ export function MessagingPage() {
     setMessages(
       ((data ?? []) as unknown as MessageRow[]).map((message) => ({
         id: message.id,
-        from: message.sender_id === user.id ? 'outgoing' : 'incoming',
+        from: (message.sender_id === user.id ? 'outgoing' : 'incoming') as 'incoming' | 'outgoing',
         body: message.body,
         time: formatMessageTime(message.created_at),
         sender:

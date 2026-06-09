@@ -5,7 +5,6 @@ import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
 
 type Filter = 'all' | 'unread' | 'matches' | 'applications' | 'reviews'
-type ProfileRole = 'tenant' | 'landlord'
 type NotificationType =
   | 'property_match'
   | 'application_update'

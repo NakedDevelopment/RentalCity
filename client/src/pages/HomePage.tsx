@@ -162,7 +162,7 @@ export function HomePage() {
         <p className="text-gray-500 py-8">Loading properties...</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {properties.map((p, i) => (
+          {properties.map((p) => (
             <PropertyCard
               key={p.id}
               id={p.id}

@@ -66,7 +66,7 @@ export function RentalApplicationPage() {
   const { user } = useAuth()
   const { role: profileRole, loading: roleLoading } = useProfileRole(user)
   const [profile, setProfile] = useState<ProfileRecord>(null)
-  const [appliedProperties, setAppliedProperties] = useState<AppliedProperty[]>([])
+  const [, setAppliedProperties] = useState<AppliedProperty[]>([])
   const [universalApplication, setUniversalApplication] = useState<{
     id: string
     status: string
@@ -82,7 +82,7 @@ export function RentalApplicationPage() {
   } | null>(null)
   const [startingScreening, setStartingScreening] = useState(false)
   const [refreshingScreening, setRefreshingScreening] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -98,7 +98,7 @@ export function RentalApplicationPage() {
       const [{ data: profileData }, { data: appsData }, { data: universalData }] = await Promise.all([
         supabase
           .from('profiles')
-          .select('display_name, phone, bio, city, created_at')
+          .select('display_name, avatar_url, phone, bio, city, created_at')
           .eq('id', user.id)
           .maybeSingle(),
         supabase
