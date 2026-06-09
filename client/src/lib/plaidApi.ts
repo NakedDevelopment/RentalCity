@@ -1,11 +1,56 @@
+export type PlaidIncomeStream = {
+  name: string
+  monthlyAmountCents: number
+  frequency: string
+  monthsSeen: number | null
+}
+
+export type PlaidAccount = {
+  name: string
+  mask: string | null
+  subtype: string | null
+  availableCents: number | null
+  currentCents: number | null
+}
+
+export type PlaidDebt = {
+  name: string
+  kind: 'credit' | 'student' | 'mortgage'
+  balanceCents: number | null
+  monthlyPaymentCents: number | null
+  aprPercent: number | null
+}
+
+export type PlaidIdentity = {
+  name: string | null
+  emails: string[]
+  phones: string[]
+  addresses: string[]
+}
+
 export type PlaidVerification = {
   institutionName: string | null
   accountsCount: number
+
   incomeVerified: boolean
   monthlyIncomeCents: number | null
+  incomeStreams: PlaidIncomeStream[]
+
   balancesVerified: boolean
   availableBalanceCents: number | null
   currentBalanceCents: number | null
+  totalAssetsCents: number | null
+  accounts: PlaidAccount[]
+
+  debtsVerified: boolean
+  totalMonthlyDebtCents: number | null
+  dtiRatio: number | null
+  debts: PlaidDebt[]
+
+  identityVerified: boolean
+  nameOnAccount: string | null
+  identity: PlaidIdentity | null
+
   lastVerifiedAt: string | null
 }
 

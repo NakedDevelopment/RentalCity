@@ -960,17 +960,41 @@ function verificationRow(row: {
   balances_verified: boolean | null
   available_balance_cents: number | string | null
   current_balance_cents: number | string | null
+  total_assets_cents?: number | string | null
+  debts_verified?: boolean | null
+  total_monthly_debt_cents?: number | string | null
+  dti_ratio?: number | string | null
+  identity_verified?: boolean | null
+  name_on_account?: string | null
+  details?: Record<string, unknown> | null
   last_verified_at: string | null
 }) {
-  const num = (v: number | string | null) => (v === null || v === undefined ? null : Number(v))
+  const num = (v: number | string | null | undefined) =>
+    v === null || v === undefined ? null : Number(v)
+  const details = (row.details ?? {}) as Record<string, unknown>
   return {
     institutionName: row.institution_name,
     accountsCount: row.accounts_count ?? 0,
+
     incomeVerified: Boolean(row.income_verified),
     monthlyIncomeCents: num(row.verified_monthly_income_cents),
+    incomeStreams: Array.isArray(details.incomeStreams) ? details.incomeStreams : [],
+
     balancesVerified: Boolean(row.balances_verified),
     availableBalanceCents: num(row.available_balance_cents),
     currentBalanceCents: num(row.current_balance_cents),
+    totalAssetsCents: num(row.total_assets_cents ?? null),
+    accounts: Array.isArray(details.accounts) ? details.accounts : [],
+
+    debtsVerified: Boolean(row.debts_verified),
+    totalMonthlyDebtCents: num(row.total_monthly_debt_cents ?? null),
+    dtiRatio: num(row.dti_ratio ?? null),
+    debts: Array.isArray(details.debts) ? details.debts : [],
+
+    identityVerified: Boolean(row.identity_verified),
+    nameOnAccount: row.name_on_account ?? null,
+    identity: (details.identity as Record<string, unknown> | undefined) ?? null,
+
     lastVerifiedAt: row.last_verified_at,
   }
 }
@@ -1082,11 +1106,29 @@ async function storeVerification(
     user_id: userId,
     institution_name: summary.institutionName,
     accounts_count: summary.accountsCount,
+
     income_verified: summary.incomeVerified,
     verified_monthly_income_cents: summary.incomeVerified ? summary.monthlyIncomeCents : null,
+
     balances_verified: summary.balancesVerified,
     available_balance_cents: summary.balancesVerified ? summary.availableBalanceCents : null,
     current_balance_cents: summary.balancesVerified ? summary.currentBalanceCents : null,
+    total_assets_cents: summary.balancesVerified ? summary.totalAssetsCents : null,
+
+    debts_verified: summary.debtsVerified,
+    total_monthly_debt_cents: summary.debtsVerified ? summary.totalMonthlyDebtCents : null,
+    dti_ratio: summary.dtiRatio,
+
+    identity_verified: summary.identityVerified,
+    name_on_account: summary.identity?.name ?? null,
+
+    details: {
+      incomeStreams: summary.incomeStreams,
+      accounts: summary.accounts,
+      debts: summary.debts,
+      identity: summary.identity,
+    },
+
     environment: env,
     last_verified_at: new Date().toISOString(),
   }

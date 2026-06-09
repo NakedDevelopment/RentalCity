@@ -1,0 +1,1 @@
+- [Plaid sandbox quirks & testing](plaid-sandbox.md) — sandbox has no real payroll income (DTI explodes, guard it); test server-secret code via `npx tsx` from root, not code_execution.

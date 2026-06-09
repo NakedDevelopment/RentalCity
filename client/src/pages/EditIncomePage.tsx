@@ -26,13 +26,28 @@ function formatMoney(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
 }
 
-function centsToDollars(cents: number | null | undefined) {
+function dollars(cents: number | null | undefined) {
   return typeof cents === 'number' ? cents / 100 : 0
+}
+
+function titleCaseFreq(freq: string) {
+  return freq
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
   return data.session?.access_token ?? null
+}
+
+function CheckIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+    </svg>
+  )
 }
 
 export function EditIncomePage() {
@@ -209,9 +224,14 @@ export function EditIncomePage() {
     )
   }
 
-  const verifiedIncome = centsToDollars(verification?.monthlyIncomeCents)
-  const availableBalance = centsToDollars(verification?.availableBalanceCents)
-  const currentBalance = centsToDollars(verification?.currentBalanceCents)
+  const v = verification
+  const hasAnyVerification = Boolean(
+    v && (v.incomeVerified || v.balancesVerified || v.debtsVerified || v.identityVerified),
+  )
+  const verifiedIncome = dollars(v?.monthlyIncomeCents)
+  const totalAssets = dollars(v?.totalAssetsCents)
+  const monthlyDebt = dollars(v?.totalMonthlyDebtCents)
+  const dtiPct = typeof v?.dtiRatio === 'number' ? Math.round(v.dtiRatio * 100) : null
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
@@ -234,42 +254,144 @@ export function EditIncomePage() {
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Verify with your bank</h2>
             <p className="mt-1 text-xs text-gray-500">
-              Securely connect your bank through Plaid to verify your income and balances. Landlords trust
-              verified financials more than self-reported numbers.
+              Securely connect your bank through Plaid to verify your income, balances, debts, and identity.
+              Landlords trust verified financials more than self-reported numbers.
             </p>
           </div>
-          {verification?.incomeVerified || verification?.balancesVerified ? (
+          {hasAnyVerification ? (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <CheckIcon />
               Verified
             </span>
           ) : null}
         </div>
 
-        {verification && (verification.incomeVerified || verification.balancesVerified) ? (
-          <div className="mt-4 space-y-3">
-            {verification.institutionName ? (
-              <p className="text-xs text-gray-500">Connected to {verification.institutionName}</p>
+        {v && hasAnyVerification ? (
+          <div className="mt-4 space-y-4">
+            {v.institutionName ? (
+              <p className="text-xs text-gray-500">
+                Connected to {v.institutionName}
+                {v.accountsCount ? ` · ${v.accountsCount} account${v.accountsCount === 1 ? '' : 's'}` : ''}
+              </p>
             ) : null}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {verification.incomeVerified ? (
+
+            {/* Headline metrics */}
+            <div className="grid grid-cols-2 gap-3">
+              {v.incomeVerified ? (
                 <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-500">Verified monthly income</p>
                   <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(verifiedIncome)}</p>
                 </div>
               ) : null}
-              {verification.balancesVerified ? (
+              {v.balancesVerified ? (
                 <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-500">Available balance</p>
-                  <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(availableBalance)}</p>
-                  {currentBalance > 0 && currentBalance !== availableBalance ? (
-                    <p className="mt-0.5 text-xs text-gray-400">{formatMoney(currentBalance)} current</p>
-                  ) : null}
+                  <p className="text-xs text-gray-500">Proof of funds (reserves)</p>
+                  <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(totalAssets)}</p>
+                </div>
+              ) : null}
+              {v.debtsVerified ? (
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Monthly debt payments</p>
+                  <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(monthlyDebt)}</p>
+                </div>
+              ) : null}
+              {dtiPct !== null ? (
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Debt-to-income</p>
+                  <p
+                    className={`mt-0.5 text-base font-semibold ${
+                      dtiPct <= 36 ? 'text-green-700' : dtiPct <= 43 ? 'text-amber-600' : 'text-red-600'
+                    }`}
+                  >
+                    {dtiPct}%
+                  </p>
                 </div>
               ) : null}
             </div>
+
+            {v.debtsVerified && dtiPct === null ? (
+              <p className="text-xs text-gray-500">
+                Debt-to-income isn’t shown because we couldn’t reliably detect recurring income from this
+                account.
+              </p>
+            ) : null}
+
+            {/* Per-account proof of funds */}
+            {v.accounts.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-700">Accounts</p>
+                <ul className="space-y-1.5">
+                  {v.accounts.map((a, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-gray-800">
+                        {a.name}
+                        {a.mask ? <span className="text-gray-400"> ••{a.mask}</span> : null}
+                        {a.subtype ? <span className="ml-1 text-xs text-gray-400">· {a.subtype}</span> : null}
+                      </span>
+                      <span className="shrink-0 text-gray-500">
+                        {a.currentCents != null ? formatMoney(dollars(a.currentCents)) : '—'}
+                        {a.availableCents != null && a.availableCents !== a.currentCents ? (
+                          <span className="ml-1 text-xs text-gray-400">
+                            ({formatMoney(dollars(a.availableCents))} avail)
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {/* Income streams */}
+            {v.incomeStreams.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-700">Income sources</p>
+                <ul className="space-y-1.5">
+                  {v.incomeStreams.map((s, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-gray-800">{s.name}</span>
+                      <span className="shrink-0 text-gray-500">
+                        {formatMoney(dollars(s.monthlyAmountCents))}/mo
+                        <span className="ml-1 text-xs text-gray-400">· {titleCaseFreq(s.frequency)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {/* Debts */}
+            {v.debts.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-medium text-gray-700">Debts</p>
+                <ul className="space-y-1.5">
+                  {v.debts.map((d, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-gray-800">{d.name}</span>
+                      <span className="shrink-0 text-gray-500">
+                        {d.balanceCents != null ? `${formatMoney(dollars(d.balanceCents))} bal` : '—'}
+                        {d.monthlyPaymentCents != null ? (
+                          <span className="ml-1 text-xs text-gray-400">
+                            · {formatMoney(dollars(d.monthlyPaymentCents))}/mo
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {/* Identity */}
+            {v.identityVerified && v.nameOnAccount ? (
+              <div className="flex items-center gap-2 rounded-lg bg-gray-50 p-3 text-sm text-gray-800">
+                <CheckIcon className="h-4 w-4 text-green-600" />
+                <span>
+                  Account held by <span className="font-medium">{v.nameOnAccount}</span>
+                </span>
+              </div>
+            ) : null}
+
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
@@ -318,11 +440,9 @@ export function EditIncomePage() {
             placeholder="$6,000"
             className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400"
           />
-          {verification?.incomeVerified && Math.round(verifiedIncome) === Math.round(incomeNum) && incomeNum > 0 ? (
+          {v?.incomeVerified && Math.round(verifiedIncome) === Math.round(incomeNum) && incomeNum > 0 ? (
             <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-green-700">
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <CheckIcon />
               Verified by your bank via Plaid.
             </p>
           ) : incomeNum > 0 ? (
