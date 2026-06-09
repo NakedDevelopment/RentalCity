@@ -15,6 +15,13 @@ import {
   computeMatch,
   type MatchResult,
 } from './match'
+import {
+  getPlaidClient,
+  getPlaidEnv,
+  createLinkToken,
+  exchangePublicToken,
+  fetchFinancialSummary,
+} from './plaid'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -927,6 +934,170 @@ app.get('/api/admin/directory', async (req, res) => {
 
   return res.json({ users: rows })
 })
+
+// ---------------------------------------------------------------------------
+// Plaid: tenant income + bank balance verification
+// ---------------------------------------------------------------------------
+
+function plaidUnavailable(res: express.Response) {
+  return res.status(503).json({
+    error: 'Bank verification is not configured. Add PLAID_CLIENT_ID and PLAID_SECRET to enable it.',
+  })
+}
+
+async function bearerUser(req: express.Request) {
+  const token = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.slice(7)
+    : null
+  return authUser(token)
+}
+
+function verificationRow(row: {
+  institution_name: string | null
+  accounts_count: number | null
+  income_verified: boolean | null
+  verified_monthly_income_cents: number | string | null
+  balances_verified: boolean | null
+  available_balance_cents: number | string | null
+  current_balance_cents: number | string | null
+  last_verified_at: string | null
+}) {
+  const num = (v: number | string | null) => (v === null || v === undefined ? null : Number(v))
+  return {
+    institutionName: row.institution_name,
+    accountsCount: row.accounts_count ?? 0,
+    incomeVerified: Boolean(row.income_verified),
+    monthlyIncomeCents: num(row.verified_monthly_income_cents),
+    balancesVerified: Boolean(row.balances_verified),
+    availableBalanceCents: num(row.available_balance_cents),
+    currentBalanceCents: num(row.current_balance_cents),
+    lastVerifiedAt: row.last_verified_at,
+  }
+}
+
+app.post('/api/plaid/link-token/create', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const client = getPlaidClient()
+  if (!client) return plaidUnavailable(res)
+  try {
+    const linkToken = await createLinkToken(client, user.id)
+    return res.json({ linkToken })
+  } catch (err) {
+    const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
+    console.error('Plaid link-token error:', msg || (err as Error)?.message)
+    return res.status(502).json({ error: msg || 'Could not start bank connection' })
+  }
+})
+
+app.post('/api/plaid/exchange', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const client = getPlaidClient()
+  if (!client) return plaidUnavailable(res)
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const publicToken = (req.body as { publicToken?: string })?.publicToken
+  if (!publicToken) return res.status(400).json({ error: 'Missing publicToken' })
+
+  try {
+    const { accessToken, itemId } = await exchangePublicToken(client, publicToken)
+    const summary = await fetchFinancialSummary(client, accessToken)
+    const env = getPlaidEnv()
+
+    const { error: itemErr } = await admin.from('plaid_items').upsert(
+      {
+        user_id: user.id,
+        access_token: accessToken,
+        item_id: itemId,
+        institution_name: summary.institutionName,
+        environment: env,
+      },
+      { onConflict: 'user_id' },
+    )
+    if (itemErr) throw itemErr
+
+    const verification = await storeVerification(admin, user.id, summary, env)
+    return res.json(verification)
+  } catch (err) {
+    const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
+    console.error('Plaid exchange error:', msg || (err as Error)?.message)
+    return res.status(502).json({ error: msg || 'Could not verify your bank' })
+  }
+})
+
+app.get('/api/plaid/verification', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data, error } = await admin
+    .from('plaid_financial_verifications')
+    .select('*')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (error) {
+    console.error('Plaid verification read error:', error.message)
+    return res.status(500).json({ error: 'Could not load verification status' })
+  }
+  return res.json({ verification: data ? verificationRow(data) : null })
+})
+
+app.post('/api/plaid/refresh', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const client = getPlaidClient()
+  if (!client) return plaidUnavailable(res)
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data: item, error: itemErr } = await admin
+    .from('plaid_items')
+    .select('access_token')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (itemErr) return res.status(500).json({ error: 'Could not load linked bank' })
+  if (!item?.access_token) return res.status(404).json({ error: 'No linked bank to refresh' })
+
+  try {
+    const summary = await fetchFinancialSummary(client, item.access_token as string)
+    const verification = await storeVerification(admin, user.id, summary, getPlaidEnv())
+    return res.json(verification)
+  } catch (err) {
+    const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
+    console.error('Plaid refresh error:', msg || (err as Error)?.message)
+    return res.status(502).json({ error: msg || 'Could not refresh verification' })
+  }
+})
+
+async function storeVerification(
+  admin: SupabaseClient,
+  userId: string,
+  summary: Awaited<ReturnType<typeof fetchFinancialSummary>>,
+  env: string,
+) {
+  const payload = {
+    user_id: userId,
+    institution_name: summary.institutionName,
+    accounts_count: summary.accountsCount,
+    income_verified: summary.incomeVerified,
+    verified_monthly_income_cents: summary.incomeVerified ? summary.monthlyIncomeCents : null,
+    balances_verified: summary.balancesVerified,
+    available_balance_cents: summary.balancesVerified ? summary.availableBalanceCents : null,
+    current_balance_cents: summary.balancesVerified ? summary.currentBalanceCents : null,
+    environment: env,
+    last_verified_at: new Date().toISOString(),
+  }
+  const { data, error } = await admin
+    .from('plaid_financial_verifications')
+    .upsert(payload, { onConflict: 'user_id' })
+    .select('*')
+    .single()
+  if (error) throw error
+  return verificationRow(data)
+}
 
 // In production, serve the built client static assets and SPA fallback
 if (process.env.NODE_ENV === 'production') {

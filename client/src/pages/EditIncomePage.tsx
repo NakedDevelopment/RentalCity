@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { usePlaidLink } from 'react-plaid-link'
 import { scoreTenantDimensions } from '../lib/tenantScoring'
 import type { TenantQuestionId, TenantChoiceId } from '../lib/tenantQuestionnaire'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import {
+  createPlaidLinkToken,
+  exchangePlaidPublicToken,
+  getPlaidVerification,
+  refreshPlaidVerification,
+  type PlaidVerification,
+} from '../lib/plaidApi'
 
 const RENTAL_BUDGET_TO_RENT: Record<string, number> = {
   a: 1200,
@@ -18,6 +26,15 @@ function formatMoney(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
 }
 
+function centsToDollars(cents: number | null | undefined) {
+  return typeof cents === 'number' ? cents / 100 : 0
+}
+
+async function getAccessToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token ?? null
+}
+
 export function EditIncomePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -25,6 +42,11 @@ export function EditIncomePage() {
   const [existingAnswers, setExistingAnswers] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [verification, setVerification] = useState<PlaidVerification | null>(null)
+  const [linkToken, setLinkToken] = useState<string | null>(null)
+  const [plaidLoading, setPlaidLoading] = useState(false)
+  const [plaidError, setPlaidError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -46,12 +68,92 @@ export function EditIncomePage() {
       })
   }, [user])
 
+  useEffect(() => {
+    if (!user) return
+    getAccessToken().then((token) => {
+      if (!token) return
+      getPlaidVerification(token)
+        .then(setVerification)
+        .catch(() => {})
+    })
+  }, [user])
+
   const incomeNum = useMemo(() => {
     const v = monthlyIncome.trim()
     if (!v) return 0
     const parsed = parseFloat(v.replace(/[^0-9.]/g, ''))
     return Number.isFinite(parsed) ? parsed : 0
   }, [monthlyIncome])
+
+  const applyVerification = useCallback((v: PlaidVerification) => {
+    setVerification(v)
+    if (v.incomeVerified && typeof v.monthlyIncomeCents === 'number' && v.monthlyIncomeCents > 0) {
+      setMonthlyIncome(String(Math.round(v.monthlyIncomeCents / 100)))
+    }
+  }, [])
+
+  const onPlaidSuccess = useCallback(
+    async (publicToken: string) => {
+      setPlaidLoading(true)
+      setPlaidError(null)
+      try {
+        const token = await getAccessToken()
+        if (!token) throw new Error('Please sign in again.')
+        const v = await exchangePlaidPublicToken(token, publicToken)
+        applyVerification(v)
+      } catch (err) {
+        setPlaidError(err instanceof Error ? err.message : 'Could not verify your bank')
+      } finally {
+        setPlaidLoading(false)
+        setLinkToken(null)
+      }
+    },
+    [applyVerification],
+  )
+
+  const { open, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess: (publicToken) => {
+      void onPlaidSuccess(publicToken)
+    },
+    onExit: () => {
+      setLinkToken(null)
+      setPlaidLoading(false)
+    },
+  })
+
+  useEffect(() => {
+    if (linkToken && ready) open()
+  }, [linkToken, ready, open])
+
+  async function handleConnectBank() {
+    setPlaidError(null)
+    setPlaidLoading(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Please sign in again.')
+      const lt = await createPlaidLinkToken(token)
+      setLinkToken(lt)
+    } catch (err) {
+      setPlaidError(err instanceof Error ? err.message : 'Could not start bank connection')
+      setPlaidLoading(false)
+    }
+  }
+
+  async function handleRefresh() {
+    setPlaidError(null)
+    setPlaidLoading(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Please sign in again.')
+      const v = await refreshPlaidVerification(token)
+      applyVerification(v)
+    } catch (err) {
+      setPlaidError(err instanceof Error ? err.message : 'Could not refresh verification')
+    } finally {
+      setPlaidLoading(false)
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -107,6 +209,10 @@ export function EditIncomePage() {
     )
   }
 
+  const verifiedIncome = centsToDollars(verification?.monthlyIncomeCents)
+  const availableBalance = centsToDollars(verification?.availableBalanceCents)
+  const currentBalance = centsToDollars(verification?.currentBalanceCents)
+
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
       <Link
@@ -123,6 +229,82 @@ export function EditIncomePage() {
         Update your monthly income to improve affordability matching.
       </p>
 
+      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Verify with your bank</h2>
+            <p className="mt-1 text-xs text-gray-500">
+              Securely connect your bank through Plaid to verify your income and balances. Landlords trust
+              verified financials more than self-reported numbers.
+            </p>
+          </div>
+          {verification?.incomeVerified || verification?.balancesVerified ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Verified
+            </span>
+          ) : null}
+        </div>
+
+        {verification && (verification.incomeVerified || verification.balancesVerified) ? (
+          <div className="mt-4 space-y-3">
+            {verification.institutionName ? (
+              <p className="text-xs text-gray-500">Connected to {verification.institutionName}</p>
+            ) : null}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {verification.incomeVerified ? (
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Verified monthly income</p>
+                  <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(verifiedIncome)}</p>
+                </div>
+              ) : null}
+              {verification.balancesVerified ? (
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Available balance</p>
+                  <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(availableBalance)}</p>
+                  {currentBalance > 0 && currentBalance !== availableBalance ? (
+                    <p className="mt-0.5 text-xs text-gray-400">{formatMoney(currentBalance)} current</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={plaidLoading}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {plaidLoading ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConnectBank}
+                disabled={plaidLoading}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Reconnect a different bank
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={handleConnectBank}
+              disabled={plaidLoading}
+              className="rounded-lg btn-primary px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {plaidLoading ? 'Connecting...' : 'Connect bank to verify'}
+            </button>
+          </div>
+        )}
+
+        {plaidError ? <p className="mt-3 text-xs text-red-600">{plaidError}</p> : null}
+      </div>
+
       <form onSubmit={handleSave} className="mt-6 space-y-5">
         <div>
           <label htmlFor="monthly-income" className="mb-2 block text-sm font-medium text-gray-800">
@@ -136,7 +318,14 @@ export function EditIncomePage() {
             placeholder="$6,000"
             className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400"
           />
-          {incomeNum > 0 ? (
+          {verification?.incomeVerified && Math.round(verifiedIncome) === Math.round(incomeNum) && incomeNum > 0 ? (
+            <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-green-700">
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Verified by your bank via Plaid.
+            </p>
+          ) : incomeNum > 0 ? (
             <p className="mt-2 text-xs text-gray-500">We’ll use {formatMoney(incomeNum)} / month for affordability.</p>
           ) : (
             <p className="mt-2 text-xs text-gray-500">Enter your gross monthly income before taxes.</p>
@@ -164,4 +353,3 @@ export function EditIncomePage() {
     </div>
   )
 }
-
