@@ -16,7 +16,7 @@ import {
   UNIVERSAL_APPLICATION_STATUS_ACTION_CLASS,
   UniversalApplicationStatusFields,
 } from '../components/UniversalApplicationStatusFields'
-import { VerificationStatusCard } from '../components/VerificationStatusChecklist'
+import { VerificationStatusCard, type VerificationStatusItem } from '../components/VerificationStatusChecklist'
 import {
   hasTenantLeasePreferencesData,
   TenantLeasePreferencesDisplay,
@@ -104,6 +104,12 @@ export function AccountPage() {
   const [universalApplication, setUniversalApplication] = useState<UniversalApplicationRecord | null>(null)
   const [responseMetrics, setResponseMetrics] = useState<LandlordResponseRateResult | null>(null)
   const [responseMetricsLoading, setResponseMetricsLoading] = useState(false)
+  const [bankVerification, setBankVerification] = useState<{
+    income_verified: boolean | null
+    balances_verified: boolean | null
+    identity_verified: boolean | null
+  } | null>(null)
+  const [tenantScreening, setTenantScreening] = useState<{ background_pass: boolean | null } | null>(null)
 
   useEffect(() => {
     async function loadProfile() {
@@ -115,8 +121,14 @@ export function AccountPage() {
       setProfile(profileData)
 
       if (profileRole === 'tenant') {
-        const [{ data: prefsData }, { data: questionnaireData }, { data: universalData }, { data: ratingsRaw }] =
-          await Promise.all([
+        const [
+          { data: prefsData },
+          { data: questionnaireData },
+          { data: universalData },
+          { data: ratingsRaw },
+          { data: bankRow },
+          { data: screeningRow },
+        ] = await Promise.all([
             supabase
               .from('tenant_preferences')
               .select('lease_length_months, move_in_date, min_budget_cents, max_budget_cents, has_pets, living_situation')
@@ -136,6 +148,18 @@ export function AccountPage() {
               )
               .eq('tenant_external_id', user.id)
               .order('created_at', { ascending: false }),
+            supabase
+              .from('plaid_financial_verifications')
+              .select('income_verified, balances_verified, identity_verified')
+              .eq('user_id', user.id)
+              .maybeSingle(),
+            supabase
+              .from('universal_application_screenings')
+              .select('background_pass')
+              .eq('tenant_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(),
           ])
         setTenantPrefs(prefsData ?? null)
         setQuestionnaireAnswers((questionnaireData as { answers?: Record<string, unknown> } | null)?.answers ?? null)
@@ -143,8 +167,12 @@ export function AccountPage() {
         setLandlordReviewsAboutMe(
           normalizeLandlordReviewRows((ratingsRaw ?? []) as LandlordReviewAboutTenantRow[]),
         )
+        setBankVerification((bankRow as typeof bankVerification) ?? null)
+        setTenantScreening((screeningRow as typeof tenantScreening) ?? null)
       } else {
         setLandlordReviewsAboutMe([])
+        setBankVerification(null)
+        setTenantScreening(null)
       }
     }
 
@@ -177,6 +205,16 @@ export function AccountPage() {
   const landlordReviewsPreview = useMemo(
     () => landlordReviewsAboutMe.slice(0, TENANT_LANDLORD_REVIEWS_PREVIEW_COUNT),
     [landlordReviewsAboutMe],
+  )
+
+  const verificationItems = useMemo<VerificationStatusItem[]>(
+    () => [
+      { label: 'Identity verified', complete: !!bankVerification?.identity_verified },
+      { label: 'Income verified', complete: !!bankVerification?.income_verified },
+      { label: 'Funds verified', complete: !!bankVerification?.balances_verified },
+      { label: 'Background check', complete: !!tenantScreening?.background_pass },
+    ],
+    [bankVerification, tenantScreening],
   )
 
   if (roleLoading || profileRole === null) {
@@ -719,7 +757,7 @@ export function AccountPage() {
             />
           </Card>
 
-          <VerificationStatusCard />
+          <VerificationStatusCard items={verificationItems} />
 
           <Card title="Profile Stats">
             <div className="space-y-4 text-sm">
