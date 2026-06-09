@@ -74,13 +74,6 @@ export type DebtInfo = {
   aprPercent: number | null
 }
 
-export type IdentityInfo = {
-  name: string | null
-  emails: string[]
-  phones: string[]
-  addresses: string[]
-}
-
 export type PlaidFinancialSummary = {
   institutionName: string | null
   accountsCount: number
@@ -105,7 +98,6 @@ export type PlaidFinancialSummary = {
 
   // Identity
   identityVerified: boolean
-  identity: IdentityInfo | null
 }
 
 // Plaid recurring-stream frequency -> approximate number of occurrences per month.
@@ -321,36 +313,14 @@ export async function fetchFinancialSummary(
   const dtiRatio = rawDti !== null && rawDti <= 5 ? rawDti : null
 
   // --- Identity on the account ---
+  // We only retain whether the account holder's identity could be verified
+  // (a name is present on the account). No contact PII (email / phone /
+  // address) and not even the name itself is collected, stored, or returned.
   let identityVerified = false
-  let identity: IdentityInfo | null = null
   try {
     const idResp = await client.identityGet({ access_token: accessToken })
     const owners = (idResp.data.accounts ?? []).flatMap((a) => a.owners ?? [])
-    if (owners.length > 0) {
-      const names = new Set<string>()
-      const emails = new Set<string>()
-      const phones = new Set<string>()
-      const addresses = new Set<string>()
-      for (const o of owners) {
-        for (const n of o.names ?? []) if (n) names.add(n)
-        for (const e of o.emails ?? []) if (e.data) emails.add(e.data)
-        for (const p of o.phone_numbers ?? []) if (p.data) phones.add(p.data)
-        for (const ad of o.addresses ?? []) {
-          const d = ad.data
-          if (d) {
-            const line = [d.street, d.city, d.region, d.postal_code].filter(Boolean).join(', ')
-            if (line) addresses.add(line)
-          }
-        }
-      }
-      identityVerified = names.size > 0
-      identity = {
-        name: [...names][0] ?? null,
-        emails: [...emails],
-        phones: [...phones],
-        addresses: [...addresses],
-      }
-    }
+    identityVerified = owners.some((o) => (o.names ?? []).some((n) => !!n))
   } catch {
     // identity not available for this institution
   }
@@ -375,6 +345,5 @@ export async function fetchFinancialSummary(
     dtiRatio,
 
     identityVerified,
-    identity,
   }
 }

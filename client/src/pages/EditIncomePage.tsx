@@ -26,17 +26,6 @@ function formatMoney(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
 }
 
-function dollars(cents: number | null | undefined) {
-  return typeof cents === 'number' ? cents / 100 : 0
-}
-
-function titleCaseFreq(freq: string) {
-  return freq
-    .toLowerCase()
-    .replace(/_/g, '-')
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
 async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
   return data.session?.access_token ?? null
@@ -47,6 +36,23 @@ function CheckIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
     </svg>
+  )
+}
+
+function ScoreRow({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5">
+      <dt className="text-sm text-gray-700">{label}</dt>
+      <dd>
+        {ok ? (
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700">
+            <CheckIcon /> Verified
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">Not verified</span>
+        )}
+      </dd>
+    </div>
   )
 }
 
@@ -100,31 +106,21 @@ export function EditIncomePage() {
     return Number.isFinite(parsed) ? parsed : 0
   }, [monthlyIncome])
 
-  const applyVerification = useCallback((v: PlaidVerification) => {
-    setVerification(v)
-    if (v.incomeVerified && typeof v.monthlyIncomeCents === 'number' && v.monthlyIncomeCents > 0) {
-      setMonthlyIncome(String(Math.round(v.monthlyIncomeCents / 100)))
+  const onPlaidSuccess = useCallback(async (publicToken: string) => {
+    setPlaidLoading(true)
+    setPlaidError(null)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Please sign in again.')
+      const v = await exchangePlaidPublicToken(token, publicToken)
+      setVerification(v)
+    } catch (err) {
+      setPlaidError(err instanceof Error ? err.message : 'Could not verify your bank')
+    } finally {
+      setPlaidLoading(false)
+      setLinkToken(null)
     }
   }, [])
-
-  const onPlaidSuccess = useCallback(
-    async (publicToken: string) => {
-      setPlaidLoading(true)
-      setPlaidError(null)
-      try {
-        const token = await getAccessToken()
-        if (!token) throw new Error('Please sign in again.')
-        const v = await exchangePlaidPublicToken(token, publicToken)
-        applyVerification(v)
-      } catch (err) {
-        setPlaidError(err instanceof Error ? err.message : 'Could not verify your bank')
-      } finally {
-        setPlaidLoading(false)
-        setLinkToken(null)
-      }
-    },
-    [applyVerification],
-  )
 
   const { open, ready } = usePlaidLink({
     token: linkToken,
@@ -162,7 +158,7 @@ export function EditIncomePage() {
       const token = await getAccessToken()
       if (!token) throw new Error('Please sign in again.')
       const v = await refreshPlaidVerification(token)
-      applyVerification(v)
+      setVerification(v)
     } catch (err) {
       setPlaidError(err instanceof Error ? err.message : 'Could not refresh verification')
     } finally {
@@ -228,9 +224,6 @@ export function EditIncomePage() {
   const hasAnyVerification = Boolean(
     v && (v.incomeVerified || v.balancesVerified || v.debtsVerified || v.identityVerified),
   )
-  const verifiedIncome = dollars(v?.monthlyIncomeCents)
-  const totalAssets = dollars(v?.totalAssetsCents)
-  const monthlyDebt = dollars(v?.totalMonthlyDebtCents)
   const dtiPct = typeof v?.dtiRatio === 'number' ? Math.round(v.dtiRatio * 100) : null
 
   return (
@@ -254,8 +247,8 @@ export function EditIncomePage() {
           <div>
             <h2 className="text-sm font-semibold text-gray-900">Verify with your bank</h2>
             <p className="mt-1 text-xs text-gray-500">
-              Securely connect your bank through Plaid to verify your income, balances, debts, and identity.
-              Landlords trust verified financials more than self-reported numbers.
+              Securely connect your bank through Plaid. We only keep the verification result — never your
+              account numbers, balances, or transactions.
             </p>
           </div>
           {hasAnyVerification ? (
@@ -275,121 +268,34 @@ export function EditIncomePage() {
               </p>
             ) : null}
 
-            {/* Headline metrics */}
-            <div className="grid grid-cols-2 gap-3">
-              {v.incomeVerified ? (
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-500">Verified monthly income</p>
-                  <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(verifiedIncome)}</p>
-                </div>
-              ) : null}
-              {v.balancesVerified ? (
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-500">Proof of funds (reserves)</p>
-                  <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(totalAssets)}</p>
-                </div>
-              ) : null}
-              {v.debtsVerified ? (
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-500">Monthly debt payments</p>
-                  <p className="mt-0.5 text-base font-semibold text-gray-900">{formatMoney(monthlyDebt)}</p>
-                </div>
-              ) : null}
-              {dtiPct !== null ? (
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-500">Debt-to-income</p>
-                  <p
-                    className={`mt-0.5 text-base font-semibold ${
-                      dtiPct <= 36 ? 'text-green-700' : dtiPct <= 43 ? 'text-amber-600' : 'text-red-600'
-                    }`}
-                  >
-                    {dtiPct}%
-                  </p>
-                </div>
-              ) : null}
-            </div>
+            {/* Verification scorecard — signals only, no raw figures */}
+            <dl className="divide-y divide-gray-100 rounded-lg border border-gray-100">
+              <ScoreRow label="Income" ok={v.incomeVerified} />
+              <ScoreRow label="Identity" ok={v.identityVerified} />
+              <ScoreRow label="Funds available" ok={v.balancesVerified} />
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <dt className="text-sm text-gray-700">Debt-to-income</dt>
+                <dd>
+                  {dtiPct !== null ? (
+                    <span
+                      className={`text-sm font-semibold ${
+                        dtiPct <= 36 ? 'text-green-700' : dtiPct <= 43 ? 'text-amber-600' : 'text-red-600'
+                      }`}
+                    >
+                      {dtiPct}%
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Not available</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
 
             {v.debtsVerified && dtiPct === null ? (
               <p className="text-xs text-gray-500">
                 Debt-to-income isn’t shown because we couldn’t reliably detect recurring income from this
                 account.
               </p>
-            ) : null}
-
-            {/* Per-account proof of funds */}
-            {v.accounts.length > 0 ? (
-              <div>
-                <p className="mb-2 text-xs font-medium text-gray-700">Accounts</p>
-                <ul className="space-y-1.5">
-                  {v.accounts.map((a, i) => (
-                    <li key={i} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="min-w-0 truncate text-gray-800">
-                        {a.name}
-                        {a.mask ? <span className="text-gray-400"> ••{a.mask}</span> : null}
-                        {a.subtype ? <span className="ml-1 text-xs text-gray-400">· {a.subtype}</span> : null}
-                      </span>
-                      <span className="shrink-0 text-gray-500">
-                        {a.currentCents != null ? formatMoney(dollars(a.currentCents)) : '—'}
-                        {a.availableCents != null && a.availableCents !== a.currentCents ? (
-                          <span className="ml-1 text-xs text-gray-400">
-                            ({formatMoney(dollars(a.availableCents))} avail)
-                          </span>
-                        ) : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {/* Income streams */}
-            {v.incomeStreams.length > 0 ? (
-              <div>
-                <p className="mb-2 text-xs font-medium text-gray-700">Income sources</p>
-                <ul className="space-y-1.5">
-                  {v.incomeStreams.map((s, i) => (
-                    <li key={i} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="min-w-0 truncate text-gray-800">{s.name}</span>
-                      <span className="shrink-0 text-gray-500">
-                        {formatMoney(dollars(s.monthlyAmountCents))}/mo
-                        <span className="ml-1 text-xs text-gray-400">· {titleCaseFreq(s.frequency)}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {/* Debts */}
-            {v.debts.length > 0 ? (
-              <div>
-                <p className="mb-2 text-xs font-medium text-gray-700">Debts</p>
-                <ul className="space-y-1.5">
-                  {v.debts.map((d, i) => (
-                    <li key={i} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="min-w-0 truncate text-gray-800">{d.name}</span>
-                      <span className="shrink-0 text-gray-500">
-                        {d.balanceCents != null ? `${formatMoney(dollars(d.balanceCents))} bal` : '—'}
-                        {d.monthlyPaymentCents != null ? (
-                          <span className="ml-1 text-xs text-gray-400">
-                            · {formatMoney(dollars(d.monthlyPaymentCents))}/mo
-                          </span>
-                        ) : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {/* Identity */}
-            {v.identityVerified && v.nameOnAccount ? (
-              <div className="flex items-center gap-2 rounded-lg bg-gray-50 p-3 text-sm text-gray-800">
-                <CheckIcon className="h-4 w-4 text-green-600" />
-                <span>
-                  Account held by <span className="font-medium">{v.nameOnAccount}</span>
-                </span>
-              </div>
             ) : null}
 
             <div className="flex flex-wrap gap-3">
@@ -440,10 +346,10 @@ export function EditIncomePage() {
             placeholder="$6,000"
             className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400"
           />
-          {v?.incomeVerified && Math.round(verifiedIncome) === Math.round(incomeNum) && incomeNum > 0 ? (
+          {v?.incomeVerified ? (
             <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-green-700">
               <CheckIcon />
-              Verified by your bank via Plaid.
+              Income verified with your bank via Plaid.
             </p>
           ) : incomeNum > 0 ? (
             <p className="mt-2 text-xs text-gray-500">We’ll use {formatMoney(incomeNum)} / month for affordability.</p>
