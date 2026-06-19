@@ -537,16 +537,24 @@ function renderResult(r, beds, baths, sqft, email) {
     return false;
   }
 
+  function toNum(n) {
+    if (n == null || (typeof n === 'string' && n.trim() === '')) return null;
+    var v = Number(n);
+    return isFinite(v) ? v : null;
+  }
+
   function fillBeds(n) {
-    if (n == null || isNaN(n)) return;
-    var v = Math.max(0, Math.round(n));
+    var num = toNum(n);
+    if (num === null) return;
+    var v = Math.max(0, Math.round(num));
     if (v > 5) v = 5;
     setSelectIfOption(bedsEl, String(v));
   }
 
   function fillBaths(n) {
-    if (n == null || isNaN(n)) return;
-    var v = Math.round(n * 2) / 2;       /* nearest 0.5 */
+    var num = toNum(n);
+    if (num === null) return;
+    var v = Math.round(num * 2) / 2;     /* nearest 0.5 */
     if (v < 1) v = 1;
     if (v > 3.5) v = 3.5;
     setSelectIfOption(bathsEl, String(v));
@@ -556,8 +564,9 @@ function renderResult(r, beds, baths, sqft, email) {
     setSelectIfOption(ptypeEl, item.propertyType);
     fillBeds(item.bedrooms);
     fillBaths(item.bathrooms);
-    if (item.squareFootage != null && !isNaN(item.squareFootage)) {
-      sqftEl.value = money(parseInt(item.squareFootage, 10)).replace('$', '');
+    var sqft = toNum(item.squareFootage);
+    if (sqft !== null && sqft > 0) {
+      sqftEl.value = money(Math.round(sqft)).replace('$', '');
     }
   }
 
