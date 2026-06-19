@@ -14,3 +14,6 @@ Shared contract: page POSTs `/api/estimate`; server proxies RentCast `avm/rent/l
 Leads from successful estimates are stored in Supabase **`public.leads`** (`source` column segments by origin, default `rental_value_report`; server-only RLS = enabled with no policies). NDJSON file is only a fallback when Supabase is unconfigured; `LEAD_WEBHOOK_URL` optionally forwards each lead.
 
 Brand wordmarks for the page live at `client/public/rental-value-report/assets/rental-city-wordmark-{gradient,white}.svg` (gradient = top trustbar on white, white = navy footer). Brand gradient: `#00BBFF → #3A7AFE`.
+
+## Logo (important)
+Rental City has **no logo image file**. The brand logo is an inline SVG `Logo()` component in `client/src/components/Layout.tsx` and `TenantLayout.tsx`: a house icon (`stroke=currentColor`, `text-primary` blue) + "Rental City" in `gray-900` (#111827) Inter `font-semibold`. To put the logo anywhere (e.g. the report page), copy that exact SVG markup — do NOT generate new wordmark graphics. On dark backgrounds use the same mark with white text (footer).
