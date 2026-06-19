@@ -6,3 +6,9 @@ id = "hX366Hf086xdD7SoPKCne"
 uri = "file://docs/visual-spec.md"
 type = "text"
 title = "Rental City — Complete Visual Spec"
+
+[[outputs]]
+id = "HZMgqZdzAGlCG19KDvIzt"
+uri = "file://rental-value-report.zip"
+type = "unspecified"
+title = "Rental Value Report — standalone lead magnet (import into a new Repl)"
