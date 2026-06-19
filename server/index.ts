@@ -1340,6 +1340,29 @@ if (process.env.NODE_ENV === 'production') {
   ]
   const clientDist = candidates.find((p) => fs.existsSync(p))
   if (clientDist) {
+    // Host-based routing for branded subdomains:
+    //   value.gorentalcity.com -> the static Rental Value Report
+    //   admin.gorentalcity.com -> the System Admin (client-side route)
+    // Everything else (app.gorentalcity.com, *.replit.app) is unaffected.
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api/')) return next()
+      const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+        .split(',')[0]
+        .trim()
+        .split(':')[0]
+        .toLowerCase()
+      if (host.startsWith('value.')) {
+        // Serve the report at the subdomain root, keeping the clean URL.
+        if (req.path === '/') req.url = '/rental-value-report/index.html'
+        return next()
+      }
+      if (host.startsWith('admin.')) {
+        // The admin UI is a client-side route, so send the browser there.
+        if (req.path === '/') return res.redirect(302, '/admin')
+        return next()
+      }
+      next()
+    })
     app.use(express.static(clientDist))
     app.get(/^\/(?!api\/).*/, (_req, res) => {
       res.sendFile(path.join(clientDist, 'index.html'))
