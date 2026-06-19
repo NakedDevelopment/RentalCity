@@ -1,3 +1,5 @@
 - [Client TypeScript conventions](tsc-conventions.md) — strict+noUnusedLocals gate; Supabase to-one joins cast `as unknown as X[]`; anonymize unread state instead of deleting features; vite-env.d.ts for import.meta.env.
 - [Plaid sandbox](plaid-sandbox.md) — signals-only / data-minimization decisions for Plaid verification (don't re-add raw figures/PII; cards are signals-only).
 - [Canvas quirks](canvas-quirks.md) — presentArtifact always fails here ("Available artifacts: []"); just place the shape and tell the user. Standalone non-SPA view = static HTML in client/public/<folder>/.
+- [Rental City DB access](supabase-vs-replit-db.md) — app data is in Supabase (query via SUPABASE_DB_URL + pg); executeSql/checkDatabase hit a different, empty Replit Postgres.
+- [Rental Value Report](rental-value-report.md) — RentCast lead magnet (in-app copy + standalone zip share /api/estimate); leads → public.leads (source-segmented, server-only RLS).

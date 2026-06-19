@@ -355,10 +355,34 @@ const RENTCAST_API_KEY = process.env.RENTCAST_API_KEY
 const LEAD_WEBHOOK_URL = process.env.LEAD_WEBHOOK_URL
 const LEADS_FILE = path.resolve(process.cwd(), 'leads.ndjson')
 
-function captureLead(record: Record<string, unknown>) {
+function appendLeadToFile(record: Record<string, unknown>) {
   fs.appendFile(LEADS_FILE, JSON.stringify(record) + '\n', (err) => {
     if (err) console.error('Failed to append lead:', err.message)
   })
+}
+
+async function captureLead(record: Record<string, unknown>) {
+  const admin = getSupabaseAdmin()
+  if (admin) {
+    const { error } = await admin.from('leads').insert({
+      source: 'rental_value_report',
+      email: record.email ?? null,
+      address: record.address,
+      property_type: record.propertyType ?? null,
+      bedrooms: record.bedrooms ?? null,
+      bathrooms: record.bathrooms ?? null,
+      square_footage: record.squareFootage ?? null,
+      rent: record.rent ?? null,
+      rent_range_low: record.rentRangeLow ?? null,
+      rent_range_high: record.rentRangeHigh ?? null,
+    })
+    if (error) {
+      console.error('Failed to insert lead:', error.message)
+      appendLeadToFile(record)
+    }
+  } else {
+    appendLeadToFile(record)
+  }
   if (LEAD_WEBHOOK_URL) {
     fetch(LEAD_WEBHOOK_URL, {
       method: 'POST',
@@ -408,7 +432,7 @@ app.post('/api/estimate', async (req, res) => {
       return res.status(rcRes.status).json(data)
     }
 
-    captureLead({
+    await captureLead({
       timestamp: new Date().toISOString(),
       email: email || null,
       address: String(address),

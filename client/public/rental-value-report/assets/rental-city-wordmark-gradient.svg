@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 28" fill="none" role="img" aria-label="Rental City">
+  <defs>
+    <linearGradient id="rcGrad" x1="0" y1="0" x2="176" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0.119" stop-color="#00BBFF"/>
+      <stop offset="0.906" stop-color="#3A7AFE"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2,2)" stroke="url(#rcGrad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+  </g>
+  <text x="34" y="20.5" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="19" font-weight="800" letter-spacing="-0.6" fill="url(#rcGrad)">Rental City</text>
+</svg>
