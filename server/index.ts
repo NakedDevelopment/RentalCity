@@ -516,6 +516,57 @@ app.post('/api/estimate', async (req, res) => {
 })
 
 /**
+ * Address search/autocomplete backed by the RentCast property records API.
+ * Returns canonical, matchable address suggestions for the typed query.
+ */
+app.get('/api/address-search', async (req, res) => {
+  const q = String(req.query.q || '').trim()
+  if (!RENTCAST_API_KEY) return res.json({ suggestions: [] })
+  if (q.length < 5) return res.json({ suggestions: [] })
+
+  const url =
+    'https://api.rentcast.io/v1/properties?address=' + encodeURIComponent(q) + '&limit=5'
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8000)
+  try {
+    const rcRes = await fetch(url, {
+      method: 'GET',
+      headers: { 'X-Api-Key': RENTCAST_API_KEY, Accept: 'application/json' },
+      signal: controller.signal,
+    })
+
+    // 400 (unparseable/partial address) and 404 (no record) are normal while
+    // typing — treat both as "no suggestions yet" rather than an error.
+    if (rcRes.status === 400 || rcRes.status === 404) return res.json({ suggestions: [] })
+    if (!rcRes.ok) return res.status(502).json({ suggestions: [], error: 'rentcast_request_failed' })
+
+    const data = await rcRes.json().catch(() => null)
+    const arr = Array.isArray(data) ? data : data ? [data] : []
+    const suggestions = arr
+      .filter((p: any) => p && typeof p.formattedAddress === 'string')
+      .map((p: any) => ({
+        address: p.formattedAddress as string,
+        city: p.city ?? null,
+        state: p.state ?? null,
+        zipCode: p.zipCode ?? null,
+        propertyType: p.propertyType ?? null,
+        bedrooms: p.bedrooms ?? null,
+        bathrooms: p.bathrooms ?? null,
+        squareFootage: p.squareFootage ?? null,
+      }))
+
+    return res.json({ suggestions })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('RentCast address search failed:', message)
+    return res.status(502).json({ suggestions: [], error: 'rentcast_request_failed' })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
+/**
  * Tenant-only: load landlord profile for a listing the tenant can see.
  * This avoids client-side RLS edge cases while still enforcing access rules.
  */
