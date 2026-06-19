@@ -349,6 +349,88 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// RentCast rental value estimate, used by the standalone "Rental Value Report"
+// lead-magnet page served at /rental-value-report/. The API key stays server-side.
+const RENTCAST_API_KEY = process.env.RENTCAST_API_KEY
+const LEAD_WEBHOOK_URL = process.env.LEAD_WEBHOOK_URL
+const LEADS_FILE = path.resolve(process.cwd(), 'leads.ndjson')
+
+function captureLead(record: Record<string, unknown>) {
+  fs.appendFile(LEADS_FILE, JSON.stringify(record) + '\n', (err) => {
+    if (err) console.error('Failed to append lead:', err.message)
+  })
+  if (LEAD_WEBHOOK_URL) {
+    fetch(LEAD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record),
+    }).catch((err) => console.error('Webhook POST failed:', err.message))
+  }
+}
+
+app.get('/api/estimate/health', (_req, res) => {
+  res.json({ ok: true, hasKey: Boolean(RENTCAST_API_KEY) })
+})
+
+app.post('/api/estimate', async (req, res) => {
+  const body = req.body || {}
+  const { address, propertyType, bedrooms, bathrooms, squareFootage, email } = body
+
+  if (!address || String(address).trim().length === 0) {
+    return res.status(400).json({ error: 'missing_address' })
+  }
+
+  if (!RENTCAST_API_KEY) {
+    return res.status(503).json({ error: 'missing_api_key' })
+  }
+
+  const qs = new URLSearchParams()
+  qs.set('address', String(address))
+  if (propertyType) qs.set('propertyType', String(propertyType))
+  if (bedrooms != null && bedrooms !== '') qs.set('bedrooms', String(bedrooms))
+  if (bathrooms != null && bathrooms !== '') qs.set('bathrooms', String(bathrooms))
+  if (squareFootage != null && squareFootage !== '') qs.set('squareFootage', String(squareFootage))
+  qs.set('compCount', '12')
+
+  const url = 'https://api.rentcast.io/v1/avm/rent/long-term?' + qs.toString()
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 12000)
+  try {
+    const rcRes = await fetch(url, {
+      method: 'GET',
+      headers: { 'X-Api-Key': RENTCAST_API_KEY, Accept: 'application/json' },
+      signal: controller.signal,
+    })
+    const data = (await rcRes.json().catch(() => ({}))) as Record<string, unknown>
+
+    if (!rcRes.ok) {
+      return res.status(rcRes.status).json(data)
+    }
+
+    captureLead({
+      timestamp: new Date().toISOString(),
+      email: email || null,
+      address: String(address),
+      propertyType: propertyType || null,
+      bedrooms: bedrooms != null ? bedrooms : null,
+      bathrooms: bathrooms != null ? bathrooms : null,
+      squareFootage: squareFootage != null ? squareFootage : null,
+      rent: data.rent != null ? data.rent : null,
+      rentRangeLow: data.rentRangeLow != null ? data.rentRangeLow : null,
+      rentRangeHigh: data.rentRangeHigh != null ? data.rentRangeHigh : null,
+    })
+
+    return res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('RentCast request failed:', message)
+    return res.status(502).json({ error: 'rentcast_request_failed', detail: message })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
 /**
  * Tenant-only: load landlord profile for a listing the tenant can see.
  * This avoids client-side RLS edge cases while still enforcing access rules.
