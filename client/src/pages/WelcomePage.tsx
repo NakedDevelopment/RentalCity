@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 export function WelcomePage() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-12 px-4">
-      <h1 className="text-4xl font-bold text-gray-900 mb-2">Rental City</h1>
+      <img src="/brand/rental-city-wordmark-gradient.svg" alt="Rental City" className="h-10 w-auto mb-3" />
       <p className="text-gray-600 italic mb-12">Find your perfect match</p>
 
       <div className="w-full max-w-sm">

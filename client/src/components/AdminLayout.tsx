@@ -82,11 +82,8 @@ export function AdminLayout() {
       <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col pl-2 pr-4">
         <header className="relative z-10 shrink-0 border-b bg-white -mx-4 pl-2 pr-4">
           <div className="flex items-center">
-            <Link to="/admin" className="flex items-center gap-2 text-xl font-semibold text-gray-900">
-              <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              Rental City
+            <Link to="/admin" className="flex items-center py-3">
+              <img src="/brand/rental-city-wordmark-gradient.svg" alt="Rental City" className="h-7 w-auto" />
             </Link>
             <span className="ml-3 rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
               Admin

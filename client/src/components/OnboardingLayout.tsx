@@ -23,13 +23,8 @@ export function OnboardingLayout() {
     <div className="min-h-screen flex flex-col bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link to="/" className="flex items-center gap-2 font-medium text-gray-900">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900 text-white">
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10.707 1.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 10h1v6a1 1 0 001 1h3a1 1 0 001-1v-3h2v3a1 1 0 001 1h3a1 1 0 001-1v-6h1a1 1 0 00.707-1.707l-7-7z" />
-              </svg>
-            </div>
-            <span>Rental City</span>
+          <Link to="/" className="flex items-center">
+            <img src="/brand/rental-city-wordmark-gradient.svg" alt="Rental City" className="h-7 w-auto" />
           </Link>
 
           <div className="flex items-center gap-2">

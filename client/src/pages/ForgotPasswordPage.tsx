@@ -31,15 +31,9 @@ export function ForgotPasswordPage() {
     <div className="flex flex-1 items-center justify-center px-4 py-12">
       <div className="w-full max-w-[314px]">
         <div className="rounded-2xl border border-gray-200 bg-white px-5 py-6 shadow-sm">
-          <div className="mb-5 flex justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl gradient-primary text-white">
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10.707 1.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 10h1v6a1 1 0 001 1h3a1 1 0 001-1v-3h2v3a1 1 0 001 1h3a1 1 0 001-1v-6h1a1 1 0 00.707-1.707l-7-7z" />
-              </svg>
-            </div>
+          <div className="mb-3 flex justify-center">
+            <img src="/brand/rental-city-wordmark-gradient.svg" alt="Rental City" className="h-9 w-auto" />
           </div>
-
-          <h1 className="text-center text-[2rem] font-medium text-gray-900">Rental City</h1>
           <p className="mt-1 text-center text-sm text-gray-500">Find your perfect match</p>
 
           <div className="mt-6 text-center">

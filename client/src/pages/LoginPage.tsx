@@ -44,11 +44,7 @@ export function LoginPage() {
       <div className="w-full max-w-[510px]">
         <div className="rounded-2xl border border-gray-200 bg-white px-12 py-10 shadow-sm">
           <div className="mb-6 flex justify-center">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary text-white">
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10.707 1.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 10h1v6a1 1 0 001 1h3a1 1 0 001-1v-3h2v3a1 1 0 001 1h3a1 1 0 001-1v-6h1a1 1 0 00.707-1.707l-7-7z" />
-              </svg>
-            </div>
+            <img src="/brand/rental-city-wordmark-gradient.svg" alt="Rental City" className="h-8 w-auto" />
           </div>
 
           <h1 className="mb-2 text-center text-[2rem] font-medium text-gray-900">Sign In</h1>
