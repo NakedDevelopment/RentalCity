@@ -528,10 +528,44 @@ function renderResult(r, beds, baths, sqft, email) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
   }
 
+  function setSelectIfOption(el, val) {
+    if (val == null || val === '') return false;
+    var target = String(val).toLowerCase();
+    for (var i = 0; i < el.options.length; i++) {
+      if (el.options[i].value.toLowerCase() === target) { el.value = el.options[i].value; return true; }
+    }
+    return false;
+  }
+
+  function fillBeds(n) {
+    if (n == null || isNaN(n)) return;
+    var v = Math.max(0, Math.round(n));
+    if (v > 5) v = 5;
+    setSelectIfOption(bedsEl, String(v));
+  }
+
+  function fillBaths(n) {
+    if (n == null || isNaN(n)) return;
+    var v = Math.round(n * 2) / 2;       /* nearest 0.5 */
+    if (v < 1) v = 1;
+    if (v > 3.5) v = 3.5;
+    setSelectIfOption(bathsEl, String(v));
+  }
+
+  function applyDetails(item) {
+    setSelectIfOption(ptypeEl, item.propertyType);
+    fillBeds(item.bedrooms);
+    fillBaths(item.bathrooms);
+    if (item.squareFootage != null && !isNaN(item.squareFootage)) {
+      sqftEl.value = money(parseInt(item.squareFootage, 10)).replace('$', '');
+    }
+  }
+
   function choose(idx) {
     var item = currentItems[idx];
     if (!item) return;
     addressEl.value = item.address;
+    applyDetails(item);
     clearInvalid();
     hideSuggest();
   }
