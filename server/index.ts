@@ -349,6 +349,16 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// TEMP diagnostic: shows which host headers the deployment receives so we can
+// confirm subdomain (host-based) routing. Safe to remove once verified.
+app.get('/api/__hostcheck', (req, res) => {
+  res.json({
+    host: req.headers.host || null,
+    xForwardedHost: req.headers['x-forwarded-host'] || null,
+    forwarded: req.headers['forwarded'] || null,
+  })
+})
+
 // RentCast rental value estimate, used by the standalone "Rental Value Report"
 // lead-magnet page served at /rental-value-report/. The API key stays server-side.
 const RENTCAST_API_KEY = process.env.RENTCAST_API_KEY
@@ -1346,17 +1356,19 @@ if (process.env.NODE_ENV === 'production') {
     // Everything else (app.gorentalcity.com, *.replit.app) is unaffected.
     app.use((req, res, next) => {
       if (req.path.startsWith('/api/')) return next()
-      const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
-        .split(',')[0]
-        .trim()
-        .split(':')[0]
-        .toLowerCase()
-      if (host.startsWith('value.')) {
+      // Replit's proxy may carry the requested host in either Host or
+      // X-Forwarded-Host (and the latter can be a comma-separated chain), so
+      // check every candidate rather than trusting a single header.
+      const hosts = [req.headers['x-forwarded-host'], req.headers.host]
+        .filter(Boolean)
+        .flatMap((h) => String(h).split(','))
+        .map((h) => h.trim().split(':')[0].toLowerCase())
+      if (hosts.some((h) => h.startsWith('value.'))) {
         // Serve the report at the subdomain root, keeping the clean URL.
         if (req.path === '/') req.url = '/rental-value-report/index.html'
         return next()
       }
-      if (host.startsWith('admin.')) {
+      if (hosts.some((h) => h.startsWith('admin.'))) {
         // The admin UI is a client-side route, so send the browser there.
         if (req.path === '/') return res.redirect(302, '/admin')
         return next()
