@@ -1,0 +1,33 @@
+Hi Michael,
+
+We've been working through the document and mapping it against our intended integration architecture, a few implementation questions came up. Our goal is to follow a data-minimization approach wherever possible, so we want to make sure our responses accurately reflect how the system will operate.
+
+A few questions:
+
+1. Decision-only responses  
+Is it possible for Equifax to return only a decision, risk tier, or score range rather than the underlying credit file or score? Ideally, we'd like to present the consumer with a credit category while avoiding storage of the underlying credit data within our platform.
+
+2. Consumer-direct collection of sensitive information  
+Do you offer a hosted workflow where applicants enter their SSN and other sensitive information directly into an Equifax-managed experience (iframe, hosted page, redirect, etc.) so that this information never passes through our systems?
+
+3. Hosted access to reports  
+For background screening reports, do you support a hosted viewing experience where landlords access the report directly through Equifax rather than through our platform? Our preference would be to retain only reference information and status outcomes while keeping the report itself within the Equifax environment.
+
+4. Definition of Class 5 Data  
+Would a derived result such as a risk tier, recommendation, or pass/fail status be considered Class 5 data, or does that classification apply only to the underlying report data and consumer information?
+
+5. Permissible Purpose Requirements  
+As a tenant-screening platform, what specific certifications, authorizations, or records do you require us to collect and retain in order to satisfy permissible purpose requirements?
+
+6. Breach Notification Requirements  
+What notification timelines, procedures, and points of contact should we follow in the event of a security incident involving Class 5 data?
+
+7. Training Requirements  
+What specifically satisfies the training requirements referenced in the attestation? Do you provide guidance or approved training materials, or is self-administered training acceptable?
+
+8. Supporting Documentation  
+For the policy and security-related sections of the attestation, what level of supporting documentation do you typically expect from vendors?
+
+Once we have clarity on the above, we should be able to complete and return the attestation promptly.
+
+Thanks for your help.
