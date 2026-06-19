@@ -354,11 +354,70 @@ app.get('/api/health', (_req, res) => {
 const RENTCAST_API_KEY = process.env.RENTCAST_API_KEY
 const LEAD_WEBHOOK_URL = process.env.LEAD_WEBHOOK_URL
 const LEADS_FILE = path.resolve(process.cwd(), 'leads.ndjson')
+// HubSpot mirror of each lead (marketing CRM). These are public, embeddable IDs
+// (portal + form GUID), not secrets, so they have safe defaults but can be
+// overridden via env if the form/account changes.
+const HUBSPOT_PORTAL_ID = process.env.HUBSPOT_PORTAL_ID || '245183301'
+const HUBSPOT_FORM_GUID = process.env.HUBSPOT_FORM_GUID || '7054444a-a19c-454d-818b-c78342341af0'
 
 function appendLeadToFile(record: Record<string, unknown>) {
   fs.appendFile(LEADS_FILE, JSON.stringify(record) + '\n', (err) => {
     if (err) console.error('Failed to append lead:', err.message)
   })
+}
+
+// Mirror a Rental Value Report lead into HubSpot via the public Forms Submission
+// API (no auth required — the portal + form GUID are the same IDs used to embed
+// the form). This records a submission against the form (so HubSpot lists /
+// workflows fire) and creates/updates the contact. Best-effort: never throws.
+async function syncLeadToHubSpot(record: Record<string, unknown>) {
+  if (!HUBSPOT_PORTAL_ID || !HUBSPOT_FORM_GUID) return
+  if (!record.email) return // HubSpot forms require an email to create the contact
+
+  const summary: string[] = []
+  if (record.propertyType) summary.push(`Property type: ${record.propertyType}`)
+  if (record.bedrooms != null) summary.push(`Bedrooms: ${record.bedrooms}`)
+  if (record.bathrooms != null) summary.push(`Bathrooms: ${record.bathrooms}`)
+  if (record.squareFootage != null) summary.push(`Square footage: ${record.squareFootage}`)
+  if (record.rent != null) {
+    const range =
+      record.rentRangeLow != null && record.rentRangeHigh != null
+        ? ` (range $${record.rentRangeLow}\u2013$${record.rentRangeHigh})`
+        : ''
+    summary.push(`Estimated rent: $${record.rent}${range}`)
+  }
+
+  const fields: Array<{ name: string; value: string }> = []
+  const add = (name: string, value: unknown) => {
+    if (value != null && String(value).trim() !== '') fields.push({ name, value: String(value) })
+  }
+  add('email', record.email)
+  add('address', record.address)
+  add('property_type', record.propertyType)
+  add('bedrooms', record.bedrooms)
+  add('bathrooms', record.bathrooms)
+  add('square_footage', record.squareFootage)
+  if (summary.length) add('message', summary.join(' | '))
+
+  const url = `https://api.hsforms.com/submissions/v3/integration/submit/${HUBSPOT_PORTAL_ID}/${HUBSPOT_FORM_GUID}`
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 3000)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields, context: { pageName: 'Rental Value Report' } }),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      console.error('HubSpot lead sync failed:', res.status, detail.slice(0, 300))
+    }
+  } catch (err) {
+    console.error('HubSpot lead sync error:', err instanceof Error ? err.message : String(err))
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 async function captureLead(record: Record<string, unknown>) {
@@ -390,6 +449,7 @@ async function captureLead(record: Record<string, unknown>) {
       body: JSON.stringify(record),
     }).catch((err) => console.error('Webhook POST failed:', err.message))
   }
+  await syncLeadToHubSpot(record)
 }
 
 app.get('/api/estimate/health', (_req, res) => {

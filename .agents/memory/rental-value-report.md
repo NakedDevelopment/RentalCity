@@ -17,3 +17,8 @@ Brand wordmarks for the page live at `client/public/rental-value-report/assets/r
 
 ## Logo (important)
 Rental City has **no logo image file**. The brand logo is an inline SVG `Logo()` component in `client/src/components/Layout.tsx` and `TenantLayout.tsx`: a house icon (`stroke=currentColor`, `text-primary` blue) + "Rental City" in `gray-900` (#111827) Inter `font-semibold`. To put the logo anywhere (e.g. the report page), copy that exact SVG markup — do NOT generate new wordmark graphics. On dark backgrounds use the same mark with white text (footer).
+
+## HubSpot lead mirror
+Each captured lead is also mirrored into HubSpot from `syncLeadToHubSpot()` (server/index.ts), called inside `captureLead()`. Uses the **public Forms Submission API** `https://api.hsforms.com/submissions/v3/integration/submit/{portalId}/{formGuid}` — **no OAuth/connector needed**; the portal ID + form GUID are the same public IDs used to embed the form (overridable via `HUBSPOT_PORTAL_ID` / `HUBSPOT_FORM_GUID` env).
+**Why no connector:** the Replit HubSpot *connector* proxy returned "No hubspot connection found" and OAuth is unnecessary for form submissions. Don't reach for the connector for form submits.
+The submission API is **lenient** — it returned 200 even for field names not on the form (unknown fields ignored, not rejected), so we map email/address/property fields + a `message` summary best-effort. Call is awaited but bounded by a 3s AbortController so a slow HubSpot can't stall `/api/estimate`.
