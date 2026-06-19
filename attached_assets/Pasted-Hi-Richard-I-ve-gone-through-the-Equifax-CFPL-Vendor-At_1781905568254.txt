@@ -1,0 +1,38 @@
+Hi Richard,
+
+I've gone through the Equifax CFPL Vendor Attestation and wanted to give you a quick update on where things stand.
+
+At a high level, the architecture we're proposing is designed to minimize our exposure to sensitive data. The goal is for SSNs, credit files, and background reports to remain within Equifax's environment whenever possible. In that model, the applicant provides their information directly to Equifax, we receive only the information needed to make a decision, and full reports remain hosted by Equifax rather than stored in our system.
+
+One important clarification: this approach still allows landlords to access the full background report they've purchased. They would simply access it through a secure Equifax-hosted link rather than through our platform. That keeps the report out of our database while still making it available to the end user.
+
+Based on my review, there are three buckets:
+
+Items we're comfortable answering today
+- Creditworthiness usage
+- General data handling and security controls
+- Overall platform architecture and data-minimization approach
+
+Items we're waiting on Equifax to confirm
+- Whether they support a decision-only response without us receiving or storing underlying credit data
+- Whether they support hosted collection of applicant information
+- Whether background reports can remain hosted by Equifax rather than being stored within our platform
+
+I've already sent those questions to their team and am waiting on clarification.
+
+Items I'd recommend for legal review
+- Permissible Purpose language and certifications
+- Breach notification requirements
+- Final review of the completed attestation before submission
+
+One item I want to flag is the training requirement. The attestation asks about FCRA and privacy/security training for personnel handling the integration. I've asked Equifax for clarification on what specifically satisfies that requirement, and we'll make sure the appropriate training and documentation are in place before finalizing that section.
+
+In parallel, I'm preparing the supporting policy documents so we're ready to move quickly once Equifax responds.
+
+Because several of the remaining answers depend on Equifax's guidance, we may not be able to return the signed attestation today. I'd rather make sure the responses are accurate than rush through assumptions. I'll keep pushing for a quick turnaround and will update you as soon as I hear back.
+
+Once we have those answers, we should be in a good position to finalize everything.
+
+Thanks,
+
+[Your Name]
