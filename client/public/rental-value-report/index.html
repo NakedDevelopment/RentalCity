@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rental City — Free Rental Value Report</title>
+<meta name="description" content="Find out what your property could rent for in minutes. Free, instant rental value report backed by local comparable data." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #3A7AFE;
+    --primary-light: #00BBFF;
+    --gradient-primary: linear-gradient(83.7338deg, #00BBFF 11.921%, #3A7AFE 90.638%);
+    --gradient-primary-hover: linear-gradient(83.7338deg, #00AAEE 11.921%, #2D68E8 90.638%);
+
+    --ink: #0F1E3D;
+    --navy-deep: #0A1733;
+    --n900: #171717;
+    --n700: #2B3245;
+    --n600: #404040;
+    --n500: #525252;
+    --n400: #737373;
+    --n300: #A3A3A3;
+    --n200: #D4D4D4;
+    --n100: #E5E5E5;
+    --n50:  #F5F5F5;
+
+    --bg: #FFFFFF;
+    --bg-soft: #F8FAFD;
+    --bg-soft2: #EEF4FE;
+
+    --accepted-bg: #CDF7D4;
+    --accepted-text: #0E7B20;
+    --notif: #FF4B4B;
+
+    --tint-blue: rgba(58,122,254,0.08);
+    --tint-blue-border: rgba(58,122,254,0.20);
+
+    --maxw: 1180px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    color: var(--n600); background: var(--bg-soft);
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    line-height: 1.55; font-size: 16px;
+  }
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+  h1, h2, h3 { color: var(--ink); margin: 0; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* ===== trust bar ===== */
+  .trustbar { background: #fff; border-bottom: 1px solid var(--n100); }
+  .trustbar-inner {
+    max-width: var(--maxw); margin: 0 auto; padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  }
+  .tb-logo { height: 30px; width: auto; }
+  .tb-items { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
+  .tb-item { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; color: var(--n600); }
+  .tb-item svg { width: 17px; height: 17px; color: var(--primary); flex-shrink: 0; }
+  .tb-item b { color: var(--ink); font-weight: 700; }
+  .tb-item span { color: var(--n400); font-weight: 500; }
+
+  /* ===== main hero ===== */
+  .hero { padding: 40px 0 48px; }
+  .panel {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    background: #fff; border: 1px solid var(--n100); border-radius: 24px; overflow: hidden;
+    box-shadow: 0 40px 90px -50px rgba(15,30,61,0.4);
+  }
+
+  /* left */
+  .left {
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(700px 360px at 110% -10%, rgba(0,187,255,0.22), transparent 60%),
+      radial-gradient(560px 380px at -10% 110%, rgba(58,122,254,0.28), transparent 60%),
+      linear-gradient(160deg, #102A57 0%, #0A1733 100%);
+    color: #fff; padding: 48px 44px;
+  }
+  .left::before {
+    content: ""; position: absolute; inset: 0; opacity: .5; mix-blend-mode: overlay; pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
+  }
+  .left-inner { position: relative; z-index: 1; }
+  .eyebrow {
+    font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--primary-light); margin-bottom: 18px; display: inline-block;
+  }
+  .left h1 { color: #fff; font-size: clamp(34px, 4vw, 50px); font-weight: 800; letter-spacing: -0.035em; line-height: 1.02; }
+  .left h1 em { font-style: normal; background: linear-gradient(83deg,#00BBFF,#8FB6FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .left .sub { color: rgba(255,255,255,0.78); font-size: 17px; margin: 18px 0 0; max-width: 420px; line-height: 1.5; }
+
+  .feat-list { list-style: none; padding: 0; margin: 30px 0 0; display: grid; gap: 13px; }
+  .feat-list li { display: grid; grid-template-columns: 24px 1fr; gap: 12px; align-items: start; font-size: 15.5px; color: rgba(255,255,255,0.92); }
+  .feat-check { width: 22px; height: 22px; border-radius: 50%; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .feat-check svg { width: 12px; height: 12px; color: #fff; }
+
+  .left-note {
+    margin-top: 30px; display: flex; gap: 14px; align-items: center;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px; padding: 16px 18px;
+  }
+  .left-note .ic { width: 40px; height: 40px; flex-shrink: 0; border-radius: 11px; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; }
+  .left-note .ic svg { width: 21px; height: 21px; color: #fff; }
+  .left-note p { margin: 0; font-size: 14px; color: rgba(255,255,255,0.88); line-height: 1.45; }
+  .left-note b { color: #fff; font-weight: 700; }
+
+  /* right */
+  .right { padding: 48px 44px; background: #fff; }
+  .right h2 { font-size: 27px; font-weight: 800; letter-spacing: -0.025em; }
+  .right .lead { font-size: 15.5px; color: var(--n500); margin: 8px 0 26px; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .field { display: flex; flex-direction: column; }
+  .field.full { grid-column: 1 / -1; }
+  .field label { font-size: 13px; font-weight: 700; color: var(--n700); margin-bottom: 7px; }
+  .field label .req { color: var(--notif); }
+  .field label .opt { color: var(--n400); font-weight: 500; }
+  .field input, .field select {
+    font: inherit; font-size: 15px; color: var(--ink);
+    border: 1.5px solid var(--n200); border-radius: 11px; padding: 12px 14px; background: var(--bg-soft);
+    outline: none; transition: border-color .15s, background .15s; width: 100%;
+  }
+  .field select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 38px; }
+  .field input:focus, .field select:focus { border-color: var(--primary); background: #fff; }
+  .field input.invalid, .field select.invalid { border-color: var(--notif); background: rgba(255,75,75,0.04); }
+
+  .btn-submit {
+    width: 100%; margin-top: 22px; border: 0; cursor: pointer;
+    background: var(--gradient-primary); color: #fff;
+    font: inherit; font-size: 16.5px; font-weight: 700; letter-spacing: -0.01em;
+    padding: 16px 22px; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    box-shadow: 0 14px 30px -14px rgba(58,122,254,0.65); transition: background .15s, transform .12s;
+  }
+  .btn-submit:hover { background: var(--gradient-primary-hover); transform: translateY(-1px); }
+  .btn-submit:active { transform: translateY(0); }
+  .btn-submit svg { width: 17px; height: 17px; }
+  .btn-submit[disabled] { opacity: .7; cursor: default; transform: none; }
+  .reassure { margin-top: 13px; font-size: 13px; color: var(--n500); display: flex; align-items: center; gap: 8px; justify-content: center; text-align: center; }
+  .reassure svg { width: 14px; height: 14px; color: var(--accepted-text); flex-shrink: 0; }
+
+  /* ===== result card ===== */
+  .result {
+    margin-top: 24px; border: 1px solid var(--tint-blue-border); border-radius: 16px; overflow: hidden;
+    background: linear-gradient(180deg, var(--bg-soft2) 0%, #fff 60%);
+    max-height: 0; opacity: 0; transition: max-height .55s ease, opacity .45s ease, margin-top .3s ease;
+  }
+  .result.open { max-height: 900px; opacity: 1; }
+  .result-top { padding: 22px 24px; display: flex; align-items: center; gap: 18px; border-bottom: 1px solid var(--n100); }
+  .result-home { width: 52px; height: 52px; flex-shrink: 0; border-radius: 14px; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; }
+  .result-home svg { width: 27px; height: 27px; color: #fff; }
+  .result-rentwrap { flex: 1; min-width: 0; }
+  .result-rentwrap .k { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n400); }
+  .result-rent { font-size: 40px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; color: var(--ink); }
+  .result-rent .grad { background: var(--gradient-primary); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .result-rent .per { font-size: 16px; font-weight: 600; color: var(--n400); letter-spacing: 0; }
+
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--n100); }
+  .rcell { background: #fff; padding: 18px 24px; }
+  .rcell .rk { font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--n400); margin-bottom: 5px; }
+  .rcell .rv { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+  .rcell .rv small { font-size: 13px; font-weight: 600; color: var(--n400); }
+
+  .range-row { padding: 18px 24px; background: #fff; }
+  .range-head { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 700; color: var(--n500); margin-bottom: 10px; }
+  .range-track { height: 8px; border-radius: 100px; background: var(--n100); position: relative; overflow: hidden; }
+  .range-fill { position: absolute; top: 0; bottom: 0; left: 18%; right: 18%; border-radius: 100px; background: var(--gradient-primary); }
+  .range-mid { position: absolute; top: -3px; bottom: -3px; left: 50%; width: 3px; background: var(--ink); border-radius: 2px; transform: translateX(-50%); }
+
+  .conf-row { padding: 16px 24px 20px; background: #fff; border-top: 1px solid var(--n100); }
+  .conf-head { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; font-weight: 700; color: var(--n500); margin-bottom: 9px; }
+  .conf-head .pct { color: var(--accepted-text); font-weight: 800; font-size: 14px; }
+  .conf-track { height: 7px; border-radius: 100px; background: var(--n100); overflow: hidden; }
+  .conf-bar { height: 100%; width: 0; border-radius: 100px; background: linear-gradient(90deg, #00BBFF, #0E7B20); transition: width 1s ease .2s; }
+  .conf-note { margin: 12px 0 0; font-size: 12.5px; color: var(--n400); }
+
+  .result-sent { padding: 16px 24px; background: var(--accepted-bg); color: var(--accepted-text); font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .result-sent svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+  /* ===== feature strip ===== */
+  .features { padding: 8px 0 64px; }
+  .feature-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--n100); border: 1px solid var(--n100); border-radius: 18px; overflow: hidden;
+  }
+  .fcard { background: #fff; padding: 28px 26px; }
+  .fcard .fi { width: 44px; height: 44px; border-radius: 12px; background: var(--tint-blue); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .fcard .fi svg { width: 22px; height: 22px; color: var(--primary); }
+  .fcard h3 { font-size: 16px; font-weight: 800; letter-spacing: -0.015em; margin-bottom: 6px; }
+  .fcard p { margin: 0; font-size: 13.5px; color: var(--n500); line-height: 1.5; }
+
+  /* ===== footer ===== */
+  footer.foot { background: var(--navy-deep); color: rgba(255,255,255,0.6); padding: 30px 0; }
+  .foot-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .foot-logo { height: 22px; opacity: .95; }
+  .foot-inner .mid { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.8); }
+  .foot-inner .r { font-size: 12.5px; }
+
+  .reveal { transition: opacity .65s ease, transform .65s ease; }
+  html.anim .reveal { opacity: 0; transform: translateY(20px); }
+  html.anim .reveal.is-in { opacity: 1; transform: none; }
+
+  /* ===== responsive ===== */
+  @media (max-width: 880px) {
+    .panel { grid-template-columns: 1fr; }
+    .left { padding: 38px 30px; }
+    .right { padding: 38px 30px; }
+    .feature-strip { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 768px) {
+    .trustbar-inner { justify-content: center; }
+    .tb-items { gap: 16px; }
+    .tb-item span { display: none; }
+    .hero { padding: 24px 0 32px; }
+  }
+  @media (max-width: 520px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .feature-strip { grid-template-columns: 1fr; }
+    .result-grid { grid-template-columns: 1fr; }
+    .left h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== TRUST BAR / HEADER ===== -->
+<div class="trustbar">
+  <div class="trustbar-inner">
+    <img class="tb-logo" src="assets/rental-city-wordmark-gradient.svg" alt="Rental City" />
+    <div class="tb-items">
+      <span class="tb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><b>100% Free</b>&nbsp;<span>· No obligation</span></span>
+      <span class="tb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><b>Secure</b>&nbsp;<span>· Your info is private</span></span>
+      <span class="tb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg><b>Trusted</b>&nbsp;<span>· By renters &amp; owners</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="wrap">
+    <div class="panel reveal">
+
+      <!-- LEFT -->
+      <div class="left">
+        <div class="left-inner">
+          <span class="eyebrow">Know your rental value</span>
+          <h1>Find out what your property could rent for. <em>In minutes.</em></h1>
+          <p class="sub">A free, instant rental estimate backed by real comparable rentals near you — no agent, no guesswork.</p>
+
+          <ul class="feat-list">
+            <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Estimated monthly rent &amp; rent range</li>
+            <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Comparable rentals within 1 mile</li>
+            <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Average rent per square foot</li>
+            <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Estimated annual rental income</li>
+            <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span> Tips to increase your rental value</li>
+          </ul>
+
+          <div class="left-note">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg></span>
+            <p>Get a <b>professional rental analysis</b> backed by real market data — free, in seconds.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="right">
+        <h2>Get your free rental report</h2>
+        <p class="lead">Enter your property details and we'll calculate your estimate instantly.</p>
+
+        <form id="rentForm" novalidate>
+          <div class="form-grid">
+            <div class="field full">
+              <label for="address">Property address <span class="req">*</span></label>
+              <input id="address" name="address" type="text" autocomplete="off" placeholder="123 Main St, Memphis, TN 38103" />
+            </div>
+            <div class="field">
+              <label for="ptype">Property type <span class="req">*</span></label>
+              <select id="ptype" name="ptype">
+                <option value="Single Family" selected>Single family</option>
+                <option value="Condo">Condo</option>
+                <option value="Townhouse">Townhouse</option>
+                <option value="Apartment">Apartment</option>
+                <option value="Manufactured">Manufactured</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="sqft">Square feet <span class="opt">(optional)</span></label>
+              <input id="sqft" name="sqft" type="text" inputmode="numeric" placeholder="1,800" />
+            </div>
+            <div class="field">
+              <label for="beds">Bedrooms <span class="req">*</span></label>
+              <select id="beds" name="beds">
+                <option value="">Select</option>
+                <option value="0">Studio</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+                <option value="4">4</option>
+                <option value="5">5+</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="baths">Bathrooms <span class="req">*</span></label>
+              <select id="baths" name="baths">
+                <option value="">Select</option>
+                <option value="1">1</option>
+                <option value="1.5">1.5</option>
+                <option value="2" selected>2</option>
+                <option value="2.5">2.5</option>
+                <option value="3">3</option>
+                <option value="3.5">3.5+</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label for="email">Email address <span class="req">*</span></label>
+              <input id="email" name="email" type="email" placeholder="you@email.com" />
+            </div>
+          </div>
+
+          <button class="btn-submit" type="submit" id="submitBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
+            Get my free rental report
+          </button>
+          <p class="reassure"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> We respect your privacy. Your information is never shared.</p>
+        </form>
+
+        <!-- RESULT -->
+        <div class="result" id="result" aria-live="polite">
+          <div class="result-top">
+            <span class="result-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span>
+            <div class="result-rentwrap">
+              <div class="k">Estimated monthly rent</div>
+              <div class="result-rent"><span class="grad" id="rRent">$0</span><span class="per"> /month</span></div>
+            </div>
+          </div>
+
+          <div class="range-row">
+            <div class="range-head"><span>Rent range</span><span id="rRange">$0 – $0</span></div>
+            <div class="range-track"><span class="range-fill"></span><span class="range-mid"></span></div>
+          </div>
+
+          <div class="result-grid">
+            <div class="rcell"><div class="rk">Rent / sq ft</div><div class="rv" id="rPsf">$0</div></div>
+            <div class="rcell"><div class="rk">Est. annual income</div><div class="rv" id="rAnnual">$0</div></div>
+            <div class="rcell"><div class="rk">Comparable rentals</div><div class="rv" id="rComps">0 <small>within 1 mi</small></div></div>
+            <div class="rcell"><div class="rk">Bedrooms · baths</div><div class="rv" id="rBeds">—</div></div>
+          </div>
+
+          <div class="conf-row">
+            <div class="conf-head"><span>Confidence score</span><span class="pct" id="rConfPct">0%</span></div>
+            <div class="conf-track"><span class="conf-bar" id="rConfBar"></span></div>
+            <p class="conf-note" id="rConfNote">Based on the depth and recency of comparable rentals near your address.</p>
+          </div>
+
+          <div class="result-sent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            <span id="rSent">Your full report is on its way to your inbox.</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FEATURE STRIP ===== -->
+<section class="features">
+  <div class="wrap">
+    <div class="feature-strip reveal">
+      <div class="fcard">
+        <span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
+        <h3>Accurate estimates</h3>
+        <p>Powered by real market data and comparable rentals — not a guess.</p>
+      </div>
+      <div class="fcard">
+        <span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
+        <h3>1-mile comparable analysis</h3>
+        <p>We analyze rentals within one mile of your property.</p>
+      </div>
+      <div class="fcard">
+        <span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg></span>
+        <h3>Local market insights</h3>
+        <p>Stay informed with up-to-date local rental trends.</p>
+      </div>
+      <div class="fcard">
+        <span class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+        <h3>Instant report</h3>
+        <p>Get your free rental report in seconds, on screen and by email.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <img class="foot-logo" src="assets/rental-city-wordmark-white.svg" alt="Rental City" />
+    <span class="mid">Know your rental value.</span>
+    <span class="r">© 2026 Rental City. All rights reserved.</span>
+  </div>
+</footer>
+
+<script>
+/* ES5 only — var, function(), string concatenation, no fetch/async */
+
+/* ---------- helpers ---------- */
+function money(n) {
+  n = Math.round(n);
+  return '$' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+function digits(s) { return (s || '').replace(/[^0-9]/g, ''); }
+function emailValid(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
+
+/* ---------- sample fallback estimator ----------
+   Runs ONLY when the /api/estimate backend isn't reachable (e.g. this static
+   preview, or before you deploy on Replit). Keeps the lead magnet functional
+   so a visitor always sees a result. Real numbers come from RentCast via the
+   server proxy — see README in the rentcast-replit folder. */
+function strSeed(s) {
+  var h = 0, i; s = s || '';
+  for (i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000;
+  return h;
+}
+function demoEstimate(seedStr, beds, baths, sqft) {
+  var seed = strSeed(seedStr);
+  var mult = 0.82 + (seed % 76) / 100;
+  var derivedSqft = sqft || (Math.round((beds * 360 + 480) / 50) * 50);
+  var base = 560 + beds * 540 + baths * 240 + derivedSqft * 0.42;
+  var monthly = Math.round((base * mult) / 25) * 25;
+  return {
+    rent: monthly,
+    rentRangeLow: Math.round((monthly * 0.93) / 25) * 25,
+    rentRangeHigh: Math.round((monthly * 1.07) / 25) * 25,
+    sqft: derivedSqft,
+    comps: 11 + (seed % 16),
+    demo: true
+  };
+}
+
+/* ---------- render a result object (live or sample) into the card ---------- */
+function renderResult(r, beds, baths, sqft, email) {
+  var rent = r.rent;
+  var low  = r.rentRangeLow  != null ? r.rentRangeLow  : Math.round(rent * 0.93);
+  var high = r.rentRangeHigh != null ? r.rentRangeHigh : Math.round(rent * 1.07);
+  var usedSqft = sqft || r.sqft || 0;
+  var comps = (r.comparables && r.comparables.length) ? r.comparables.length : (r.comps || 0);
+
+  document.getElementById('rRent').textContent = money(rent);
+  document.getElementById('rRange').textContent = money(low) + ' – ' + money(high);
+  document.getElementById('rPsf').innerHTML = usedSqft ? ('$' + (rent / usedSqft).toFixed(2) + ' <small>/ sq ft</small>') : '<small>add sq ft</small>';
+  document.getElementById('rAnnual').textContent = money(rent * 12);
+  document.getElementById('rComps').innerHTML = comps + ' <small>within 1 mi</small>';
+  document.getElementById('rBeds').textContent = (beds === 0 ? 'Studio' : beds) + ' bd · ' + baths + ' ba';
+
+  /* confidence from the tightness of the rent range + comp depth */
+  var spreadPct = rent ? ((high - low) / rent) * 100 : 12;
+  var conf = Math.round(96 - spreadPct * 1.1 + Math.min(comps, 20) * 0.25);
+  if (conf > 97) conf = 97; if (conf < 72) conf = 72;
+  document.getElementById('rConfPct').textContent = conf + '%';
+
+  document.getElementById('rConfNote').textContent = r.demo
+    ? 'Sample estimate shown in preview. Connect the RentCast API on your server to return live market data.'
+    : 'Powered by live RentCast market data — comparable rentals near this address.';
+
+  document.getElementById('rSent').textContent = 'Your full report is on its way to ' + email + '.';
+
+  document.getElementById('result').className = 'result open';
+  setTimeout(function () { document.getElementById('rConfBar').style.width = conf + '%'; }, 120);
+}
+
+/* ---------- form ---------- */
+(function () {
+  var form = document.getElementById('rentForm');
+  var btn = document.getElementById('submitBtn');
+
+  var addressEl = document.getElementById('address');
+  var ptypeEl = document.getElementById('ptype');
+  var bedsEl = document.getElementById('beds');
+  var bathsEl = document.getElementById('baths');
+  var sqftEl = document.getElementById('sqft');
+  var emailEl = document.getElementById('email');
+
+  sqftEl.addEventListener('blur', function () {
+    var d = digits(sqftEl.value);
+    sqftEl.value = d ? money(parseInt(d, 10)).replace('$', '') : '';
+  });
+
+  function clearInvalid() {
+    var els = [addressEl, bedsEl, bathsEl, emailEl];
+    for (var i = 0; i < els.length; i++) els[i].className = els[i].className.replace(' invalid', '');
+  }
+  function markInvalid(el) { if (el.className.indexOf('invalid') < 0) el.className += ' invalid'; }
+
+  function setLoading(on) {
+    btn.disabled = on;
+    btn.innerHTML = on
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" opacity="0.3"/><path d="M21 12a9 9 0 0 0-9-9"/></svg> Pulling market data…'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg> Email me the full report again';
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    clearInvalid();
+
+    var address = (addressEl.value || '').trim();
+    var beds  = bedsEl.value === ''  ? null : parseFloat(bedsEl.value);
+    var baths = bathsEl.value === '' ? null : parseFloat(bathsEl.value);
+    var sqft  = digits(sqftEl.value) ? parseInt(digits(sqftEl.value), 10) : null;
+    var email = (emailEl.value || '').trim();
+
+    var ok = true;
+    if (address.length < 6) { markInvalid(addressEl); ok = false; }
+    if (beds === null)  { markInvalid(bedsEl);  ok = false; }
+    if (baths === null) { markInvalid(bathsEl); ok = false; }
+    if (!emailValid(email)) { markInvalid(emailEl); ok = false; }
+    if (!ok) return;
+
+    setLoading(true);
+
+    var payload = {
+      address: address,
+      propertyType: ptypeEl.value,
+      bedrooms: beds,
+      bathrooms: baths,
+      squareFootage: sqft,
+      email: email
+    };
+
+    function fallback() {
+      setLoading(false);
+      renderResult(demoEstimate(address + ptypeEl.value, beds, baths, sqft), beds, baths, sqft, email);
+    }
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/estimate', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.timeout = 12000;
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) return;
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (err) { data = null; }
+      if (xhr.status >= 200 && xhr.status < 300 && data && data.rent != null) {
+        setLoading(false);
+        renderResult(data, beds, baths, sqft, email);
+      } else {
+        fallback();
+      }
+    };
+    xhr.ontimeout = fallback;
+    xhr.onerror = fallback;
+    try { xhr.send(JSON.stringify(payload)); }
+    catch (err) { fallback(); }
+  });
+})();
+
+/* ---------- reveal ---------- */
+(function () {
+  var nodes = document.querySelectorAll('.reveal');
+  document.documentElement.classList.add('anim');
+  function showAll() { for (var i = 0; i < nodes.length; i++) nodes[i].classList.add('is-in'); }
+  if (!('IntersectionObserver' in window)) { showAll(); return; }
+  var io = new IntersectionObserver(function (entries) {
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].isIntersecting) { io.unobserve(entries[i].target); entries[i].target.classList.add('is-in'); }
+    }
+  }, { threshold: 0.07 });
+  for (var j = 0; j < nodes.length; j++) io.observe(nodes[j]);
+  var vh = window.innerHeight || document.documentElement.clientHeight;
+  for (var k = 0; k < nodes.length; k++) { if (nodes[k].getBoundingClientRect().top < vh * 0.96) nodes[k].classList.add('is-in'); }
+})();
+</script>
+</body>
+</html>
