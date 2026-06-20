@@ -22,6 +22,9 @@ import {
   exchangePublicToken,
   fetchFinancialSummary,
 } from './plaid'
+import { randomUUID } from 'node:crypto'
+import { buildReport, type ReportData, type ReportComparable } from './report-template'
+import { sendReportEmail } from './email'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -462,8 +465,66 @@ async function captureLead(record: Record<string, unknown>) {
   await syncLeadToHubSpot(record)
 }
 
+// Best-effort GET against the RentCast API. Returns parsed JSON, or null on any
+// non-2xx / network / timeout error so each enrichment call can fail in
+// isolation without breaking the core rent estimate.
+async function rentcastGet(pathAndQuery: string): Promise<any | null> {
+  if (!RENTCAST_API_KEY) return null
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 9000)
+  try {
+    const res = await fetch('https://api.rentcast.io/v1' + pathAndQuery, {
+      method: 'GET',
+      headers: { 'X-Api-Key': RENTCAST_API_KEY, Accept: 'application/json' },
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    return await res.json().catch(() => null)
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function formatUSD(n: number): string {
+  return '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+// Absolute origin for shareable report links (used in the emailed CTA, which
+// must be absolute to work in real inboxes). Prefers PUBLIC_BASE_URL, then the
+// proxied request host, then the Replit dev domain. Returns '' if none known.
+function getReportBaseUrl(req: express.Request): string {
+  const env = process.env.PUBLIC_BASE_URL
+  if (env) return env.replace(/\/+$/, '')
+  const host = (req.headers['x-forwarded-host'] || req.headers['host']) as string | undefined
+  const proto = ((req.headers['x-forwarded-proto'] as string | undefined) || 'https').split(',')[0]
+  if (host) return `${proto}://${host}`
+  if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`
+  return ''
+}
+
 app.get('/api/estimate/health', (_req, res) => {
   res.json({ ok: true, hasKey: Boolean(RENTCAST_API_KEY) })
+})
+
+// Serve a stored, fully-rendered rental analysis report as a standalone HTML
+// page. Lives under /api so it is proxied in dev, excluded from the prod SPA
+// fallback, and skipped by the subdomain-rewrite middleware.
+app.get('/api/reports/:id', async (req, res) => {
+  const id = String(req.params.id || '')
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) return res.status(404).send('Not found')
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(503).send('Report storage unavailable')
+  const { data, error } = await admin
+    .from('rental_reports')
+    .select('html')
+    .eq('id', id)
+    .maybeSingle()
+  if (error || !data || !data.html) return res.status(404).send('Report not found')
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=3600')
+  return res.send(data.html as string)
 })
 
 app.post('/api/estimate', async (req, res) => {
@@ -515,7 +576,168 @@ app.post('/api/estimate', async (req, res) => {
       rentRangeHigh: data.rentRangeHigh != null ? data.rentRangeHigh : null,
     })
 
-    return res.json(data)
+    // --- Enrich the bare rent estimate into a full professional analysis. Each
+    // call is independent and resilient: any failure simply omits that section.
+    const rentNum = Number(data.rent)
+    if (!Number.isFinite(rentNum) || rentNum <= 0) {
+      return res.json(data)
+    }
+
+    const valueQs = new URLSearchParams()
+    valueQs.set('address', String(address))
+    if (propertyType) valueQs.set('propertyType', String(propertyType))
+    if (bedrooms != null && bedrooms !== '') valueQs.set('bedrooms', String(bedrooms))
+    if (bathrooms != null && bathrooms !== '') valueQs.set('bathrooms', String(bathrooms))
+    if (squareFootage != null && squareFootage !== '') valueQs.set('squareFootage', String(squareFootage))
+
+    const [propsRes, valueRes] = await Promise.all([
+      rentcastGet('/properties?' + new URLSearchParams({ address: String(address) }).toString()),
+      rentcastGet('/avm/value/long-term?' + valueQs.toString()),
+    ])
+
+    const propRecord =
+      (Array.isArray(propsRes) ? propsRes[0] : propsRes && typeof propsRes === 'object' ? propsRes : null) || null
+
+    const zipMatch = String(address).match(/\b(\d{5})(?:-\d{4})?\b/)
+    const zipFinal = (propRecord && propRecord.zipCode) || (zipMatch ? zipMatch[1] : null)
+    const marketRes = zipFinal
+      ? await rentcastGet('/markets?zipCode=' + encodeURIComponent(String(zipFinal)) + '&dataType=All')
+      : null
+
+    // Comparables come from the rent AVM response.
+    const rawComps: any[] = Array.isArray(data.comparables) ? (data.comparables as any[]) : []
+    const comparables: ReportComparable[] = rawComps.map((c) => ({
+      formattedAddress: c.formattedAddress,
+      propertyType: c.propertyType,
+      bedrooms: c.bedrooms,
+      bathrooms: c.bathrooms,
+      squareFootage: c.squareFootage,
+      price: c.price,
+      distance: c.distance,
+      daysOld: c.daysOld,
+      correlation: c.correlation,
+    }))
+    const compCount = comparables.length
+
+    const property = propRecord
+      ? {
+          propertyType: propRecord.propertyType ?? (propertyType || null),
+          bedrooms: propRecord.bedrooms ?? (bedrooms != null && bedrooms !== '' ? Number(bedrooms) : null),
+          bathrooms: propRecord.bathrooms ?? (bathrooms != null && bathrooms !== '' ? Number(bathrooms) : null),
+          squareFootage:
+            propRecord.squareFootage ?? (squareFootage != null && squareFootage !== '' ? Number(squareFootage) : null),
+          lotSize: propRecord.lotSize ?? null,
+          yearBuilt: propRecord.yearBuilt ?? null,
+        }
+      : null
+
+    const rd = marketRes && marketRes.rentalData ? marketRes.rentalData : null
+    let yoyChange: number | null = null
+    if (rd && rd.history && typeof rd.history === 'object') {
+      const keys = Object.keys(rd.history).sort()
+      if (keys.length >= 13) {
+        const latest = rd.history[keys[keys.length - 1]]?.averageRent
+        const prior = rd.history[keys[keys.length - 13]]?.averageRent
+        if (latest && prior) yoyChange = +(((latest - prior) / prior) * 100).toFixed(1)
+      }
+    }
+    const market = rd
+      ? {
+          averageRent: rd.averageRent ?? null,
+          medianRent: rd.medianRent ?? null,
+          averageRentPerSqft: rd.averageRentPerSquareFoot ?? null,
+          averageDaysOnMarket: rd.averageDaysOnMarket ?? null,
+          yoyChange,
+          activeRentals: rd.totalListings ?? null,
+          zipCode: (marketRes && marketRes.zipCode) || zipFinal || null,
+        }
+      : null
+
+    const value = valueRes && valueRes.price != null ? { price: Number(valueRes.price) } : null
+
+    const usedSqft =
+      squareFootage != null && squareFootage !== ''
+        ? Number(squareFootage)
+        : property && property.squareFootage != null
+          ? Number(property.squareFootage)
+          : null
+    const low = data.rentRangeLow != null ? Number(data.rentRangeLow) : Math.round(rentNum * 0.93)
+    const high = data.rentRangeHigh != null ? Number(data.rentRangeHigh) : Math.round(rentNum * 1.07)
+    const rentPerSqft = usedSqft ? +(rentNum / usedSqft).toFixed(2) : null
+    const annualGross = Math.round(rentNum * 12)
+    const grossYield = value && value.price ? +(((rentNum * 12) / value.price) * 100).toFixed(1) : null
+    const spreadPct = rentNum ? ((high - low) / rentNum) * 100 : 12
+    let confidence = Math.round(96 - spreadPct * 1.1 + Math.min(compCount, 20) * 0.25)
+    confidence = Math.max(72, Math.min(97, confidence))
+
+    const reportData: ReportData = {
+      rent: rentNum,
+      rentRangeLow: low,
+      rentRangeHigh: high,
+      comparables,
+      property,
+      market,
+      value,
+      rentPerSqft,
+      annualGross,
+      grossYield,
+      confidence,
+      compCount,
+    }
+    const reportInput = {
+      address: String(address),
+      propertyType: propertyType || null,
+      bedrooms: bedrooms != null && bedrooms !== '' ? Number(bedrooms) : null,
+      bathrooms: bathrooms != null && bathrooms !== '' ? Number(bathrooms) : null,
+      squareFootage: usedSqft,
+      email: email || null,
+    }
+
+    const reportId = randomUUID()
+    const reportUrl = '/api/reports/' + reportId
+    const baseUrl = getReportBaseUrl(req)
+    const reportUrlAbs = baseUrl ? baseUrl + reportUrl : reportUrl
+    let stored = false
+    try {
+      const { reportHtml, emailHtml, summary } = buildReport(reportInput, reportData, {
+        reportUrl: reportUrlAbs,
+      })
+
+      const admin = getSupabaseAdmin()
+      if (admin) {
+        const { error: storeErr } = await admin.from('rental_reports').insert({
+          id: reportId,
+          html: reportHtml,
+          summary,
+          address: String(address),
+          email: email || null,
+        })
+        if (storeErr) {
+          console.error('Failed to store rental report:', storeErr.message)
+        } else {
+          stored = true
+        }
+      }
+
+      if (stored && email) {
+        // Fire-and-forget: never block the response on email delivery.
+        sendReportEmail({
+          to: String(email),
+          subject: `Your rental analysis for ${address} — est. ${formatUSD(rentNum)}/mo`,
+          html: emailHtml,
+        }).catch((e) => console.error('Report email error:', e instanceof Error ? e.message : String(e)))
+      }
+
+      return res.json({
+        ...data,
+        comparables,
+        summary: { ...summary, reportUrl: stored ? reportUrl : null },
+        reportUrl: stored ? reportUrl : null,
+      })
+    } catch (buildErr) {
+      console.error('Report build failed:', buildErr instanceof Error ? buildErr.message : String(buildErr))
+      return res.json(data)
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('RentCast request failed:', message)

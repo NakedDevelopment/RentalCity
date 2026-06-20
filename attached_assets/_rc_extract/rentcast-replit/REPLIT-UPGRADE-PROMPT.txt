@@ -1,0 +1,158 @@
+UPGRADE PROMPT — Rental City "Rental Value Report" app
+=======================================================
+Paste everything below into the Replit Agent for the EXISTING Rental City
+rental-value Repl. This upgrades the current app — do not start a new project.
+
+----------------------------------------------------------------------
+CONTEXT (what already exists in this Repl)
+----------------------------------------------------------------------
+- Express server (server.js, Node 18+, CommonJS) that:
+    • serves a single-file lead magnet from public/index.html
+    • exposes POST /api/estimate, a server-side proxy to the RentCast API
+      (key in the RENTCAST_API_KEY secret, sent as the X-Api-Key header)
+    • currently calls GET https://api.rentcast.io/v1/avm/rent/long-term and
+      returns RentCast's JSON to the browser, and logs the lead to leads.ndjson
+      (+ optional LEAD_WEBHOOK_URL).
+- The frontend (public/index.html) collects: address, propertyType, bedrooms,
+  bathrooms, squareFootage, email. On submit it POSTs to /api/estimate, hides
+  the form, and shows an on-screen result with a "List your property on Rental
+  City" CTA. It falls back to a sample estimate if the API is unreachable.
+
+A complete visual REFERENCE for the new output lives in this repo at:
+    templates/rental-analysis-reference.html
+It is a single self-contained HTML file containing BOTH deliverables we want to
+generate for every lead:
+    • Stage 01 — "The email": the branded HTML email that lands in their inbox.
+    • Stage 02 — "The full report": the full branded professional rental analysis.
+Reproduce these two designs FAITHFULLY (same layout, brand colors #00BBFF→#3A7AFE
+gradient, Inter font, navy #0F1E3D). The sample numbers in that file (123 Main St,
+$1,795, the comps, ZIP 38103 market figures) are PLACEHOLDERS — replace them with
+live RentCast data at request time.
+
+----------------------------------------------------------------------
+GOAL OF THIS UPGRADE
+----------------------------------------------------------------------
+Turn the single rent number into a full professional rental analysis. After a
+successful estimate the app must:
+  1. Enrich the data with additional RentCast endpoints.
+  2. Build a full REPORT (HTML) and an EMAIL (HTML) from the reference template.
+  3. Persist the report as a shareable page and return its URL to the browser.
+  4. Render the full report on the result page (replacing the basic result card),
+     AND email the branded summary email to the lead.
+
+----------------------------------------------------------------------
+1) DATA — call these RentCast endpoints server-side (all with X-Api-Key)
+----------------------------------------------------------------------
+Keep the existing rent call, then enrich. Make every enrichment call resilient:
+if one fails or returns no data, OMIT that section of the report and continue —
+never fail the whole request because an enrichment call failed.
+
+  a. Rent estimate (already in place) — REQUIRED
+     GET /v1/avm/rent/long-term?address=&propertyType=&bedrooms=&bathrooms=&squareFootage=&compCount=12
+     Use: rent, rentRangeLow, rentRangeHigh, comparables[]
+     Each comparable has: formattedAddress, propertyType, bedrooms, bathrooms,
+       squareFootage, price (monthly rent), distance (miles), daysOld, correlation.
+     Sort comparables by correlation desc; show the top 5–6 in the report table
+     and the top 3 in the email.
+
+  b. Property record — OPTIONAL (subject-property section)
+     GET /v1/properties?address=<address>
+     Use the first match: propertyType, bedrooms, bathrooms, squareFootage,
+       lotSize, yearBuilt. Fall back to the user's form inputs when a field is absent.
+
+  c. ZIP market data — OPTIONAL (local-market section)
+     GET /v1/markets?zipCode=<zip>&dataType=All&historyRange=12
+     Parse the rental market data (rentalData). Use averages/medians it provides:
+       average rent, median rent, average rent per sqft, average days on market,
+       and a year-over-year rent change if derivable from the included history.
+     If the endpoint or a field is missing, hide the market section.
+
+  d. Value estimate — OPTIONAL (yield metric)
+     GET /v1/avm/value/long-term?address=&propertyType=&bedrooms=&bathrooms=&squareFootage=
+     Use: price (estimated value). Compute gross yield = (rent*12)/value*100.
+     If unavailable, hide the value + yield metrics.
+
+  Derived fields you compute (not from the API):
+     rentPerSqft = rent / squareFootage
+     annualGross = rent * 12
+     confidence  = derive from comp count + range tightness
+                   (e.g. start 96, subtract ((high-low)/rent*100)*1.1, add up to
+                    +5 for comp depth; clamp 72–97). Show as a %.
+
+----------------------------------------------------------------------
+2) BUILD the report + email (server-side)
+----------------------------------------------------------------------
+Create a module, e.g. report-template.js, exporting:
+    buildReport(input, data) -> { reportHtml, emailHtml, summary }
+where:
+    input   = { address, propertyType, bedrooms, bathrooms, squareFootage, email }
+    data    = { rent, rentRangeLow, rentRangeHigh, comparables, property,
+                market, value, rentPerSqft, annualGross, grossYield, confidence }
+    summary = { rent, rentRangeLow, rentRangeHigh, rentPerSqft, annualGross,
+                confidence, compCount, reportUrl }  // returned to the browser
+
+Use templates/rental-analysis-reference.html as the source of truth for markup
+and styling. Split it into the two pieces (the .mail-card block = email; the
+.report block = report) and turn the placeholder values into template variables.
+Escape all user/address strings. For the email, inline the critical CSS (email
+clients strip <style> in <head>) — keep colors/spacing identical to the reference.
+
+----------------------------------------------------------------------
+3) PERSIST a shareable report
+----------------------------------------------------------------------
+- Generate a random id (e.g. crypto.randomUUID()).
+- Write reportHtml to public/reports/<id>.html so it's reachable at
+  https://<your-app>/reports/<id>.html  (create the folder; add it to static).
+- Add public/reports/ to .gitignore (generated content).
+- Return reportUrl in the /api/estimate JSON response.
+- (Optional) expire/clean reports older than 90 days on startup.
+
+----------------------------------------------------------------------
+4) EMAIL the lead
+----------------------------------------------------------------------
+Send the branded emailHtml to input.email with subject:
+    "Your rental analysis for <street address> — est. $<rent>/mo"
+Make the transport configurable via env, supporting whichever the user has:
+    • SMTP_URL  (use nodemailer)  OR
+    • SENDGRID_API_KEY  OR
+    • MAILERSEND_API_KEY  (the brand's docs mention MailerSend)
+Keep the existing LEAD_WEBHOOK_URL behavior (POST the lead record) so HubSpot/
+Zapier still fire. If no email transport is configured, skip sending but still
+return reportUrl (and log a warning). Never block the response on email — send
+async and still return the JSON promptly.
+
+----------------------------------------------------------------------
+5) FRONTEND (public/index.html) changes
+----------------------------------------------------------------------
+- Keep the existing form + ES5-only JS (var, function(), XMLHttpRequest; no
+  const/let/arrow/fetch).
+- On a successful response, in addition to the current result card, add a
+  prominent secondary button: "View your full report →" that opens summary.reportUrl
+  in a new tab. Place it directly above the existing "List your property on Rental
+  City" CTA. Keep the "Estimate another property" reset.
+- If reportUrl is absent (sample-fallback mode with no backend), hide that button.
+- Do not change the brand styling; match the existing gradient button treatment.
+
+----------------------------------------------------------------------
+SECRETS (Replit → Secrets / lock icon; never hardcode)
+----------------------------------------------------------------------
+  RENTCAST_API_KEY      (required)
+  LEAD_WEBHOOK_URL      (optional — existing)
+  one email transport:  SMTP_URL  |  SENDGRID_API_KEY  |  MAILERSEND_API_KEY
+  FROM_EMAIL            (e.g. reports@rentalcity.com)
+  PUBLIC_BASE_URL       (optional — used to build absolute reportUrl in the email)
+
+----------------------------------------------------------------------
+ACCEPTANCE CRITERIA
+----------------------------------------------------------------------
+  • POST /api/estimate still returns rent/rentRangeLow/rentRangeHigh and now also
+    comparables, the derived metrics, and reportUrl.
+  • Visiting reportUrl shows the full branded report (matches the reference design)
+    populated with live data; missing-data sections are cleanly omitted.
+  • The lead receives the branded email (when a transport is configured), subject
+    line includes the address and rent.
+  • The lead magnet result page shows "View your full report →" + the Rental City CTA.
+  • RENTCAST_API_KEY is never exposed to the browser; frontend JS stays ES5.
+  • If RentCast enrichment calls fail, the core estimate + report still render.
+
+Do not redesign the page or the report — reproduce templates/rental-analysis-reference.html.

@@ -1,0 +1,49 @@
+Build a single-purpose Node.js web app: a "Rental Value Report" lead magnet for a
+company called Rental City. It must deploy as its own Autoscale Repl.
+
+ARCHITECTURE
+- Express server (Node 18+, CommonJS) that does two things:
+  1. Serves a single static page from /public/index.html.
+  2. Exposes POST /api/estimate — a server-side proxy to the RentCast API so the
+     API key is NEVER exposed to the browser.
+- No React, no build step, no database. Keep it minimal.
+
+THE PAGE (public/index.html)
+- A single self-contained HTML file (all CSS and JS inline) — I will paste the exact
+  HTML; use it verbatim, do not redesign it. It posts JSON to /api/estimate with:
+  { address, propertyType, bedrooms, bathrooms, squareFootage, email }
+  and renders the returned { rent, rentRangeLow, rentRangeHigh, comparables }.
+- If /api/estimate is unreachable it already falls back to a sample estimate — leave
+  that behavior intact.
+
+THE ENDPOINT (POST /api/estimate)
+- Read the JSON body. Require `address`; return 400 {error:"missing_address"} if absent.
+- Read the API key from the environment variable RENTCAST_API_KEY (a Replit Secret).
+  If missing, return 500 {error:"missing_api_key"}.
+- Call RentCast's long-term rent estimate:
+    GET https://api.rentcast.io/v1/avm/rent/long-term
+    Header: X-Api-Key: <RENTCAST_API_KEY>
+    Query params: address, propertyType, bedrooms, bathrooms, squareFootage, compCount=12
+    (docs: https://developers.rentcast.io/reference/value-estimate-long-term-rent)
+- On success, return RentCast's JSON to the browser unchanged
+  (it includes rent, rentRangeLow, rentRangeHigh, comparables[]).
+- On RentCast error, forward the status and error JSON.
+
+LEAD CAPTURE
+- On every successful estimate, append one JSON record per line to leads.ndjson
+  with: timestamp, email, address, propertyType, bedrooms, bathrooms, squareFootage,
+  rent, rentRangeLow, rentRangeHigh.
+- Also, if the env var LEAD_WEBHOOK_URL is set, POST that same record to it (fire-and-forget).
+
+EXTRAS
+- Add GET /api/health that returns { ok: true, hasKey: <boolean> }.
+- Listen on process.env.PORT (default 3000).
+- package.json: express dependency, "start": "node server.js", engines node >=18.
+- Add a .gitignore for node_modules, leads.ndjson, .env.
+
+SECRETS (do not hardcode)
+- RENTCAST_API_KEY (required)
+- LEAD_WEBHOOK_URL (optional)
+
+After building, tell me to (1) add RENTCAST_API_KEY in Secrets, (2) press Run,
+(3) Deploy as Autoscale. Then I will paste the index.html content.

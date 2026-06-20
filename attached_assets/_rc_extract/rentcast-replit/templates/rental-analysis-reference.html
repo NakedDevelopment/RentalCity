@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rental City — Professional Rental Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #3A7AFE;
+    --primary-light: #00BBFF;
+    --gradient-primary: linear-gradient(83.7338deg, #00BBFF 11.921%, #3A7AFE 90.638%);
+    --gradient-primary-hover: linear-gradient(83.7338deg, #00AAEE 11.921%, #2D68E8 90.638%);
+    --ink: #0F1E3D;
+    --n900: #171717;
+    --n700: #2B3245;
+    --n600: #404040;
+    --n500: #525252;
+    --n400: #737373;
+    --n300: #A3A3A3;
+    --n200: #D4D4D4;
+    --n100: #E5E5E5;
+    --n50:  #F5F5F5;
+    --bg: #F8FAFD;
+    --bg-soft2: #F2F6FC;
+    --accepted-bg: #CDF7D4;
+    --accepted-text: #0E7B20;
+    --locked-bg: #FAE8C7;
+    --locked-text: #905F05;
+    --tint-blue: rgba(58,122,254,0.08);
+    --tint-blue-border: rgba(58,122,254,0.22);
+    --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg);
+    font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    color: var(--n600); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    line-height: 1.55;
+  }
+  img { display: block; max-width: 100%; }
+  h1,h2,h3,h4 { color: var(--ink); margin: 0; }
+
+  /* ===== scaffolding / page intro ===== */
+  .doc-intro {
+    max-width: 980px; margin: 0 auto; padding: 48px 32px 8px;
+  }
+  .doc-eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--primary); }
+  .doc-intro h1 { font-size: clamp(28px,4vw,40px); font-weight: 800; letter-spacing: -0.03em; margin: 14px 0 10px; }
+  .doc-intro p { font-size: 16px; color: var(--n500); max-width: 640px; margin: 0; }
+
+  .stage-label {
+    max-width: 980px; margin: 56px auto 0; padding: 0 32px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .stage-label .pill {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #fff; background: var(--ink); padding: 6px 12px; border-radius: 100px;
+  }
+  .stage-label .desc { font-size: 14px; color: var(--n400); }
+  .stage-label .rule { flex: 1; height: 1px; background: var(--n100); }
+
+  /* ===== EMAIL MOCKUP ===== */
+  .mail-wrap { max-width: 660px; margin: 28px auto 0; padding: 0 24px; }
+  .mail-card {
+    background: #fff; border: 1px solid var(--n100); border-radius: 16px; overflow: hidden;
+    box-shadow: 0 30px 70px -40px rgba(15,30,61,0.3);
+  }
+  .mail-head { padding: 18px 22px; border-bottom: 1px solid var(--n100); background: #fff; }
+  .mail-row { display: flex; gap: 10px; font-size: 13px; margin-bottom: 6px; }
+  .mail-row:last-child { margin-bottom: 0; }
+  .mail-row .lab { color: var(--n400); width: 52px; flex-shrink: 0; font-weight: 600; }
+  .mail-row .val { color: var(--n700); }
+  .mail-row .val b { color: var(--ink); font-weight: 700; }
+  .mail-from-ic { width: 18px; height: 18px; border-radius: 5px; background: var(--gradient-primary); display: inline-block; vertical-align: -4px; margin-right: 6px; }
+  .mail-subject { font-size: 15px; font-weight: 700; color: var(--ink); }
+
+  .mail-body { padding: 0; }
+  .mail-banner { background: var(--gradient-primary); padding: 30px 32px; color: #fff; position: relative; overflow: hidden; }
+  .mail-banner::after { content:""; position:absolute; inset:0; background: radial-gradient(380px 200px at 90% 120%, rgba(255,255,255,0.18), transparent 60%); }
+  .mail-banner img.logo { height: 22px; margin-bottom: 22px; position: relative; }
+  .mail-banner .k { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.92; position: relative; }
+  .mail-banner .addr { font-size: 17px; font-weight: 600; margin-top: 4px; position: relative; }
+  .mail-banner .rent { font-size: 46px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; margin-top: 14px; position: relative; }
+  .mail-banner .rent span { font-size: 17px; font-weight: 600; opacity: 0.9; }
+  .mail-banner .range { font-size: 14px; opacity: 0.92; margin-top: 6px; position: relative; }
+
+  .mail-inner { padding: 28px 32px 8px; }
+  .mail-inner p { font-size: 15px; color: var(--n600); margin: 0 0 16px; }
+  .mail-inner p b { color: var(--ink); }
+  .mail-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--n100); border: 1px solid var(--n100); border-radius: 12px; overflow: hidden; margin: 4px 0 22px; }
+  .mail-stat { background: #fff; padding: 16px 14px; text-align: center; }
+  .mail-stat .sv { font-size: 19px; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; }
+  .mail-stat .sk { font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--n400); margin-top: 4px; }
+
+  .mail-comps { border: 1px solid var(--n100); border-radius: 12px; overflow: hidden; margin: 0 0 22px; }
+  .mail-comps .ch { background: var(--bg-soft2); padding: 11px 16px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n500); }
+  .mail-comp { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-top: 1px solid var(--n100); font-size: 13.5px; }
+  .mail-comp .ca { color: var(--n700); }
+  .mail-comp .ca small { display: block; color: var(--n400); font-size: 12px; }
+  .mail-comp .cr { font-weight: 800; color: var(--ink); }
+
+  .mail-cta { text-align: center; padding: 6px 0 4px; }
+  .mail-cta a.primary {
+    display: block; background: var(--gradient-primary); color: #fff; text-decoration: none;
+    font-weight: 700; font-size: 16px; padding: 16px; border-radius: 11px;
+  }
+  .mail-cta .sub { font-size: 13px; color: var(--n400); margin: 12px 0 0; }
+  .mail-cta a.text { color: var(--primary); font-weight: 700; text-decoration: none; }
+  .mail-foot { padding: 24px 32px 30px; border-top: 1px solid var(--n100); margin-top: 22px; font-size: 12px; color: var(--n400); line-height: 1.6; }
+  .mail-foot b { color: var(--n600); }
+  .mail-foot a { color: var(--n400); }
+
+  /* ===== FULL REPORT ===== */
+  .report {
+    max-width: 980px; margin: 28px auto 0; background: #fff;
+    border: 1px solid var(--n100); border-radius: 18px; overflow: hidden;
+    box-shadow: 0 40px 90px -55px rgba(15,30,61,0.35);
+  }
+  .rep-head { background: var(--ink); color: #fff; padding: 36px 44px; position: relative; overflow: hidden; }
+  .rep-head::after { content:""; position:absolute; inset:0; background: radial-gradient(600px 280px at 88% -20%, rgba(0,187,255,0.22), transparent 60%); }
+  .rep-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; position: relative; }
+  .rep-head-top img { height: 26px; }
+  .rep-head-top .meta { text-align: right; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: rgba(255,255,255,0.7); line-height: 1.7; }
+  .rep-head-top .meta b { color: #fff; font-weight: 500; }
+  .rep-title { position: relative; margin-top: 28px; }
+  .rep-title .k { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--primary-light); }
+  .rep-title h2 { color: #fff; font-size: clamp(24px,3vw,32px); font-weight: 800; letter-spacing: -0.03em; margin: 10px 0 0; }
+  .rep-title .sub { color: rgba(255,255,255,0.72); font-size: 15px; margin-top: 8px; }
+
+  .rep-section { padding: 40px 44px; border-bottom: 1px solid var(--n100); }
+  .rep-section:last-child { border-bottom: 0; }
+  .rep-section-h { display: flex; align-items: baseline; gap: 12px; margin-bottom: 22px; }
+  .rep-section-h .num { font-family: var(--mono); font-size: 12px; color: var(--primary); font-weight: 500; }
+  .rep-section-h h3 { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; }
+  .rep-section-h .src { margin-left: auto; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--n300); }
+
+  /* headline estimate */
+  .est-row { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 28px; align-items: center; }
+  .est-big .k { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n400); }
+  .est-big .v { font-size: 58px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; margin-top: 8px; }
+  .est-big .v .grad { background: var(--gradient-primary); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .est-big .v .per { font-size: 20px; font-weight: 600; color: var(--n400); letter-spacing: 0; }
+  .est-range { margin-top: 18px; }
+  .est-range .rl { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: var(--n500); margin-bottom: 8px; }
+  .est-range .track { height: 8px; border-radius: 100px; background: var(--n100); position: relative; overflow: hidden; }
+  .est-range .fill { position: absolute; top: 0; bottom: 0; left: 16%; right: 16%; background: var(--gradient-primary); border-radius: 100px; }
+  .est-range .mid { position: absolute; top: -3px; bottom: -3px; left: 50%; width: 3px; transform: translateX(-50%); background: var(--ink); border-radius: 2px; }
+  .conf-box { background: var(--bg-soft2); border: 1px solid var(--tint-blue-border); border-radius: 14px; padding: 22px 24px; }
+  .conf-box .ct { display: flex; justify-content: space-between; align-items: baseline; }
+  .conf-box .ct .lab { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .conf-box .ct .pct { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; background: var(--gradient-primary); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .conf-box .track { height: 7px; border-radius: 100px; background: #fff; border: 1px solid var(--n100); margin: 12px 0 12px; overflow: hidden; }
+  .conf-box .bar { height: 100%; width: 92%; background: var(--gradient-primary); border-radius: 100px; }
+  .conf-box p { font-size: 12.5px; color: var(--n500); margin: 0; }
+
+  /* metric grid */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .metric { border: 1px solid var(--n100); border-radius: 14px; padding: 20px; background: #fff; }
+  .metric .mk { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--n400); }
+  .metric .mv { font-size: 24px; font-weight: 800; letter-spacing: -0.025em; color: var(--ink); margin-top: 8px; }
+  .metric .mv small { font-size: 13px; font-weight: 600; color: var(--n400); }
+  .metric .mnote { font-size: 12px; color: var(--n400); margin-top: 4px; }
+  .metric.good .mv { color: var(--accepted-text); }
+
+  /* property details */
+  .prop { display: grid; grid-template-columns: repeat(3, 1fr) ; gap: 1px; background: var(--n100); border: 1px solid var(--n100); border-radius: 14px; overflow: hidden; }
+  .prop .pc { background: #fff; padding: 18px 20px; }
+  .prop .pk { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--n400); }
+  .prop .pv { font-size: 16px; font-weight: 700; color: var(--ink); margin-top: 5px; }
+
+  /* comps table */
+  .comp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .comp-table thead th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--n400); padding: 0 14px 12px; border-bottom: 1px solid var(--n100); }
+  .comp-table thead th.r, .comp-table tbody td.r { text-align: right; }
+  .comp-table tbody td { padding: 14px; border-bottom: 1px solid var(--n100); color: var(--n600); vertical-align: middle; }
+  .comp-table tbody tr:last-child td { border-bottom: 0; }
+  .comp-table .addr { font-weight: 600; color: var(--ink); }
+  .comp-table .addr small { display: block; color: var(--n400); font-weight: 500; font-size: 12px; margin-top: 2px; }
+  .comp-table .rent { font-weight: 800; color: var(--ink); }
+  .comp-subj td { background: var(--tint-blue); }
+  .comp-subj .addr { color: var(--primary); }
+  .badge-subj { display: inline-block; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; background: var(--gradient-primary); color: #fff; padding: 2px 7px; border-radius: 100px; margin-left: 8px; vertical-align: 1px; }
+
+  /* market */
+  .market { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 28px; align-items: center; }
+  .market-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .ms { border: 1px solid var(--n100); border-radius: 12px; padding: 16px 18px; }
+  .ms .k { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--n400); }
+  .ms .v { font-size: 22px; font-weight: 800; letter-spacing: -0.025em; color: var(--ink); margin-top: 6px; }
+  .ms .v small { font-size: 12px; font-weight: 600; color: var(--n400); }
+  .ms .v .up { color: var(--accepted-text); }
+  .market-note { background: var(--bg-soft2); border-radius: 14px; padding: 22px 24px; }
+  .market-note h4 { font-size: 15px; font-weight: 800; margin-bottom: 8px; }
+  .market-note p { font-size: 13.5px; color: var(--n500); margin: 0; line-height: 1.6; }
+
+  /* recommendations */
+  .recs { display: grid; gap: 12px; }
+  .rec { display: grid; grid-template-columns: 30px 1fr auto; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid var(--n100); border-radius: 14px; }
+  .rec .ic { width: 30px; height: 30px; border-radius: 9px; background: var(--tint-blue); display: flex; align-items: center; justify-content: center; }
+  .rec .ic svg { width: 16px; height: 16px; color: var(--primary); }
+  .rec .rt b { color: var(--ink); font-weight: 700; }
+  .rec .rt p { margin: 2px 0 0; font-size: 13.5px; color: var(--n500); }
+  .rec .gain { font-size: 14px; font-weight: 800; color: var(--accepted-text); white-space: nowrap; }
+
+  /* CTA */
+  .rep-cta { background: var(--gradient-primary); padding: 44px; color: #fff; position: relative; overflow: hidden; text-align: center; }
+  .rep-cta::after { content:""; position:absolute; inset:0; background: radial-gradient(500px 240px at 50% 130%, rgba(255,255,255,0.18), transparent 60%); }
+  .rep-cta > * { position: relative; }
+  .rep-cta .k { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.9; }
+  .rep-cta h3 { color: #fff; font-size: clamp(24px,3vw,30px); font-weight: 800; letter-spacing: -0.03em; margin: 12px 0 0; }
+  .rep-cta h3 em { font-style: italic; opacity: 0.78; }
+  .rep-cta p { color: rgba(255,255,255,0.9); font-size: 15px; max-width: 480px; margin: 12px auto 24px; }
+  .rep-cta a { display: inline-flex; align-items: center; gap: 10px; background: #fff; color: var(--primary); font-weight: 800; font-size: 16px; padding: 16px 30px; border-radius: 11px; text-decoration: none; }
+  .rep-cta a svg { width: 18px; height: 18px; }
+  .rep-cta .reassure { font-size: 12.5px; color: rgba(255,255,255,0.82); margin: 16px 0 0; }
+
+  .rep-method { padding: 26px 44px; background: var(--bg-soft2); }
+  .rep-method h4 { font-size: 12px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--n500); margin-bottom: 10px; }
+  .rep-method p { font-size: 12.5px; color: var(--n400); margin: 0 0 6px; line-height: 1.6; }
+  .rep-method .pw { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--n600); }
+
+  .doc-foot { max-width: 980px; margin: 0 auto; padding: 30px 32px 64px; font-size: 12px; color: var(--n400); }
+
+  @media (max-width: 720px) {
+    .est-row, .market { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: 1fr 1fr; }
+    .prop { grid-template-columns: 1fr 1fr; }
+    .rep-section, .rep-head, .rep-cta, .rep-method { padding-left: 24px; padding-right: 24px; }
+    .market-stats { grid-template-columns: 1fr 1fr; }
+    .comp-hide { display: none; }
+    .rec { grid-template-columns: 30px 1fr; }
+    .rec .gain { grid-column: 2; }
+  }
+</style>
+</head>
+<body>
+
+<div class="doc-intro">
+  <span class="doc-eyebrow">Rental City · Deliverable</span>
+  <h1>The professional rental analysis</h1>
+  <p>This is what a lead receives after using the Free Rental Value Report — first the email that lands in their inbox, then the full branded report. Every figure maps to a live RentCast API field, so what you see here is exactly what we can generate for real.</p>
+</div>
+
+<!-- ============ STAGE 1: EMAIL ============ -->
+<div class="stage-label">
+  <span class="pill">01 · The email</span>
+  <span class="desc">What lands in their inbox, seconds after they submit</span>
+  <span class="rule"></span>
+</div>
+
+<div class="mail-wrap">
+  <div class="mail-card">
+    <div class="mail-head">
+      <div class="mail-row"><span class="lab">From</span><span class="val"><span class="mail-from-ic"></span><b>Rental City</b> &lt;reports@rentalcity.com&gt;</span></div>
+      <div class="mail-row"><span class="lab">To</span><span class="val">you@email.com</span></div>
+      <div class="mail-row"><span class="lab">Subj</span><span class="val mail-subject">Your rental analysis for 123 Main St — est. $1,795/mo</span></div>
+    </div>
+
+    <div class="mail-body">
+      <div class="mail-banner">
+        <img class="logo" src="data:image/svg+xml,%3Csvg%20width%3D%22493%22%20height%3D%22122%22%20viewBox%3D%220%200%20493%20122%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Cpath%20d%3D%22M4.60039%20116.579H69.7932V4.60039L4.60039%204.60232V116.579ZM74.3955%20121.185H0V0H74.3955V121.185Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M104.665%2093.2346C100.851%2093.2346%2097.3993%2092.5842%2094.3089%2091.2869C91.2222%2089.9843%2088.5899%2088.2145%2086.4105%2085.9758C84.2293%2083.7335%2082.5511%2081.13%2081.3725%2078.1636C80.1938%2075.199%2079.6045%2072.0817%2079.6045%2068.8134C79.6045%2065.4212%2080.1794%2062.2284%2081.3294%2059.2332C82.4793%2056.2399%2084.1412%2053.6059%2086.3171%2051.3348C88.4965%2049.0637%2091.1467%2047.2634%2094.2658%2045.9302C97.385%2044.5988%20100.88%2043.9323%20104.752%2043.9323C108.627%2043.9323%20112.093%2044.5988%20115.151%2045.9302C118.207%2047.2634%20120.809%2049.0493%20122.956%2051.2917C125.107%2053.5304%20126.74%2056.1321%20127.858%2059.0967C128.979%2062.0631%20129.539%2065.1517%20129.539%2068.3606C129.539%2069.1476%20129.525%2069.904%20129.496%2070.6317C129.467%2071.3558%20129.392%2071.9595%20129.273%2072.4428H92.4978C92.6793%2074.3222%2093.1321%2075.986%2093.8562%2077.4377C94.5838%2078.8895%2095.5235%2080.131%2096.6734%2081.1605C97.8234%2082.1919%2099.1242%2082.9788%20100.576%2083.525C102.028%2084.0677%20103.541%2084.3372%20105.118%2084.3372C107.536%2084.3372%20109.82%2083.7478%20111.967%2082.5692C114.118%2081.3869%20115.589%2079.8274%20116.38%2077.8905L126.815%2080.794C125.062%2084.4306%20122.263%2087.4132%20118.421%2089.7417C114.578%2092.0703%20109.993%2093.2346%20104.665%2093.2346ZM117.012%2064.5444C116.711%2060.9761%20115.392%2058.1175%20113.06%2055.9704C110.731%2053.8197%20107.901%2052.7434%20104.572%2052.7434C102.937%2052.7434%20101.41%2053.0309%2099.9866%2053.6059C98.5636%2054.1808%2097.3059%2054.984%2096.2135%2056.0135C95.1247%2057.0394%2094.2335%2058.281%2093.5399%2059.7363C92.8446%2061.1881%2092.4368%2062.7908%2092.3182%2064.5444H117.012Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M181.202%2092.3295H169.034V65.6373C169.034%2061.8246%20168.368%2059.0397%20167.036%2057.2861C165.709%2055.5288%20163.863%2054.6484%20161.502%2054.6484C160.29%2054.6484%20159.048%2054.891%20157.78%2055.3743C156.509%2055.8594%20155.314%2056.5386%20154.193%2057.4154C153.072%2058.2922%20152.055%2059.3379%20151.146%2060.5489C150.24%2061.7617%20149.576%2063.0931%20149.155%2064.5448V92.3295H136.988V44.752H147.969V53.556C149.727%2050.5339%20152.271%2048.173%20155.602%2046.4769C158.931%2044.7808%20162.683%2043.9327%20166.857%2043.9327C169.821%2043.9327%20172.243%2044.4789%20174.123%2045.5714C176%2046.6602%20177.452%2048.0832%20178.478%2049.8404C179.507%2051.594%20180.219%2053.592%20180.612%2055.8343C181.004%2058.073%20181.202%2060.3405%20181.202%2062.6403V92.3295Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M220.34%2089.8793C218.705%2090.6034%20216.707%2091.3293%20214.346%2092.0569C211.983%2092.7846%20209.502%2093.1494%20206.9%2093.1494C205.204%2093.1494%20203.612%2092.9356%20202.128%2092.5097C200.648%2092.0893%20199.347%2091.4083%20198.226%2090.4686C197.108%2089.5307%20196.217%2088.3197%20195.552%2086.8392C194.886%2085.3551%20194.553%2083.553%20194.553%2081.4347V54.1028H188.286V44.7526H194.553V29.3151H206.721V44.7526H216.703V54.1028H206.721V77.3453C206.721%2079.0414%20207.159%2080.2398%20208.036%2080.9388C208.913%2081.6341%20209.985%2081.9809%20211.256%2081.9809C212.529%2081.9809%20213.771%2081.7707%20214.978%2081.3484C216.189%2080.9226%20217.16%2080.5579%20217.889%2080.256L220.34%2089.8793Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M239.675%2093.2351C237.376%2093.2351%20235.227%2092.856%20233.229%2092.0995C231.231%2091.3431%20229.506%2090.2848%20228.054%2088.9229C226.602%2087.5628%20225.467%2085.9745%20224.648%2084.158C223.832%2082.3433%20223.426%2080.3453%20223.426%2078.1641C223.426%2075.9272%20223.923%2073.8555%20224.921%2071.9474C225.921%2070.0411%20227.314%2068.4222%20229.096%2067.089C230.882%2065.7576%20233.017%2064.7137%20235.5%2063.9555C237.981%2063.1991%20240.705%2062.82%20243.671%2062.82C245.788%2062.82%20247.861%2063.0033%20249.888%2063.3662C251.918%2063.7309%20253.72%2064.2466%20255.293%2064.9114V62.1875C255.293%2059.0397%20254.398%2056.6177%20252.612%2054.9216C250.83%2053.2254%20248.181%2052.3774%20244.67%2052.3774C242.13%2052.3774%20239.648%2052.8338%20237.225%2053.7429C234.804%2054.6485%20232.323%2055.978%20229.779%2057.7316L226.056%2050.0201C232.169%2045.963%20238.766%2043.9327%20245.849%2043.9327C252.691%2043.9327%20258.002%2045.6127%20261.782%2048.9708C265.566%2052.3307%20267.46%2057.189%20267.46%2063.5459V78.3438C267.46%2079.6194%20267.686%2080.5286%20268.143%2081.0748C268.597%2081.6174%20269.339%2081.9193%20270.371%2081.9803V92.3295C268.31%2092.75%20266.522%2092.962%20265.009%2092.962C262.71%2092.962%20260.938%2092.4481%20259.698%2091.424C258.457%2090.3944%20257.686%2089.0307%20257.384%2087.3346L257.111%2084.7042C254.993%2087.4891%20252.42%2089.6057%20249.392%2091.0574C246.363%2092.5092%20243.125%2093.2351%20239.675%2093.2351ZM243.125%2084.3377C245.184%2084.3377%20247.137%2083.9765%20248.983%2083.2524C250.831%2082.5248%20252.269%2081.5545%20253.295%2080.3417C254.626%2079.3176%20255.293%2078.1677%20255.293%2076.892V71.4443C253.841%2070.8981%20252.267%2070.4597%20250.571%2070.1291C248.878%2069.7949%20247.245%2069.626%20245.669%2069.626C242.521%2069.626%20239.949%2070.3375%20237.951%2071.7605C235.953%2073.1835%20234.954%2074.9857%20234.954%2077.1651C234.954%2079.226%20235.739%2080.9364%20237.311%2082.2966C238.887%2083.6585%20240.825%2084.3377%20243.125%2084.3377Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M278.719%2026.0447H290.887V77.0719C290.887%2078.8309%20291.311%2080.1946%20292.159%2081.1612C293.007%2082.1297%20294.216%2082.613%20295.788%2082.613C296.516%2082.613%20297.319%2082.4944%20298.196%2082.2537C299.073%2082.0093%20299.903%2081.7057%20300.69%2081.3409L302.328%2090.6049C300.693%2091.3918%20298.787%2091.9955%20296.608%2092.416C294.426%2092.8418%20292.461%2093.0556%20290.707%2093.0556C286.893%2093.0556%20283.941%2092.0423%20281.853%2090.0155C279.763%2087.9888%20278.719%2085.0979%20278.719%2081.3409V26.0447Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M326.663%2059.6437C326.663%2055.7107%20327.371%2051.8225%20328.79%2047.9793C330.213%2044.1325%20332.287%2040.6972%20335.014%2037.6733C337.74%2034.6458%20341.069%2032.1932%20345.004%2030.3139C348.937%2028.4363%20353.416%2027.4966%20358.444%2027.4966C364.375%2027.4966%20369.504%2028.801%20373.831%2031.4063C378.157%2034.0079%20381.381%2037.3984%20383.505%2041.5758L373.874%2048.2021C373.026%2046.3874%20371.995%2044.8584%20370.784%2043.6169C369.576%2042.3771%20368.275%2041.3943%20366.881%2040.6702C365.49%2039.9425%20364.039%2039.4125%20362.526%2039.0819C361.011%2038.7477%20359.529%2038.5788%20358.077%2038.5788C354.929%2038.5788%20352.187%2039.2149%20349.855%2040.4834C347.527%2041.7537%20345.59%2043.4049%20344.048%2045.4352C342.505%2047.4619%20341.339%2049.7617%20340.548%2052.3346C339.761%2054.9075%20339.37%2057.4643%20339.37%2060.0031C339.37%2062.8491%20339.822%2065.5909%20340.728%2068.2249C341.637%2070.8553%20342.924%2073.1695%20344.587%2075.1675C346.255%2077.1655%20348.253%2078.7717%20350.581%2079.9827C352.913%2081.1901%20355.472%2081.7938%20358.257%2081.7938C359.712%2081.7938%20361.227%2081.6142%20362.799%2081.2548C364.369%2080.8919%20365.868%2080.3169%20367.291%2079.5299C368.714%2078.7394%20370.031%2077.7242%20371.244%2076.4827C372.455%2075.2429%20373.423%2073.7445%20374.147%2071.9909L384.41%2077.8913C383.379%2080.3169%20381.911%2082.4514%20380.004%2084.2949C378.096%2086.1401%20375.947%2087.6997%20373.558%2088.9736C371.166%2090.2439%20368.608%2091.2123%20365.882%2091.8771C363.16%2092.5419%20360.499%2092.8761%20357.897%2092.8761C353.298%2092.8761%20349.09%2091.9094%20345.277%2089.9726C341.463%2088.0321%20338.178%2085.5059%20335.424%2082.3903C332.668%2079.2712%20330.519%2075.7317%20328.977%2071.7681C327.434%2067.8009%20326.663%2063.76%20326.663%2059.6437Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M391.673%2092.3297V44.7523H403.84V92.3297H391.673ZM391.673%2038.1259V26.0447H403.84V38.1259H391.673Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M443.336%2089.8789C441.701%2090.603%20439.703%2091.3289%20437.343%2092.0566C434.98%2092.7843%20432.499%2093.149%20429.897%2093.149C428.201%2093.149%20426.609%2092.9352%20425.125%2092.5094C423.644%2092.0889%20422.343%2091.408%20421.222%2090.4683C420.105%2089.5304%20419.213%2088.3194%20418.549%2086.8389C417.882%2085.3548%20417.55%2083.5527%20417.55%2081.4343V54.1024H411.283V44.7522H417.55V29.3147H429.717V44.7522H439.7V54.1024H429.717V77.3449C429.717%2079.0411%20430.156%2080.2395%20431.032%2080.9384C431.909%2081.6337%20432.982%2081.9805%20434.252%2081.9805C435.526%2081.9805%20436.768%2081.7703%20437.975%2081.3481C439.186%2080.9222%20440.156%2080.5575%20440.886%2080.2556L443.336%2089.8789Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M450.691%20101.594C451.715%20101.895%20452.712%20102.12%20453.68%20102.269C454.652%20102.422%20455.472%20102.499%20456.138%20102.499C456.924%20102.499%20457.649%20102.348%20458.316%20102.046C458.981%20101.745%20459.584%20101.215%20460.127%20100.458C460.673%2099.6999%20461.22%2098.656%20461.766%2097.3246C462.312%2095.9914%20462.887%2094.3276%20463.491%2092.3297L444.697%2044.7522H457.224L470.117%2081.7936L481.559%2044.7522H493L473.028%20101.773C471.878%20105.103%20469.909%20107.826%20467.12%20109.945C464.335%20112.061%20460.885%20113.121%20456.771%20113.121C455.802%20113.121%20454.818%20113.044%20453.817%20112.891C452.82%20112.742%20451.778%20112.485%20450.691%20112.122V101.594Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M68.3589%206.77991L68.4351%20114.711L68.436%20115.547L67.6392%20115.296L12.2632%2097.8541L11.8354%2097.7194L11.8345%2097.2721L11.604%2020.5846L11.603%2020.1051L12.0688%2019.9889L67.5991%206.18616L68.3579%205.9967L68.3589%206.77991ZM19.4175%2087.4098H30.0376V69.0875H40.5122L51.6753%2087.4098H63.605L51.1323%2066.8571C54.1622%2065.5744%2056.5616%2063.481%2058.3286%2060.5807C60.0985%2057.6805%2060.9848%2054.4605%2060.9849%2050.9176C60.9849%2048.7119%2060.5481%2046.5179%2059.6753%2044.3365C58.8055%2042.1552%2057.6005%2040.2052%2056.062%2038.4869C54.522%2036.7687%2052.6858%2035.3842%2050.5532%2034.3317C48.4238%2033.2807%2046.1026%2032.7536%2043.5894%2032.7535H19.4175V87.4098ZM15.5894%2062.359C14.1898%2062.3591%2013.0552%2063.4936%2013.0552%2064.8932C13.0553%2066.2927%2014.1899%2067.4273%2015.5894%2067.4274C16.9889%2067.4274%2018.1234%2066.2927%2018.1235%2064.8932C18.1235%2063.4935%2016.989%2062.359%2015.5894%2062.359ZM42.895%2042.0699C43.821%2042.07%2044.7318%2042.2882%2045.6304%2042.7223C46.5275%2043.1579%2047.3216%2043.7729%2048.0132%2044.568C48.7078%2045.3647%2049.2591%2046.3035%2049.6704%2047.3834C50.0801%2048.4603%2050.2856%2049.6381%2050.2856%2050.9176C50.2856%2052.1529%2050.1046%2053.3091%2049.7437%2054.3844C49.3857%2055.4613%2048.8977%2056.3979%2048.2808%2057.193C47.6669%2057.9896%2046.9358%2058.6186%2046.0874%2059.0817C45.2421%2059.5416%2044.3327%2059.7711%2043.3579%2059.7711H30.0376V42.0699H42.895Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%3C%2Fsvg%3E" alt="Rental City" />
+        <div class="k">Estimated monthly rent</div>
+        <div class="addr">123 Main St, Memphis, TN 38103</div>
+        <div class="rent">$1,795 <span>/ month</span></div>
+        <div class="range">Likely range $1,650 – $1,940 &nbsp;·&nbsp; 92% confidence</div>
+      </div>
+
+      <div class="mail-inner">
+        <p>Hi there,</p>
+        <p>Here's your rental analysis for <b>123 Main St</b>. We compared your property against <b>14 active and recent rentals</b> within one mile to estimate what it could rent for today.</p>
+
+        <div class="mail-stats">
+          <div class="mail-stat"><div class="sv">$1.00</div><div class="sk">Rent / sq ft</div></div>
+          <div class="mail-stat"><div class="sv">$21,540</div><div class="sk">Annual income</div></div>
+          <div class="mail-stat"><div class="sv">+4.2%</div><div class="sk">ZIP rent YoY</div></div>
+        </div>
+
+        <p style="font-weight:700;color:var(--ink);margin-bottom:10px;">Top comparable rentals nearby</p>
+        <div class="mail-comps">
+          <div class="ch">3 of 14 comps · sorted by similarity</div>
+          <div class="mail-comp"><div class="ca">118 Auction Ave <small>3 bd · 2 ba · 1,760 sqft · 0.3 mi</small></div><div class="cr">$1,850</div></div>
+          <div class="mail-comp"><div class="ca">245 N Front St <small>3 bd · 2 ba · 1,840 sqft · 0.5 mi</small></div><div class="cr">$1,775</div></div>
+          <div class="mail-comp"><div class="ca">390 Mulberry St <small>3 bd · 2.5 ba · 1,910 sqft · 0.8 mi</small></div><div class="cr">$1,925</div></div>
+        </div>
+
+        <p>Your full report breaks down every comparable, your local market trend, and three specific ways to push your rent higher.</p>
+
+        <div class="mail-cta">
+          <a class="primary" href="#report">View your full rental report →</a>
+          <p class="sub">Ready to fill it? <a class="text" href="https://rentalcity.com">List your property free on Rental City →</a></p>
+        </div>
+      </div>
+
+      <div class="mail-foot">
+        <b>Rental City</b> · The leasing-agent-free rental platform · Memphis, TN<br/>
+        Estimate based on RentCast market data. For informational purposes only — not an appraisal or guarantee of rent.<br/>
+        <a href="#">Unsubscribe</a> · <a href="#">Manage preferences</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STAGE 2: REPORT ============ -->
+<div class="stage-label" id="report">
+  <span class="pill">02 · The full report</span>
+  <span class="desc">The branded analysis, viewable on the web or as a PDF</span>
+  <span class="rule"></span>
+</div>
+
+<div class="report">
+
+  <!-- header -->
+  <div class="rep-head">
+    <div class="rep-head-top">
+      <img src="data:image/svg+xml,%3Csvg%20width%3D%22493%22%20height%3D%22122%22%20viewBox%3D%220%200%20493%20122%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Cpath%20d%3D%22M4.60039%20116.579H69.7932V4.60039L4.60039%204.60232V116.579ZM74.3955%20121.185H0V0H74.3955V121.185Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M104.665%2093.2346C100.851%2093.2346%2097.3993%2092.5842%2094.3089%2091.2869C91.2222%2089.9843%2088.5899%2088.2145%2086.4105%2085.9758C84.2293%2083.7335%2082.5511%2081.13%2081.3725%2078.1636C80.1938%2075.199%2079.6045%2072.0817%2079.6045%2068.8134C79.6045%2065.4212%2080.1794%2062.2284%2081.3294%2059.2332C82.4793%2056.2399%2084.1412%2053.6059%2086.3171%2051.3348C88.4965%2049.0637%2091.1467%2047.2634%2094.2658%2045.9302C97.385%2044.5988%20100.88%2043.9323%20104.752%2043.9323C108.627%2043.9323%20112.093%2044.5988%20115.151%2045.9302C118.207%2047.2634%20120.809%2049.0493%20122.956%2051.2917C125.107%2053.5304%20126.74%2056.1321%20127.858%2059.0967C128.979%2062.0631%20129.539%2065.1517%20129.539%2068.3606C129.539%2069.1476%20129.525%2069.904%20129.496%2070.6317C129.467%2071.3558%20129.392%2071.9595%20129.273%2072.4428H92.4978C92.6793%2074.3222%2093.1321%2075.986%2093.8562%2077.4377C94.5838%2078.8895%2095.5235%2080.131%2096.6734%2081.1605C97.8234%2082.1919%2099.1242%2082.9788%20100.576%2083.525C102.028%2084.0677%20103.541%2084.3372%20105.118%2084.3372C107.536%2084.3372%20109.82%2083.7478%20111.967%2082.5692C114.118%2081.3869%20115.589%2079.8274%20116.38%2077.8905L126.815%2080.794C125.062%2084.4306%20122.263%2087.4132%20118.421%2089.7417C114.578%2092.0703%20109.993%2093.2346%20104.665%2093.2346ZM117.012%2064.5444C116.711%2060.9761%20115.392%2058.1175%20113.06%2055.9704C110.731%2053.8197%20107.901%2052.7434%20104.572%2052.7434C102.937%2052.7434%20101.41%2053.0309%2099.9866%2053.6059C98.5636%2054.1808%2097.3059%2054.984%2096.2135%2056.0135C95.1247%2057.0394%2094.2335%2058.281%2093.5399%2059.7363C92.8446%2061.1881%2092.4368%2062.7908%2092.3182%2064.5444H117.012Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M181.202%2092.3295H169.034V65.6373C169.034%2061.8246%20168.368%2059.0397%20167.036%2057.2861C165.709%2055.5288%20163.863%2054.6484%20161.502%2054.6484C160.29%2054.6484%20159.048%2054.891%20157.78%2055.3743C156.509%2055.8594%20155.314%2056.5386%20154.193%2057.4154C153.072%2058.2922%20152.055%2059.3379%20151.146%2060.5489C150.24%2061.7617%20149.576%2063.0931%20149.155%2064.5448V92.3295H136.988V44.752H147.969V53.556C149.727%2050.5339%20152.271%2048.173%20155.602%2046.4769C158.931%2044.7808%20162.683%2043.9327%20166.857%2043.9327C169.821%2043.9327%20172.243%2044.4789%20174.123%2045.5714C176%2046.6602%20177.452%2048.0832%20178.478%2049.8404C179.507%2051.594%20180.219%2053.592%20180.612%2055.8343C181.004%2058.073%20181.202%2060.3405%20181.202%2062.6403V92.3295Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M220.34%2089.8793C218.705%2090.6034%20216.707%2091.3293%20214.346%2092.0569C211.983%2092.7846%20209.502%2093.1494%20206.9%2093.1494C205.204%2093.1494%20203.612%2092.9356%20202.128%2092.5097C200.648%2092.0893%20199.347%2091.4083%20198.226%2090.4686C197.108%2089.5307%20196.217%2088.3197%20195.552%2086.8392C194.886%2085.3551%20194.553%2083.553%20194.553%2081.4347V54.1028H188.286V44.7526H194.553V29.3151H206.721V44.7526H216.703V54.1028H206.721V77.3453C206.721%2079.0414%20207.159%2080.2398%20208.036%2080.9388C208.913%2081.6341%20209.985%2081.9809%20211.256%2081.9809C212.529%2081.9809%20213.771%2081.7707%20214.978%2081.3484C216.189%2080.9226%20217.16%2080.5579%20217.889%2080.256L220.34%2089.8793Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M239.675%2093.2351C237.376%2093.2351%20235.227%2092.856%20233.229%2092.0995C231.231%2091.3431%20229.506%2090.2848%20228.054%2088.9229C226.602%2087.5628%20225.467%2085.9745%20224.648%2084.158C223.832%2082.3433%20223.426%2080.3453%20223.426%2078.1641C223.426%2075.9272%20223.923%2073.8555%20224.921%2071.9474C225.921%2070.0411%20227.314%2068.4222%20229.096%2067.089C230.882%2065.7576%20233.017%2064.7137%20235.5%2063.9555C237.981%2063.1991%20240.705%2062.82%20243.671%2062.82C245.788%2062.82%20247.861%2063.0033%20249.888%2063.3662C251.918%2063.7309%20253.72%2064.2466%20255.293%2064.9114V62.1875C255.293%2059.0397%20254.398%2056.6177%20252.612%2054.9216C250.83%2053.2254%20248.181%2052.3774%20244.67%2052.3774C242.13%2052.3774%20239.648%2052.8338%20237.225%2053.7429C234.804%2054.6485%20232.323%2055.978%20229.779%2057.7316L226.056%2050.0201C232.169%2045.963%20238.766%2043.9327%20245.849%2043.9327C252.691%2043.9327%20258.002%2045.6127%20261.782%2048.9708C265.566%2052.3307%20267.46%2057.189%20267.46%2063.5459V78.3438C267.46%2079.6194%20267.686%2080.5286%20268.143%2081.0748C268.597%2081.6174%20269.339%2081.9193%20270.371%2081.9803V92.3295C268.31%2092.75%20266.522%2092.962%20265.009%2092.962C262.71%2092.962%20260.938%2092.4481%20259.698%2091.424C258.457%2090.3944%20257.686%2089.0307%20257.384%2087.3346L257.111%2084.7042C254.993%2087.4891%20252.42%2089.6057%20249.392%2091.0574C246.363%2092.5092%20243.125%2093.2351%20239.675%2093.2351ZM243.125%2084.3377C245.184%2084.3377%20247.137%2083.9765%20248.983%2083.2524C250.831%2082.5248%20252.269%2081.5545%20253.295%2080.3417C254.626%2079.3176%20255.293%2078.1677%20255.293%2076.892V71.4443C253.841%2070.8981%20252.267%2070.4597%20250.571%2070.1291C248.878%2069.7949%20247.245%2069.626%20245.669%2069.626C242.521%2069.626%20239.949%2070.3375%20237.951%2071.7605C235.953%2073.1835%20234.954%2074.9857%20234.954%2077.1651C234.954%2079.226%20235.739%2080.9364%20237.311%2082.2966C238.887%2083.6585%20240.825%2084.3377%20243.125%2084.3377Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M278.719%2026.0447H290.887V77.0719C290.887%2078.8309%20291.311%2080.1946%20292.159%2081.1612C293.007%2082.1297%20294.216%2082.613%20295.788%2082.613C296.516%2082.613%20297.319%2082.4944%20298.196%2082.2537C299.073%2082.0093%20299.903%2081.7057%20300.69%2081.3409L302.328%2090.6049C300.693%2091.3918%20298.787%2091.9955%20296.608%2092.416C294.426%2092.8418%20292.461%2093.0556%20290.707%2093.0556C286.893%2093.0556%20283.941%2092.0423%20281.853%2090.0155C279.763%2087.9888%20278.719%2085.0979%20278.719%2081.3409V26.0447Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M326.663%2059.6437C326.663%2055.7107%20327.371%2051.8225%20328.79%2047.9793C330.213%2044.1325%20332.287%2040.6972%20335.014%2037.6733C337.74%2034.6458%20341.069%2032.1932%20345.004%2030.3139C348.937%2028.4363%20353.416%2027.4966%20358.444%2027.4966C364.375%2027.4966%20369.504%2028.801%20373.831%2031.4063C378.157%2034.0079%20381.381%2037.3984%20383.505%2041.5758L373.874%2048.2021C373.026%2046.3874%20371.995%2044.8584%20370.784%2043.6169C369.576%2042.3771%20368.275%2041.3943%20366.881%2040.6702C365.49%2039.9425%20364.039%2039.4125%20362.526%2039.0819C361.011%2038.7477%20359.529%2038.5788%20358.077%2038.5788C354.929%2038.5788%20352.187%2039.2149%20349.855%2040.4834C347.527%2041.7537%20345.59%2043.4049%20344.048%2045.4352C342.505%2047.4619%20341.339%2049.7617%20340.548%2052.3346C339.761%2054.9075%20339.37%2057.4643%20339.37%2060.0031C339.37%2062.8491%20339.822%2065.5909%20340.728%2068.2249C341.637%2070.8553%20342.924%2073.1695%20344.587%2075.1675C346.255%2077.1655%20348.253%2078.7717%20350.581%2079.9827C352.913%2081.1901%20355.472%2081.7938%20358.257%2081.7938C359.712%2081.7938%20361.227%2081.6142%20362.799%2081.2548C364.369%2080.8919%20365.868%2080.3169%20367.291%2079.5299C368.714%2078.7394%20370.031%2077.7242%20371.244%2076.4827C372.455%2075.2429%20373.423%2073.7445%20374.147%2071.9909L384.41%2077.8913C383.379%2080.3169%20381.911%2082.4514%20380.004%2084.2949C378.096%2086.1401%20375.947%2087.6997%20373.558%2088.9736C371.166%2090.2439%20368.608%2091.2123%20365.882%2091.8771C363.16%2092.5419%20360.499%2092.8761%20357.897%2092.8761C353.298%2092.8761%20349.09%2091.9094%20345.277%2089.9726C341.463%2088.0321%20338.178%2085.5059%20335.424%2082.3903C332.668%2079.2712%20330.519%2075.7317%20328.977%2071.7681C327.434%2067.8009%20326.663%2063.76%20326.663%2059.6437Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M391.673%2092.3297V44.7523H403.84V92.3297H391.673ZM391.673%2038.1259V26.0447H403.84V38.1259H391.673Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M443.336%2089.8789C441.701%2090.603%20439.703%2091.3289%20437.343%2092.0566C434.98%2092.7843%20432.499%2093.149%20429.897%2093.149C428.201%2093.149%20426.609%2092.9352%20425.125%2092.5094C423.644%2092.0889%20422.343%2091.408%20421.222%2090.4683C420.105%2089.5304%20419.213%2088.3194%20418.549%2086.8389C417.882%2085.3548%20417.55%2083.5527%20417.55%2081.4343V54.1024H411.283V44.7522H417.55V29.3147H429.717V44.7522H439.7V54.1024H429.717V77.3449C429.717%2079.0411%20430.156%2080.2395%20431.032%2080.9384C431.909%2081.6337%20432.982%2081.9805%20434.252%2081.9805C435.526%2081.9805%20436.768%2081.7703%20437.975%2081.3481C439.186%2080.9222%20440.156%2080.5575%20440.886%2080.2556L443.336%2089.8789Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M450.691%20101.594C451.715%20101.895%20452.712%20102.12%20453.68%20102.269C454.652%20102.422%20455.472%20102.499%20456.138%20102.499C456.924%20102.499%20457.649%20102.348%20458.316%20102.046C458.981%20101.745%20459.584%20101.215%20460.127%20100.458C460.673%2099.6999%20461.22%2098.656%20461.766%2097.3246C462.312%2095.9914%20462.887%2094.3276%20463.491%2092.3297L444.697%2044.7522H457.224L470.117%2081.7936L481.559%2044.7522H493L473.028%20101.773C471.878%20105.103%20469.909%20107.826%20467.12%20109.945C464.335%20112.061%20460.885%20113.121%20456.771%20113.121C455.802%20113.121%20454.818%20113.044%20453.817%20112.891C452.82%20112.742%20451.778%20112.485%20450.691%20112.122V101.594Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%20%20%3Cpath%20d%3D%22M68.3589%206.77991L68.4351%20114.711L68.436%20115.547L67.6392%20115.296L12.2632%2097.8541L11.8354%2097.7194L11.8345%2097.2721L11.604%2020.5846L11.603%2020.1051L12.0688%2019.9889L67.5991%206.18616L68.3579%205.9967L68.3589%206.77991ZM19.4175%2087.4098H30.0376V69.0875H40.5122L51.6753%2087.4098H63.605L51.1323%2066.8571C54.1622%2065.5744%2056.5616%2063.481%2058.3286%2060.5807C60.0985%2057.6805%2060.9848%2054.4605%2060.9849%2050.9176C60.9849%2048.7119%2060.5481%2046.5179%2059.6753%2044.3365C58.8055%2042.1552%2057.6005%2040.2052%2056.062%2038.4869C54.522%2036.7687%2052.6858%2035.3842%2050.5532%2034.3317C48.4238%2033.2807%2046.1026%2032.7536%2043.5894%2032.7535H19.4175V87.4098ZM15.5894%2062.359C14.1898%2062.3591%2013.0552%2063.4936%2013.0552%2064.8932C13.0553%2066.2927%2014.1899%2067.4273%2015.5894%2067.4274C16.9889%2067.4274%2018.1234%2066.2927%2018.1235%2064.8932C18.1235%2063.4935%2016.989%2062.359%2015.5894%2062.359ZM42.895%2042.0699C43.821%2042.07%2044.7318%2042.2882%2045.6304%2042.7223C46.5275%2043.1579%2047.3216%2043.7729%2048.0132%2044.568C48.7078%2045.3647%2049.2591%2046.3035%2049.6704%2047.3834C50.0801%2048.4603%2050.2856%2049.6381%2050.2856%2050.9176C50.2856%2052.1529%2050.1046%2053.3091%2049.7437%2054.3844C49.3857%2055.4613%2048.8977%2056.3979%2048.2808%2057.193C47.6669%2057.9896%2046.9358%2058.6186%2046.0874%2059.0817C45.2421%2059.5416%2044.3327%2059.7711%2043.3579%2059.7711H30.0376V42.0699H42.895Z%22%20fill%3D%22white%22%3E%3C%2Fpath%3E%0A%3C%2Fsvg%3E" alt="Rental City" />
+      <div class="meta">
+        Report <b>RC-RA-10428</b><br/>
+        Prepared <b>May 26, 2026</b><br/>
+        Valid <b>30 days</b>
+      </div>
+    </div>
+    <div class="rep-title">
+      <div class="k">Professional rental analysis</div>
+      <h2>123 Main St, Memphis, TN 38103</h2>
+      <div class="sub">Single-family home · 3 bed · 2 bath · 1,800 sq ft · Built 1996</div>
+    </div>
+  </div>
+
+  <!-- 01 estimate -->
+  <div class="rep-section">
+    <div class="rep-section-h"><span class="num">01</span><h3>Estimated rent</h3><span class="src">RentCast · /avm/rent</span></div>
+    <div class="est-row">
+      <div class="est-big">
+        <div class="k">Estimated monthly rent</div>
+        <div class="v"><span class="grad">$1,795</span><span class="per"> / month</span></div>
+        <div class="est-range">
+          <div class="rl"><span>$1,650</span><span style="color:var(--ink);">Estimate</span><span>$1,940</span></div>
+          <div class="track"><span class="fill"></span><span class="mid"></span></div>
+        </div>
+      </div>
+      <div class="conf-box">
+        <div class="ct"><span class="lab">Confidence score</span><span class="pct">92%</span></div>
+        <div class="track"><span class="bar"></span></div>
+        <p>High confidence — based on 14 comparable rentals within 1 mile, a tight price spread, and recent listing activity (median 21 days old).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 02 metrics -->
+  <div class="rep-section">
+    <div class="rep-section-h"><span class="num">02</span><h3>Income at a glance</h3><span class="src">Derived</span></div>
+    <div class="metrics">
+      <div class="metric"><div class="mk">Rent / sq ft</div><div class="mv">$1.00</div><div class="mnote">Market avg $0.98</div></div>
+      <div class="metric"><div class="mk">Annual gross income</div><div class="mv">$21,540</div><div class="mnote">12 × monthly rent</div></div>
+      <div class="metric"><div class="mk">Est. property value</div><div class="mv">$245,000</div><div class="mnote">RentCast value AVM</div></div>
+      <div class="metric good"><div class="mk">Gross rental yield</div><div class="mv">8.8<small>%</small></div><div class="mnote">Strong for Memphis</div></div>
+    </div>
+  </div>
+
+  <!-- 03 property -->
+  <div class="rep-section">
+    <div class="rep-section-h"><span class="num">03</span><h3>Subject property</h3><span class="src">RentCast · /properties</span></div>
+    <div class="prop">
+      <div class="pc"><div class="pk">Property type</div><div class="pv">Single family</div></div>
+      <div class="pc"><div class="pk">Bedrooms</div><div class="pv">3</div></div>
+      <div class="pc"><div class="pk">Bathrooms</div><div class="pv">2</div></div>
+      <div class="pc"><div class="pk">Living area</div><div class="pv">1,800 sq ft</div></div>
+      <div class="pc"><div class="pk">Lot size</div><div class="pv">6,534 sq ft</div></div>
+      <div class="pc"><div class="pk">Year built</div><div class="pv">1996</div></div>
+    </div>
+  </div>
+
+  <!-- 04 comps -->
+  <div class="rep-section">
+    <div class="rep-section-h"><span class="num">04</span><h3>Comparable rentals</h3><span class="src">RentCast · comparables[]</span></div>
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th>Address</th>
+          <th class="comp-hide">Bd / Ba</th>
+          <th class="comp-hide r">Sq ft</th>
+          <th class="r">Rent</th>
+          <th class="comp-hide r">$/sqft</th>
+          <th class="r">Dist.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="comp-subj">
+          <td class="addr">123 Main St <span class="badge-subj">Subject</span></td>
+          <td class="comp-hide">3 / 2</td>
+          <td class="comp-hide r">1,800</td>
+          <td class="r rent">$1,795</td>
+          <td class="comp-hide r">$1.00</td>
+          <td class="r">—</td>
+        </tr>
+        <tr>
+          <td class="addr">118 Auction Ave<small>Single family · 4 days listed</small></td>
+          <td class="comp-hide">3 / 2</td>
+          <td class="comp-hide r">1,760</td>
+          <td class="r rent">$1,850</td>
+          <td class="comp-hide r">$1.05</td>
+          <td class="r">0.3 mi</td>
+        </tr>
+        <tr>
+          <td class="addr">245 N Front St<small>Single family · 12 days listed</small></td>
+          <td class="comp-hide">3 / 2</td>
+          <td class="comp-hide r">1,840</td>
+          <td class="r rent">$1,775</td>
+          <td class="comp-hide r">$0.96</td>
+          <td class="r">0.5 mi</td>
+        </tr>
+        <tr>
+          <td class="addr">390 Mulberry St<small>Single family · 9 days listed</small></td>
+          <td class="comp-hide">3 / 2.5</td>
+          <td class="comp-hide r">1,910</td>
+          <td class="r rent">$1,925</td>
+          <td class="comp-hide r">$1.01</td>
+          <td class="r">0.8 mi</td>
+        </tr>
+        <tr>
+          <td class="addr">72 G E Patterson Ave<small>Townhouse · 26 days listed</small></td>
+          <td class="comp-hide">3 / 2</td>
+          <td class="comp-hide r">1,690</td>
+          <td class="r rent">$1,700</td>
+          <td class="comp-hide r">$1.01</td>
+          <td class="r">0.6 mi</td>
+        </tr>
+        <tr>
+          <td class="addr">511 S Main St<small>Single family · 33 days listed</small></td>
+          <td class="comp-hide">3 / 2</td>
+          <td class="comp-hide r">1,880</td>
+          <td class="r rent">$1,725</td>
+          <td class="comp-hide r">$0.92</td>
+          <td class="r">0.9 mi</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 05 market -->
+  <div class="rep-section">
+    <div class="rep-section-h"><span class="num">05</span><h3>Local market — ZIP 38103</h3><span class="src">RentCast · /markets</span></div>
+    <div class="market">
+      <div class="market-stats">
+        <div class="ms"><div class="k">Average rent</div><div class="v">$1,720</div></div>
+        <div class="ms"><div class="k">Median rent</div><div class="v">$1,650</div></div>
+        <div class="ms"><div class="k">Market rent / sqft</div><div class="v">$0.98</div></div>
+        <div class="ms"><div class="k">Avg days on market</div><div class="v">28 <small>days</small></div></div>
+        <div class="ms"><div class="k">Rent trend (YoY)</div><div class="v"><span class="up">+4.2%</span></div></div>
+        <div class="ms"><div class="k">Active rentals</div><div class="v">186</div></div>
+      </div>
+      <div class="market-note">
+        <h4>What this means</h4>
+        <p>Your estimate sits slightly above the ZIP average — your square footage and condition are working in your favor. Rents in 38103 are up <b>4.2% year-over-year</b>, and well-priced units lease in under a month. Priced at $1,795, this property should attract qualified renters quickly.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 06 recommendations -->
+  <div class="rep-section">
+    <div class="rep-section-h"><span class="num">06</span><h3>Three ways to raise your rent</h3><span class="src">Rental City</span></div>
+    <div class="recs">
+      <div class="rec">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h.01M9 13h.01M9 17h.01"/></svg></span>
+        <div class="rt"><b>In-unit washer & dryer</b><p>Comps with laundry rented for $55–$80 more per month in this ZIP.</p></div>
+        <span class="gain">+$65/mo</span>
+      </div>
+      <div class="rec">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4L12 17l-6.3 4.4L8 14 2 9.4h7.6z"/></svg></span>
+        <div class="rt"><b>Refreshed kitchen & fixtures</b><p>Updated finishes are the single biggest driver of rent-per-sqft among your comps.</p></div>
+        <span class="gain">+$90/mo</span>
+      </div>
+      <div class="rec">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s7 3 7 9c0 4-3 7-7 11-4-4-7-7-7-11 0-6 7-9 7-9z"/></svg></span>
+        <div class="rt"><b>Pet-friendly listing</b><p>Allowing pets widens your applicant pool and supports a modest pet rent.</p></div>
+        <span class="gain">+$40/mo</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="rep-cta">
+    <div class="k">Your next step</div>
+    <h3>You know what it's worth. <em>Now fill it.</em></h3>
+    <p>List your property free on Rental City and get matched with pre-screened, qualified renters. No agents. No wasted showings.</p>
+    <a href="https://rentalcity.com">List your property on Rental City
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+    </a>
+    <p class="reassure">Free to list · You only pay $350 when your unit is filled · Matched in 48 hours or it's free</p>
+  </div>
+
+  <!-- methodology -->
+  <div class="rep-method">
+    <h4>How this report was generated</h4>
+    <p>Rent estimate, range, and comparable rentals come from the <span class="pw">RentCast</span> rental AVM (<code>/avm/rent/long-term</code>), which analyzes nearby active and recent rental listings. Property attributes are drawn from RentCast property records (<code>/properties</code>), and local market figures from RentCast market data by ZIP (<code>/markets</code>). Property value and yield use the RentCast value AVM (<code>/avm/value/long-term</code>).</p>
+    <p>Estimates are for informational purposes only and are not an appraisal, guarantee, or offer of rent. Actual rent depends on condition, timing, and terms.</p>
+  </div>
+
+</div>
+
+<div class="doc-foot">
+  © 2026 Rental City · The leasing-agent-free rental platform · Memphis, TN. Sample figures shown for design; live reports are generated from RentCast at request time.
+</div>
+
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "rental-city-rental-value",
+  "version": "1.0.0",
+  "description": "Rental City — Free Rental Value Report lead magnet, backed by the RentCast API.",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
