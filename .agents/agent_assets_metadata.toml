@@ -12,3 +12,9 @@ id = "HZMgqZdzAGlCG19KDvIzt"
 uri = "file://rental-value-report.zip"
 type = "unspecified"
 title = "Rental Value Report — standalone lead magnet (import into a new Repl)"
+
+[[outputs]]
+id = "ifh3SEcR3FOSN9n5yj5Gz"
+uri = "file://PRODUCT.md"
+type = "text"
+title = "Rental City — Product Reference & Marketing Brief"
