@@ -42,6 +42,10 @@ subdomain (host-based middleware), so emailed/shared links must point there rega
 which surface (app/marketing) generated them. Non-gorentalcity hosts fall back to
 PUBLIC_BASE_URL → request host → REPLIT_DEV_DOMAIN so dev/replit still work.
 
+## Landing/result-page design source vs our additions
+The landing page's *visual/UX* source of truth is the zip's `attached_assets/_rc_extract/.../public/index.html` (distinct from the report template, whose source is the zip's `templates/...`). On submit the result view hides `#formView` and shows `.result` (display:none/block + `resultIn` keyframe), with a `.result-head`, a `.result-cta` listing band, and a `#resetBtn` that restores the form. We layer ONE extra element the zip lacks: a "View your full report" button (`#rReportWrap`/`#rReportBtn`) wired to the persisted `reportUrl`.
+**Why:** the user re-ports the zip's "recent changes" periodically and expects a faithful match; keep our report button as the only intentional divergence and use gorentalcity.com (not rentalcity.com) for CTA links.
+
 ## Template module
 `server/report-template.ts` exports `buildReport(input, data, opts) -> {reportHtml,
 emailHtml, summary}`. All user/RentCast strings go through `htmlEscape`. Design source of

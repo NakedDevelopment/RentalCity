@@ -168,9 +168,13 @@
   .result {
     margin-top: 24px; border: 1px solid var(--tint-blue-border); border-radius: 16px; overflow: hidden;
     background: linear-gradient(180deg, var(--bg-soft2) 0%, #fff 60%);
-    max-height: 0; opacity: 0; transition: max-height .55s ease, opacity .45s ease, margin-top .3s ease;
+    display: none;
   }
-  .result.open { max-height: 900px; opacity: 1; }
+  .result.open { display: block; }
+  @media (prefers-reduced-motion: no-preference) {
+    .result.open { animation: resultIn .5s ease both; }
+  }
+  @keyframes resultIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   .result-top { padding: 22px 24px; display: flex; align-items: center; gap: 18px; border-bottom: 1px solid var(--n100); }
   .result-home { width: 52px; height: 52px; flex-shrink: 0; border-radius: 14px; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; }
   .result-home svg { width: 27px; height: 27px; color: #fff; }
@@ -201,6 +205,48 @@
 
   .result-sent { padding: 16px 24px; background: var(--accepted-bg); color: var(--accepted-text); font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
   .result-sent svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+  /* result heading (shown once form is replaced) */
+  .result-head { padding: 26px 24px 18px; }
+  .result-head .eyebrow { display: block; margin-bottom: 8px; }
+  .result-head h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.12; }
+
+  /* post-result CTA band */
+  .result-cta {
+    padding: 30px 28px; color: #fff; position: relative; overflow: hidden;
+    background: var(--gradient-primary);
+  }
+  .result-cta::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(420px 220px at 88% 120%, rgba(255,255,255,0.18), transparent 60%);
+    pointer-events: none;
+  }
+  .result-cta > * { position: relative; }
+  .cta-eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.88); }
+  .result-cta h3 { font-size: 24px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.12; color: #fff; margin: 10px 0 0; }
+  .result-cta h3 em { font-style: italic; color: #fff; opacity: 0.78; }
+  .result-cta p { font-size: 14.5px; line-height: 1.55; color: rgba(255,255,255,0.9); margin: 12px 0 22px; }
+  .btn-cta {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; background: #fff; color: var(--primary);
+    font-size: 16px; font-weight: 800; letter-spacing: -0.01em;
+    padding: 16px 22px; border-radius: 11px; text-decoration: none;
+    transition: transform .12s ease, box-shadow .2s ease;
+    box-shadow: 0 14px 28px -14px rgba(0,0,0,0.4);
+  }
+  .btn-cta:hover { transform: translateY(-1px); box-shadow: 0 18px 34px -14px rgba(0,0,0,0.46); }
+  .btn-cta:active { transform: translateY(0); }
+  .btn-cta svg { width: 18px; height: 18px; }
+  .cta-reassure { font-size: 12.5px !important; color: rgba(255,255,255,0.82) !important; margin: 14px 0 0 !important; text-align: center; }
+
+  .result-reset {
+    width: 100%; border: 0; background: #fff; cursor: pointer;
+    padding: 16px 24px; font: inherit; font-size: 13.5px; font-weight: 700; color: var(--n500);
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    border-top: 1px solid var(--n100); transition: color .15s, background .15s;
+  }
+  .result-reset:hover { color: var(--primary); background: var(--bg-soft); }
+  .result-reset svg { width: 15px; height: 15px; }
 
   /* ===== feature strip ===== */
   .features { padding: 8px 0 64px; }
@@ -290,6 +336,7 @@
 
       <!-- RIGHT -->
       <div class="right">
+        <div id="formView">
         <h2>Get your free rental report</h2>
         <p class="lead">Enter your property details and we'll calculate your estimate instantly.</p>
 
@@ -352,9 +399,14 @@
           </button>
           <p class="reassure"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> We respect your privacy. Your information is never shared.</p>
         </form>
+        </div><!-- /formView -->
 
         <!-- RESULT -->
         <div class="result" id="result" aria-live="polite">
+          <div class="result-head">
+            <span class="eyebrow">Your rental estimate</span>
+            <h2>Here's what your property could rent for.</h2>
+          </div>
           <div class="result-top">
             <span class="result-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span>
             <div class="result-rentwrap">
@@ -386,7 +438,26 @@
             <span id="rSent">Your full report is on its way to your inbox.</span>
           </div>
 
-          <a id="rReportBtn" href="#" target="_blank" rel="noopener" style="display:none;align-items:center;justify-content:center;gap:8px;margin-top:18px;background:linear-gradient(83.7338deg,#00BBFF 11.921%,#3A7AFE 90.638%);color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:15px 18px;border-radius:11px;box-shadow:0 14px 30px -16px rgba(58,122,254,0.7);">View your full report &rarr;</a>
+          <div id="rReportWrap" style="display:none;padding:18px 24px;background:#fff;border-top:1px solid var(--n100);">
+            <a id="rReportBtn" href="#" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--gradient-primary);color:#fff;text-decoration:none;font-weight:800;font-size:15px;padding:15px 18px;border-radius:11px;box-shadow:0 14px 30px -16px rgba(58,122,254,0.7);">View your full report &rarr;</a>
+          </div>
+
+          <!-- POST-RESULT CTA -->
+          <div class="result-cta">
+            <span class="cta-eyebrow">Your next step</span>
+            <h3>Now find a renter who fits. <em>In days, not weeks.</em></h3>
+            <p>You know what it's worth — now fill it. List your property free on Rental City and get matched with pre-screened, qualified renters. No agents. No wasted showings.</p>
+            <a class="btn-cta" id="ctaLink" href="https://gorentalcity.com" target="_blank" rel="noopener">
+              List your property on Rental City
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </a>
+            <p class="cta-reassure">Free to list · You only pay $350 when your unit is filled · Matched in 48 hours or it's free</p>
+          </div>
+
+          <button type="button" class="result-reset" id="resetBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+            Estimate another property
+          </button>
         </div>
 
       </div>
@@ -496,15 +567,42 @@ function renderResult(r, beds, baths, sqft, email) {
   document.getElementById('rSent').textContent = 'Your full report is on its way to ' + email + '.';
 
   var reportBtn = document.getElementById('rReportBtn');
+  var reportWrap = document.getElementById('rReportWrap');
   var reportUrl = r.reportUrl || (r.summary && r.summary.reportUrl) || null;
-  if (reportBtn) {
-    if (reportUrl) { reportBtn.href = reportUrl; reportBtn.style.display = 'flex'; }
-    else { reportBtn.style.display = 'none'; }
+  if (reportBtn && reportWrap) {
+    if (reportUrl) { reportBtn.href = reportUrl; reportWrap.style.display = 'block'; }
+    else { reportWrap.style.display = 'none'; }
   }
 
-  document.getElementById('result').className = 'result open';
+  /* swap the form out for the result so the page reads as a single clear outcome */
+  var fv = document.getElementById('formView');
+  if (fv) fv.style.display = 'none';
+
+  var resultEl = document.getElementById('result');
+  resultEl.style.marginTop = '0';
+  resultEl.className = 'result open';
   setTimeout(function () { document.getElementById('rConfBar').style.width = conf + '%'; }, 120);
 }
+
+/* ---------- reset: estimate another property ---------- */
+(function () {
+  var btn = document.getElementById('resetBtn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var resultEl = document.getElementById('result');
+    resultEl.className = 'result';
+    resultEl.style.marginTop = '';
+    var bar = document.getElementById('rConfBar');
+    if (bar) bar.style.width = '0';
+    var fv = document.getElementById('formView');
+    if (fv) fv.style.display = '';
+    var sb = document.getElementById('submitBtn');
+    if (sb) {
+      sb.disabled = false;
+      sb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg> Get my free rental report';
+    }
+  });
+})();
 
 /* ---------- form ---------- */
 (function () {
