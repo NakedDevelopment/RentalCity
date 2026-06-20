@@ -425,8 +425,11 @@ const REPORT_CSS = `
 function buildReportPage(
   input: ReportInput,
   d: Derived,
+  reportUrl?: string,
 ): string {
   const address = htmlEscape(input.address)
+  const shareUrl = isAbsoluteUrl(reportUrl) ? htmlEscape(reportUrl) : 'https://value.gorentalcity.com/'
+  const shareImage = 'https://value.gorentalcity.com/rental-report-share.png'
 
   // Property subtitle line under the address.
   const prop = d.property
@@ -679,6 +682,24 @@ function buildReportPage(
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Rental City — Rental Analysis for ${address}</title>
+<meta name="description" content="Professional rental analysis for ${address} — estimated rent, range, comparable rentals, and market insights from Rental City." />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Rental City" />
+<meta property="og:title" content="Rental City — Rental Analysis for ${address}" />
+<meta property="og:description" content="Professional rental analysis for ${address} — estimated rent, range, comparable rentals, and market insights from Rental City." />
+<meta property="og:url" content="${shareUrl}" />
+<meta property="og:image" content="${shareImage}" />
+<meta property="og:image:width" content="1171" />
+<meta property="og:image:height" content="610" />
+<meta property="og:image:alt" content="Rental City — Apply once. Match fast. Rent smarter." />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Rental City — Rental Analysis for ${address}" />
+<meta name="twitter:description" content="Professional rental analysis for ${address} — estimated rent, range, comparable rentals, and market insights from Rental City." />
+<meta name="twitter:image" content="${shareImage}" />
+<meta name="twitter:image:alt" content="Rental City — Apply once. Match fast. Rent smarter." />
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -804,7 +825,7 @@ export function buildReport(
   const d = derive(input, data)
   const reportUrl = opts?.reportUrl
 
-  const reportHtml = buildReportPage(input, d)
+  const reportHtml = buildReportPage(input, d, reportUrl)
   const emailHtml = buildEmail(input, d, reportUrl)
 
   const summary: ReportSummary = {

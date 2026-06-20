@@ -46,6 +46,10 @@ PUBLIC_BASE_URL → request host → REPLIT_DEV_DOMAIN so dev/replit still work.
 The landing page's *visual/UX* source of truth is the zip's `attached_assets/_rc_extract/.../public/index.html` (distinct from the report template, whose source is the zip's `templates/...`). On submit the result view hides `#formView` and shows `.result` (display:none/block + `resultIn` keyframe), with a `.result-head`, a `.result-cta` listing band, and a `#resetBtn` that restores the form. We layer ONE extra element the zip lacks: a "View your full report" button (`#rReportWrap`/`#rReportBtn`) wired to the persisted `reportUrl`.
 **Why:** the user re-ports the zip's "recent changes" periodically and expects a faithful match; keep our report button as the only intentional divergence and use gorentalcity.com (not rentalcity.com) for CTA links.
 
+## Social share (OG/Twitter) image
+Both the landing page (`client/public/rental-value-report/index.html`) and the shared report HTML (`buildReportPage` in `server/report-template.ts`) carry OG + Twitter `summary_large_image` tags. The image lives at `client/public/rental-report-share.png` (served at `/rental-report-share.png`) and is referenced as the ABSOLUTE `https://value.gorentalcity.com/rental-report-share.png`.
+**Why:** social scrapers require absolute image URLs and shared reports live on the `value.` subdomain (see CTA section); the report's `og:url` uses the absolute `reportUrl` when present, else falls back to the value-subdomain root.
+
 ## Template module
 `server/report-template.ts` exports `buildReport(input, data, opts) -> {reportHtml,
 emailHtml, summary}`. All user/RentCast strings go through `htmlEscape`. Design source of
