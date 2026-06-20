@@ -33,9 +33,14 @@ to all three.
 
 ## Emailed CTA links MUST be absolute
 The email "View your full report" CTA falls back to `href="#"` unless given an absolute
-URL. The server derives the origin via `getReportBaseUrl(req)` (PUBLIC_BASE_URL →
-x-forwarded-host/proto → REPLIT_DEV_DOMAIN) and passes the absolute URL to `buildReport`,
-while still returning the relative `reportUrl` to the same-origin frontend.
+URL. The server derives the origin via `getReportBaseUrl(req)` and passes the absolute URL to
+`buildReport`, while still returning the relative `reportUrl` to the same-origin frontend.
+`getReportBaseUrl` normalizes ANY `*.gorentalcity.com` host (app/apex/www/value) to
+`https://value.gorentalcity.com` — branded reports always live on the `value.` subdomain.
+**Why:** the report static page + `/api/reports/:id` are served under the `value.`
+subdomain (host-based middleware), so emailed/shared links must point there regardless of
+which surface (app/marketing) generated them. Non-gorentalcity hosts fall back to
+PUBLIC_BASE_URL → request host → REPLIT_DEV_DOMAIN so dev/replit still work.
 
 ## Template module
 `server/report-template.ts` exports `buildReport(input, data, opts) -> {reportHtml,

@@ -492,12 +492,20 @@ function formatUSD(n: number): string {
 }
 
 // Absolute origin for shareable report links (used in the emailed CTA, which
-// must be absolute to work in real inboxes). Prefers PUBLIC_BASE_URL, then the
-// proxied request host, then the Replit dev domain. Returns '' if none known.
+// must be absolute to work in real inboxes). Branded reports always live on the
+// value.* subdomain of the primary domain, so any gorentalcity.com host is
+// normalized to https://value.gorentalcity.com. Otherwise prefers
+// PUBLIC_BASE_URL, then the proxied request host, then the Replit dev domain.
+// Returns '' if none known.
 function getReportBaseUrl(req: express.Request): string {
+  const rawHost = (req.headers['x-forwarded-host'] || req.headers['host']) as string | undefined
+  const host = rawHost ? String(rawHost).split(',')[0].trim() : undefined
+  const hostname = host ? host.split(':')[0].toLowerCase() : undefined
+  if (hostname && (hostname === 'gorentalcity.com' || hostname.endsWith('.gorentalcity.com'))) {
+    return 'https://value.gorentalcity.com'
+  }
   const env = process.env.PUBLIC_BASE_URL
   if (env) return env.replace(/\/+$/, '')
-  const host = (req.headers['x-forwarded-host'] || req.headers['host']) as string | undefined
   const proto = ((req.headers['x-forwarded-proto'] as string | undefined) || 'https').split(',')[0]
   if (host) return `${proto}://${host}`
   if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`
