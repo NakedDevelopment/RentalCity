@@ -313,7 +313,7 @@ const REPORT_CSS = `
     box-shadow: 0 40px 90px -55px rgba(15,30,61,0.35);
   }
   .rep-head { background: var(--ink); color: #fff; padding: 36px 44px; position: relative; overflow: hidden; }
-  .rep-head::after { content:""; position:absolute; inset:0; background: radial-gradient(600px 280px at 88% -20%, rgba(0,187,255,0.22), transparent 60%); }
+  .rep-head::after { content:""; position:absolute; inset:0; pointer-events: none; background: radial-gradient(600px 280px at 88% -20%, rgba(0,187,255,0.22), transparent 60%); }
   .rep-head-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; position: relative; }
   .rep-head-top img { height: 26px; }
   .rep-head-top .meta { text-align: right; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: rgba(255,255,255,0.7); line-height: 1.7; }
@@ -322,6 +322,11 @@ const REPORT_CSS = `
   .rep-title .k { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--primary-light); }
   .rep-title h2 { color: #fff; font-size: clamp(24px,3vw,32px); font-weight: 800; letter-spacing: -0.03em; margin: 10px 0 0; }
   .rep-title .sub { color: rgba(255,255,255,0.72); font-size: 15px; margin-top: 8px; }
+  .rep-head-cta { position: relative; margin-top: 26px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .rep-head-cta .rhc-copy b { display: block; color: #fff; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+  .rep-head-cta .rhc-copy span { display: block; color: rgba(255,255,255,0.66); font-size: 13.5px; margin-top: 5px; max-width: 480px; line-height: 1.5; }
+  .rep-head-cta a { display: inline-flex; align-items: center; gap: 9px; background: #fff; color: var(--ink); font-weight: 800; font-size: 14.5px; padding: 13px 22px; border-radius: 10px; text-decoration: none; white-space: nowrap; }
+  .rep-head-cta a svg { width: 16px; height: 16px; }
 
   .rep-section { padding: 40px 44px; border-bottom: 1px solid var(--n100); }
   .rep-section:last-child { border-bottom: 0; }
@@ -720,6 +725,15 @@ function buildReportPage(
       <div class="k">Professional rental analysis</div>
       <h2>${address}</h2>
       ${subLine}
+    </div>
+    <div class="rep-head-cta">
+      <div class="rhc-copy">
+        <b>Know what it's worth? Now fill it.</b>
+        <span>List free and match with pre-screened renters — pay $350 only when it's filled.</span>
+      </div>
+      <a href="https://gorentalcity.com">List your property
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </a>
     </div>
   </div>
 ${sections.join('\n')}
