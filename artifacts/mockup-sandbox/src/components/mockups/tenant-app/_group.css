@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+.tenant-app-scope {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Primary */
+  --color-primary: #3A7AFE;
+  --color-primary-light: #00BBFF;
+  --gradient-primary: linear-gradient(83.7338deg, #00BBFF 11.921%, #3A7AFE 90.638%);
+
+  /* Neutrals */
+  --color-neutral-900: #171717;
+  --color-neutral-600: #404040;
+  --color-neutral-500: #525252;
+  --color-neutral-400: #737373;
+  --color-neutral-100: #E5E5E5;
+  --color-neutral-50: #F5F5F5;
+
+  /* Backgrounds */
+  --color-background-dashboard: #F8FAFD;
+
+  /* Status (the off-brand greens) */
+  --color-status-accepted-bg: #CDF7D4;
+  --color-status-accepted-text: #0E7B20;
+  --color-status-locked-bg: #FAE8C7;
+  --color-status-locked-text: #905F05;
+  --color-notification: #FF4B4B;
+  --color-score-excellent: #4CD964;
+  --color-score-moderate: #FFB020;
+}
+
+.tenant-app-scope .gradient-primary {
+  background: linear-gradient(83.7338deg, #00BBFF 11.921%, #3A7AFE 90.638%);
+}
