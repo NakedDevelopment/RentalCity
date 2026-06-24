@@ -1,1 +1,1 @@
-- [App UI redesign direction](app-ui-redesign-direction.md) — tenant/landlord app redesigned to match lead magnet: stay blue, drop off-brand greens, use lucide icons, fix sidebar alignment hack.
+- [Tailwind palette remap](tailwind-palette-remap.md) — client/tailwind.config.js remaps emerald/green/amber→status tokens; use arbitrary hex (#3A7AFE/#EEF4FE) for true brand blue.

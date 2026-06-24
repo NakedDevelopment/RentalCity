@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Bed, Bath, Maximize } from 'lucide-react'
 
 interface PropertyCardProps {
   id?: string
@@ -24,47 +25,41 @@ export function PropertyCard({
   address,
 }: PropertyCardProps) {
   const content = (
-    <article className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-      <div className="relative aspect-[4/3]">
+    <article className="group bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-[0_14px_32px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)] transition-all duration-300 cursor-pointer">
+      <div className="relative aspect-[4/3] overflow-hidden">
         <img
           src={image}
           alt={address}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
         {perfectFit && (
-          <span className="absolute top-2 left-2 px-2 py-1 gradient-primary text-white text-xs font-medium rounded">
+          <span className="absolute top-3 left-3 px-2.5 py-1 bg-[#3A7AFE] text-white text-xs font-bold rounded-full shadow-sm">
             Perfect Fit
           </span>
         )}
         {postedAgo && (
-          <span className="absolute top-2 right-2 px-2 py-1 bg-gray-600/90 text-white text-xs rounded">
+          <span className="absolute top-3 right-3 px-2.5 py-1 bg-white/90 backdrop-blur-sm text-gray-700 text-xs font-semibold rounded-full shadow-sm">
             {postedAgo}
           </span>
         )}
       </div>
-      <div className="p-4">
-        <div className="flex gap-4 text-gray-600 text-sm mb-2">
-          <span className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
+      <div className="p-5">
+        <div className="flex gap-4 text-gray-500 text-xs font-medium mb-3">
+          <span className="flex items-center gap-1.5">
+            <Bed className="w-3.5 h-3.5" />
             {beds} Beds
           </span>
-          <span className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
-            </svg>
+          <span className="flex items-center gap-1.5">
+            <Bath className="w-3.5 h-3.5" />
             {baths} Baths
           </span>
-          <span className="flex items-center gap-1">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-            </svg>
+          <span className="flex items-center gap-1.5">
+            <Maximize className="w-3.5 h-3.5" />
             {sqft} Ft
           </span>
         </div>
-        <p className="font-bold text-lg text-gray-900">{price}</p>
-        <p className="text-gray-600 text-sm">{address}</p>
+        <p className="font-extrabold text-lg text-[#0F1E3D] group-hover:text-[#3A7AFE] transition-colors">{price}</p>
+        <p className="text-gray-500 text-sm mt-0.5">{address}</p>
       </div>
     </article>
   )

@@ -22,8 +22,14 @@ const PAGE_SIZE = 6
 type ListingStatusFilter = 'all' | 'draft' | 'active' | 'leased' | 'inactive'
 
 function PropertyStatusBadge({ status }: { status: PropertyStatus }) {
+  const tone =
+    status === 'Active'
+      ? 'bg-[#EEF4FE] text-[#3A7AFE]'
+      : status === 'Leased'
+        ? 'bg-gray-100 text-gray-700'
+        : 'bg-gray-100 text-gray-600'
   return (
-    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+    <span className={`rounded-full px-3 py-1 text-xs font-bold ${tone}`}>
       {status}
     </span>
   )
@@ -157,8 +163,8 @@ export function PropertiesPage() {
       <div className="flex min-h-full flex-col py-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-[2rem] font-medium text-gray-900">My Properties</h1>
-            <p className="mt-2 text-sm text-gray-600">
+            <h1 className="text-3xl font-extrabold tracking-tight text-[#0F1E3D]">My Properties</h1>
+            <p className="mt-2 text-[15px] font-medium text-gray-500">
               Manage your rental properties and find the perfect tenants
             </p>
           </div>
@@ -176,7 +182,7 @@ export function PropertiesPage() {
 
         {error ? <p className="mt-6 text-sm text-red-600">{error}</p> : null}
 
-        <div className="mt-6 flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="property-status-filter" className="text-xs font-medium text-gray-500">
               Status
@@ -249,8 +255,8 @@ export function PropertiesPage() {
         {!empty ? (
         <div className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {properties.map((property) => (
-            <article key={property.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-              <div className="flex aspect-[16/8.4] items-center justify-center overflow-hidden bg-gray-300">
+            <article key={property.id} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_14px_32px_rgba(0,0,0,0.03)] transition-shadow hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)]">
+              <div className="flex aspect-[16/8.4] items-center justify-center overflow-hidden bg-gradient-to-br from-[#F8FAFD] to-[#EEF4FE]">
                 {property.photoUrl ? (
                   <img
                     src={property.photoUrl}

@@ -217,10 +217,10 @@ const DIMENSION_WEIGHTS: Record<keyof MatchDimensions, number> = {
 
 // 0 = red, 1 = green (pct is 0–100). Returns bg- and border- class names.
 function scoreBarColor(pct: number): { bg: string; border: string } {
-  if (pct <= 25) return { bg: 'bg-red-500', border: 'border-red-500' }
-  if (pct <= 50) return { bg: 'bg-orange-500', border: 'border-orange-500' }
-  if (pct <= 75) return { bg: 'bg-amber-500', border: 'border-amber-500' }
-  return { bg: 'bg-emerald-500', border: 'border-emerald-500' }
+  if (pct <= 25) return { bg: 'bg-[#BAD1FF]', border: 'border-[#BAD1FF]' }
+  if (pct <= 50) return { bg: 'bg-[#85AAFF]', border: 'border-[#85AAFF]' }
+  if (pct <= 75) return { bg: 'bg-[#5C8AFF]', border: 'border-[#5C8AFF]' }
+  return { bg: 'bg-[#3A7AFE]', border: 'border-[#3A7AFE]' }
 }
 
 function ScoreBar({ value, max = 10 }: { value: number; max?: number }) {
@@ -301,7 +301,7 @@ function MatchScoreDisplay({
         {showQuestionnaireIncomeHint && (dimensions.affordability ?? 0) === 0 ? (
           <p className="text-[11px] text-gray-500">
           Affordability is based on this listing’s rent and your income. Add or update income in the{' '}
-          <Link to="/tenant-questionnaire" className="text-emerald-600 hover:underline">questionnaire</Link> if it’s missing.
+          <Link to="/tenant-questionnaire" className="text-[#3A7AFE] hover:underline">questionnaire</Link> if it’s missing.
           </p>
         ) : (
           <div className="h-0 overflow-hidden" aria-hidden />
@@ -1313,7 +1313,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
               return (
               <div
                 key={match.id}
-                className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-4"
+                className="flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-[0_14px_32px_rgba(0,0,0,0.03)] transition-shadow hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)]"
               >
                 <>
                   <div className="flex items-start justify-between gap-4">
@@ -1351,7 +1351,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                           : workflow === 'declined'
                             ? 'bg-red-50 text-red-700'
                             : workflow === 'accepted'
-                              ? 'bg-emerald-50 text-emerald-800'
+                              ? 'bg-[#EEF4FE] text-[#3A7AFE]'
                               : workflow === 'unlocked'
                                 ? 'bg-sky-50 text-sky-800'
                                 : 'bg-gray-100 text-gray-600'
@@ -1800,7 +1800,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             return (
               <div
                 key={match.id}
-                className="flex flex-col rounded-xl border border-gray-200 bg-white p-4"
+                className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-[0_14px_32px_rgba(0,0,0,0.03)] transition-shadow hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)]"
               >
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1864,7 +1864,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                             </p>
                             <Link
                               to="/tenant-questionnaire"
-                              className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:text-emerald-700"
+                              className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-[#3A7AFE] hover:text-[#2558CC]"
                             >
                               Complete questionnaire
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
