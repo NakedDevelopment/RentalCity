@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, User, Mail, Settings, Bell, Search, SlidersHorizontal, Bed, Bath, LayoutGrid, MapPin, Building, ChevronDown, Check } from 'lucide-react';
+import { User, Mail, Settings, Bell, Search, SlidersHorizontal, Bed, Bath, LayoutGrid, Building, ChevronDown, Check } from 'lucide-react';
 import './_group.css';
 
 const navItems = [
@@ -9,13 +9,23 @@ const navItems = [
   { label: 'Settings', icon: Settings, active: false },
 ];
 
+type Dims = { affordability: number; stability: number; risk: number; lifestyle: number; policy: number };
+
+const DIMENSIONS: { key: keyof Dims; emoji: string; label: string; max: number }[] = [
+  { key: 'affordability', emoji: '💰', label: 'Affordability', max: 35 },
+  { key: 'stability', emoji: '🏠', label: 'Stability', max: 25 },
+  { key: 'risk', emoji: '🛡️', label: 'Risk fit', max: 20 },
+  { key: 'lifestyle', emoji: '✨', label: 'Lifestyle', max: 10 },
+  { key: 'policy', emoji: '📋', label: 'Policy', max: 10 },
+];
+
 const properties = [
-  { title: 'Sunny 2BR in Mission District', price: '$3,200/mo', beds: '2 bd', baths: '1 ba', sqft: '950 sqft', score: 94, label: 'Excellent match', status: 'Accepted' },
-  { title: 'Modern Loft Downtown', price: '$2,850/mo', beds: '1 bd', baths: '1 ba', sqft: '720 sqft', score: 88, label: 'Excellent match', status: null },
-  { title: 'Cozy Studio near Park', price: '$2,100/mo', beds: 'Studio', baths: '1 ba', sqft: '480 sqft', score: 72, label: 'Good match', status: null },
-  { title: 'Spacious 3BR Family Home', price: '$4,500/mo', beds: '3 bd', baths: '2 ba', sqft: '1,640 sqft', score: 91, label: 'Excellent match', status: null },
-  { title: 'Renovated 1BR with Balcony', price: '$2,650/mo', beds: '1 bd', baths: '1 ba', sqft: '640 sqft', score: 67, label: 'Good match', status: 'Locked' },
-  { title: 'Bright Corner Unit', price: '$3,000/mo', beds: '2 bd', baths: '2 ba', sqft: '1,020 sqft', score: 85, label: 'Excellent match', status: null },
+  { title: 'Sunny 2BR in Mission District', price: '$3,200/mo', beds: '2 bd', baths: '1 ba', sqft: '950 sqft', score: 94, label: 'Excellent match', status: 'Accepted', dims: { affordability: 35, stability: 24, risk: 17, lifestyle: 9, policy: 9 } },
+  { title: 'Modern Loft Downtown', price: '$2,850/mo', beds: '1 bd', baths: '1 ba', sqft: '720 sqft', score: 88, label: 'Excellent match', status: null, dims: { affordability: 33, stability: 22, risk: 16, lifestyle: 8, policy: 9 } },
+  { title: 'Cozy Studio near Park', price: '$2,100/mo', beds: 'Studio', baths: '1 ba', sqft: '480 sqft', score: 72, label: 'Good match', status: null, dims: { affordability: 28, stability: 18, risk: 14, lifestyle: 7, policy: 5 } },
+  { title: 'Spacious 3BR Family Home', price: '$4,500/mo', beds: '3 bd', baths: '2 ba', sqft: '1,640 sqft', score: 91, label: 'Excellent match', status: null, dims: { affordability: 34, stability: 23, risk: 17, lifestyle: 9, policy: 8 } },
+  { title: 'Renovated 1BR with Balcony', price: '$2,650/mo', beds: '1 bd', baths: '1 ba', sqft: '640 sqft', score: 67, label: 'Good match', status: 'Locked', dims: { affordability: 25, stability: 17, risk: 13, lifestyle: 7, policy: 5 } },
+  { title: 'Bright Corner Unit', price: '$3,000/mo', beds: '2 bd', baths: '2 ba', sqft: '1,020 sqft', score: 85, label: 'Excellent match', status: null, dims: { affordability: 32, stability: 21, risk: 16, lifestyle: 8, policy: 8 } },
 ];
 
 // Brand Colors
@@ -39,6 +49,42 @@ function statusPill(status: string | null) {
   return <span />;
 }
 
+function MatchBreakdown({ score, dims }: { score: number; dims: Dims }) {
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-50">
+      {/* Overall match score */}
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className="text-xs font-bold text-[#0F1E3D]">Match score</span>
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#3A7AFE] text-xs font-extrabold text-[#0F1E3D] shrink-0">
+          {score}
+        </span>
+        <div className="flex-1 h-2 rounded-full bg-[#EEF4FE] overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-[#00BBFF] to-[#3A7AFE]" style={{ width: `${score}%` }} />
+        </div>
+      </div>
+
+      {/* Per-dimension contribution bars */}
+      <div className="space-y-2">
+        {DIMENSIONS.map((d) => {
+          const val = dims[d.key];
+          const pct = Math.min(100, Math.max(0, (val / d.max) * 100));
+          return (
+            <div key={d.key} className="flex items-center gap-2 text-[11px]">
+              <span className="w-4 text-center shrink-0">{d.emoji}</span>
+              <span className="text-gray-600 font-medium w-[5.25rem] shrink-0">{d.label}</span>
+              <div className="flex-1 h-1.5 rounded-full bg-[#EEF4FE] overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-[#00BBFF] to-[#3A7AFE]" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="text-gray-400 font-semibold w-[3.25rem] text-right shrink-0 tabular-nums">{val} / {d.max}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-gray-400 mt-2.5">Bars show weighted contribution to total score.</p>
+    </div>
+  );
+}
+
 function PropertyCard({ p }: { p: typeof properties[number] }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100/50 overflow-hidden shadow-[0_14px_32px_rgba(0,0,0,0.03)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col group">
@@ -47,7 +93,7 @@ function PropertyCard({ p }: { p: typeof properties[number] }) {
         <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#00BBFF]/10 rounded-full blur-2xl"></div>
         <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-[#3A7AFE]/10 rounded-full blur-xl"></div>
         <Building className="w-10 h-10 text-[#3A7AFE]/30 relative z-10" />
-        
+
         <div
           className={`absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs font-bold shadow-sm backdrop-blur-sm z-20 ${scoreColor(p.score)}`}
         >
@@ -58,21 +104,23 @@ function PropertyCard({ p }: { p: typeof properties[number] }) {
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="font-extrabold text-[#0F1E3D] text-base leading-snug group-hover:text-[#3A7AFE] transition-colors">{p.title}</h3>
         </div>
-        <div className="mt-auto">
-          <div className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-[#00BBFF] to-[#3A7AFE] tracking-tight">{p.price}</div>
-          <div className="mt-2.5 flex items-center gap-3 text-xs font-medium text-gray-500">
-            <span className="flex items-center gap-1.5"><Bed className="w-3.5 h-3.5" />{p.beds}</span>
-            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-            <span className="flex items-center gap-1.5"><Bath className="w-3.5 h-3.5" />{p.baths}</span>
-            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-            <span className="flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" />{p.sqft}</span>
-          </div>
-          <div className="mt-5 flex items-center justify-between pt-4 border-t border-gray-50">
-            {statusPill(p.status)}
-            <button className="text-sm font-bold text-[#3A7AFE] hover:text-[#0F1E3D] transition-colors ml-auto flex items-center gap-1">
-              View details
-            </button>
-          </div>
+        <div className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-[#00BBFF] to-[#3A7AFE] tracking-tight">{p.price}</div>
+        <div className="mt-2.5 flex items-center gap-3 text-xs font-medium text-gray-500">
+          <span className="flex items-center gap-1.5"><Bed className="w-3.5 h-3.5" />{p.beds}</span>
+          <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+          <span className="flex items-center gap-1.5"><Bath className="w-3.5 h-3.5" />{p.baths}</span>
+          <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+          <span className="flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5" />{p.sqft}</span>
+        </div>
+
+        {/* Match score + weighted breakdown */}
+        <MatchBreakdown score={p.score} dims={p.dims} />
+
+        <div className="mt-5 flex items-center justify-between pt-4 border-t border-gray-50">
+          {statusPill(p.status)}
+          <button className="text-sm font-bold text-[#3A7AFE] hover:text-[#0F1E3D] transition-colors ml-auto flex items-center gap-1">
+            View details
+          </button>
         </div>
       </div>
     </div>
@@ -111,8 +159,8 @@ export function Redesigned() {
                 <a
                   key={item.label}
                   className={`flex items-center gap-3.5 px-4 py-3 rounded-xl transition-all cursor-pointer font-semibold text-sm ${
-                    item.active 
-                      ? 'bg-[#EEF4FE] text-[#3A7AFE]' 
+                    item.active
+                      ? 'bg-[#EEF4FE] text-[#3A7AFE]'
                       : 'text-gray-500 hover:bg-gray-50 hover:text-[#0F1E3D]'
                   }`}
                 >
@@ -122,7 +170,7 @@ export function Redesigned() {
               );
             })}
           </nav>
-          
+
           {/* Help / Bottom Section */}
           <div className="p-6 mt-auto">
             <div className="bg-[#F8FAFD] rounded-xl p-4 border border-gray-100">
@@ -145,14 +193,14 @@ export function Redesigned() {
             <div className="bg-white p-2 rounded-2xl border border-gray-100 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] flex flex-wrap items-center gap-2 mb-8">
               <div className="flex-1 min-w-[240px] relative">
                 <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                <input 
-                  className="w-full pl-11 pr-4 py-3 bg-transparent text-sm font-medium text-[#0F1E3D] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#3A7AFE]/20 rounded-xl transition-shadow" 
-                  placeholder="Search neighborhoods or cities..." 
+                <input
+                  className="w-full pl-11 pr-4 py-3 bg-transparent text-sm font-medium text-[#0F1E3D] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#3A7AFE]/20 rounded-xl transition-shadow"
+                  placeholder="Search neighborhoods or cities..."
                 />
               </div>
-              
+
               <div className="w-px h-8 bg-gray-100 hidden sm:block"></div>
-              
+
               <div className="relative shrink-0">
                 <select className="appearance-none pl-4 pr-10 py-3 bg-transparent text-sm font-bold text-[#0F1E3D] focus:outline-none cursor-pointer">
                   <option>Any price</option>
@@ -162,9 +210,9 @@ export function Redesigned() {
                 </select>
                 <ChevronDown className="w-4 h-4 text-gray-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
-              
+
               <div className="w-px h-8 bg-gray-100 hidden sm:block"></div>
-              
+
               <div className="relative shrink-0">
                 <select className="appearance-none pl-4 pr-10 py-3 bg-transparent text-sm font-bold text-[#0F1E3D] focus:outline-none cursor-pointer">
                   <option>Any beds</option>
