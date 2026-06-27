@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { startUniversalBackgroundCheck } from '../lib/backgroundChecksApi'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
@@ -13,20 +13,15 @@ const INCLUDED_ITEMS = [
   '6 months of unlimited property applications',
 ]
 
-function stripSpaces(s: string) {
-  return s.replace(/\s/g, '')
-}
-
 export function UniversalApplicationPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [hasExistingApplication, setHasExistingApplication] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const [cardNumber, setCardNumber] = useState('')
-  const [expiryDate, setExpiryDate] = useState('')
-  const [cvc, setCvc] = useState('')
-  const [cardholderName, setCardholderName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [canceled, setCanceled] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const applicationFee = hasExistingApplication ? UPDATE_APPLICATION_FEE : NEW_APPLICATION_FEE
 
@@ -52,27 +47,61 @@ export function UniversalApplicationPage() {
     loadHistory()
   }, [user])
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  // Handle the redirect back from Stripe Checkout.
+  useEffect(() => {
+    const checkout = searchParams.get('checkout')
+    const sessionId = searchParams.get('session_id')
+
+    if (checkout === 'cancel') {
+      setCanceled(true)
+      return
+    }
+    if (checkout !== 'success' || !sessionId) return
+
+    let active = true
+    async function confirmPayment() {
+      setConfirming(true)
+      setError(null)
+      try {
+        const { data: session } = await supabase.auth.getSession()
+        const accessToken = session.session?.access_token
+        if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+
+        const res = await fetch('/api/stripe/universal-application/confirm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ sessionId }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error((err as { error?: string }).error || 'We could not confirm your payment.')
+        }
+        const json = (await res.json()) as { universalApplicationId?: string | null }
+        const universalApplicationId = json.universalApplicationId ?? null
+        if (universalApplicationId) {
+          // Fire-and-forget: create/reuse screening row for this application window.
+          startUniversalBackgroundCheck(accessToken, universalApplicationId).catch(() => {})
+        }
+        if (active) navigate('/account/rental-application', { replace: true })
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : 'Something went wrong confirming your payment.')
+          setConfirming(false)
+        }
+      }
+    }
+    confirmPayment()
+    return () => {
+      active = false
+    }
+  }, [searchParams, navigate])
+
+  async function handleCheckout() {
     setError(null)
-    const digits = stripSpaces(cardNumber)
-    if (digits.length < 13 || digits.length > 19 || !/^\d+$/.test(digits)) {
-      setError('Enter a valid card number.')
-      return
-    }
-    const expiryDigits = stripSpaces(expiryDate).replace('/', '')
-    if (!/^\d{4}$/.test(expiryDigits)) {
-      setError('Enter expiry as MM/YY (e.g. 12/25).')
-      return
-    }
-    if (!/^\d{3,4}$/.test(stripSpaces(cvc))) {
-      setError('Enter a valid CVC.')
-      return
-    }
-    if (!cardholderName.trim()) {
-      setError('Enter cardholder name.')
-      return
-    }
+    setCanceled(false)
     if (!user) {
       setError('Your session expired. Please sign in again.')
       return
@@ -82,11 +111,10 @@ export function UniversalApplicationPage() {
       const { data: session } = await supabase.auth.getSession()
       const accessToken = session.session?.access_token
       if (!accessToken) {
-        setError('Your session expired. Please sign in again.')
-        return
+        throw new Error('Your session expired. Please sign in again.')
       }
 
-      const res = await fetch('/api/universal-applications/activate', {
+      const res = await fetch('/api/stripe/universal-application/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,19 +124,15 @@ export function UniversalApplicationPage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Checkout failed. Please try again.')
+        throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
       }
-      const json = (await res.json()) as { universalApplicationId?: string | null }
-      const universalApplicationId = json.universalApplicationId ?? null
-      if (universalApplicationId) {
-        // Fire-and-forget: create/reuse screening row for this application window.
-        startUniversalBackgroundCheck(accessToken, universalApplicationId).catch(() => {})
-      }
+      const json = (await res.json()) as { url?: string }
+      if (!json.url) throw new Error('Could not start checkout. Please try again.')
 
-      navigate('/account/rental-application', { replace: true })
+      // Hand off to Stripe's hosted Checkout page.
+      window.location.href = json.url
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
@@ -157,143 +181,97 @@ export function UniversalApplicationPage() {
           ))}
         </ul>
 
-        <form onSubmit={handleSubmit} className="max-w-xl mx-auto space-y-6">
-          {error && (
-            <div className="rounded-xl bg-red-50 px-4 py-3 text-red-800 text-center text-sm">
-              {error}
+        <div className="max-w-xl mx-auto space-y-6">
+          {confirming ? (
+            <div className="rounded-xl bg-gray-50 px-4 py-8 text-center">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-900" />
+              <p className="text-sm text-gray-700">Confirming your payment…</p>
             </div>
-          )}
-          <div>
-            <label htmlFor="card-number" className="mb-2 block text-sm font-medium text-gray-800">
-              Card Number
-            </label>
-            <div className="relative">
-              <input
-                id="card-number"
-                type="text"
-                value={cardNumber}
-                onChange={(e) => setCardNumber(e.target.value)}
-                placeholder="1234 5678 9012 3456"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-12 text-base text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-              />
-              <svg className="absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-9 4h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-          </div>
+          ) : (
+            <>
+              {error && (
+                <div className="rounded-xl bg-red-50 px-4 py-3 text-red-800 text-center text-sm">
+                  {error}
+                </div>
+              )}
+              {canceled && !error && (
+                <div className="rounded-xl bg-amber-50 px-4 py-3 text-amber-800 text-center text-sm">
+                  Payment canceled. You can try again whenever you&apos;re ready.
+                </div>
+              )}
 
-          <div className="grid sm:grid-cols-2 gap-5">
-            <div>
-              <label htmlFor="expiry-date" className="mb-2 block text-sm font-medium text-gray-800">
-                Expiry Date
-              </label>
-              <input
-                id="expiry-date"
-                type="text"
-                value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
-                placeholder="MM/YY"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-              />
-            </div>
-            <div>
-              <label htmlFor="cvc" className="mb-2 block text-sm font-medium text-gray-800">
-                CVC
-              </label>
-              <input
-                id="cvc"
-                type="text"
-                value={cvc}
-                onChange={(e) => setCvc(e.target.value)}
-                placeholder="123"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-              />
-            </div>
-          </div>
+              <div className="pt-2 space-y-4">
+                {user ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleCheckout}
+                      disabled={loading || loadingHistory}
+                      className="inline-flex w-full items-center justify-center gap-3 rounded-xl btn-primary py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loading || loadingHistory ? (
+                        'Processing…'
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c-1.657 0-3 .895-3 2v2h6v-2c0-1.105-1.343-2-3-2zm6 2v2a2 2 0 01-2 2H8a2 2 0 01-2-2v-2a2 2 0 012-2V9a4 4 0 118 0v2a2 2 0 012 2zm-6-8a2 2 0 00-2 2v2h4V7a2 2 0 00-2-2z" />
+                          </svg>
+                          {hasExistingApplication
+                            ? `Pay $${applicationFee} & Update Application`
+                            : `Pay $${applicationFee} & Continue to Application`}
+                        </>
+                      )}
+                    </button>
 
-          <div>
-            <label htmlFor="cardholder-name" className="mb-2 block text-sm font-medium text-gray-800">
-              Cardholder Name
-            </label>
-            <input
-              id="cardholder-name"
-              type="text"
-              value={cardholderName}
-              onChange={(e) => setCardholderName(e.target.value)}
-              placeholder="John Doe"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-            />
-          </div>
-
-          <div className="pt-2 space-y-4">
-            {user ? (
-              <>
-                <button
-                  type="submit"
-                  disabled={loading || loadingHistory}
-                  className="inline-flex w-full items-center justify-center gap-3 rounded-xl btn-primary py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loading || loadingHistory ? (
-                    'Processing…'
-                  ) : (
-                    <>
+                    <Link
+                      to="/matches?tab=applied"
+                      className="inline-flex w-full items-center justify-center rounded-xl border border-gray-300 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to="/signup"
+                      className="inline-flex w-full items-center justify-center gap-3 rounded-xl btn-primary py-3 text-sm font-medium text-white"
+                    >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c-1.657 0-3 .895-3 2v2h6v-2c0-1.105-1.343-2-3-2zm6 2v2a2 2 0 01-2 2H8a2 2 0 01-2-2v-2a2 2 0 012-2V9a4 4 0 118 0v2a2 2 0 012 2zm-6-8a2 2 0 00-2 2v2h4V7a2 2 0 00-2-2z" />
                       </svg>
                       {hasExistingApplication
                         ? `Pay $${applicationFee} & Update Application`
                         : `Pay $${applicationFee} & Continue to Application`}
-                    </>
-                  )}
-                </button>
+                    </Link>
 
-                <Link
-                  to="/matches?tab=applied"
-                  className="inline-flex w-full items-center justify-center rounded-xl border border-gray-300 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/signup"
-                  className="inline-flex w-full items-center justify-center gap-3 rounded-xl btn-primary py-3 text-sm font-medium text-white"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c-1.657 0-3 .895-3 2v2h6v-2c0-1.105-1.343-2-3-2zm6 2v2a2 2 0 01-2 2H8a2 2 0 01-2-2v-2a2 2 0 012-2V9a4 4 0 118 0v2a2 2 0 012 2zm-6-8a2 2 0 00-2 2v2h4V7a2 2 0 00-2-2z" />
-                  </svg>
-                  {hasExistingApplication
-                    ? `Pay $${applicationFee} & Update Application`
-                    : `Pay $${applicationFee} & Continue to Application`}
-                </Link>
+                    <Link
+                      to="/matches?tab=applied"
+                      className="inline-flex w-full items-center justify-center rounded-xl border border-gray-300 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </Link>
+                  </>
+                )}
 
-                <Link
-                  to="/matches?tab=applied"
-                  className="inline-flex w-full items-center justify-center rounded-xl border border-gray-300 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </Link>
-              </>
-            )}
+                <div className="text-center text-sm text-gray-500">
+                  <span className="inline-flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Secure payment processed by Stripe
+                  </span>
+                </div>
 
-            <div className="text-center text-sm text-gray-500">
-              <span className="inline-flex items-center gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Secure payment processed by Stripe
-              </span>
-            </div>
-
-            <div className="border-t border-gray-200 pt-6 text-center">
-              <p className="text-sm text-gray-700">Questions about the fee?</p>
-              <Link to="/support" className="text-sm underline text-gray-900 hover:text-gray-700">
-                Contact support
-              </Link>
-            </div>
-          </div>
-        </form>
+                <div className="border-t border-gray-200 pt-6 text-center">
+                  <p className="text-sm text-gray-700">Questions about the fee?</p>
+                  <Link to="/support" className="text-sm underline text-gray-900 hover:text-gray-700">
+                    Contact support
+                  </Link>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

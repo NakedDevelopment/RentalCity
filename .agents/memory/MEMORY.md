@@ -1,1 +1,8 @@
-- [Tailwind palette remap](tailwind-palette-remap.md) — client/tailwind.config.js remaps emerald/green/amber→status tokens; use arbitrary hex (#3A7AFE/#EEF4FE) for true brand blue.
+- [Stripe integration approach](stripe-integration.md) — direct hosted Checkout (not stripe-replit-sync); Supabase DB + restricted keys; PaymentIntent-keyed idempotency; validate kind+amount.
+- [Tailwind palette remap](tailwind-palette-remap.md) — emerald/green/amber are remapped to status tokens; use arbitrary hex (#3A7AFE/#EEF4FE) for true brand blue.
+- [App UI redesign direction](app-ui-redesign-direction.md) — agreed visual direction for the tenant/landlord redesign and why.
+- [Database access](supabase-vs-replit-db.md) — app uses Supabase; agent SQL tools hit a different DB; how to inspect real app data.
+- [Client tsc conventions](tsc-conventions.md) — keeping `tsc -p client/tsconfig.json` clean under strict + noUnusedLocals + Supabase typing quirks.
+- [Plaid sandbox quirks](plaid-sandbox.md) — gotchas testing Plaid financial verification in the sandbox env.
+- [Rental Value Report](rental-value-report.md) — architecture/decisions for the standalone rental analysis lead magnet.
+- [Canvas quirks](canvas-quirks.md) — non-obvious behaviors placing/presenting canvas iframe shapes in this mockup-sandbox-only project.

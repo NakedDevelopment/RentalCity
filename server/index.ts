@@ -25,6 +25,8 @@ import {
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
 import { sendReportEmail } from './email'
+import Stripe from 'stripe'
+import type { Request, Response } from 'express'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -37,7 +39,26 @@ const backgroundChecksApiToken =
     ? process.env.BACKGROUNDCHECKS_API_TOKEN_PROD
     : process.env.BACKGROUNDCHECKS_API_TOKEN_SANDBOX
 
+// Stripe client. Prefer the test key in development, the live key in production,
+// each falling back to the other if only one is configured.
+let stripeSingleton: Stripe | null = null
+function getStripe(): Stripe | null {
+  if (stripeSingleton) return stripeSingleton
+  const key =
+    process.env.NODE_ENV === 'production'
+      ? process.env.STRIPE_API_KEY || process.env.STRIPE_API_KEY_TEST
+      : process.env.STRIPE_API_KEY_TEST || process.env.STRIPE_API_KEY
+  if (!key) return null
+  stripeSingleton = new Stripe(key)
+  return stripeSingleton
+}
+
 app.use(cors({ origin: true }))
+
+// Stripe webhook needs the raw request body for signature verification, so it
+// must be registered before express.json() parses the body.
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
+
 app.use(express.json())
 
 function backgroundChecksBaseUrl() {
@@ -861,15 +882,99 @@ app.get('/api/tenant/landlord-profile', async (req, res) => {
   return res.json({ profile })
 })
 
+// One-time universal application fee amounts (cents): renewal $50, new $125.
+const UNIVERSAL_APP_FEE_CENTS: number[] = [5000, 12500]
+
 /**
- * Activate (or renew) a tenant universal application window.
- * Server-backed so the client isn't "simulating" checkout.
- *
- * Note: payment provider integration can replace the "succeeded" write below later.
+ * Shared, idempotent activation for a paid universal application window.
+ * Keyed on the Stripe PaymentIntent id (payments.stripe_payment_intent_id is UNIQUE),
+ * so the confirm endpoint and the webhook can both run without double-activating.
  */
-app.post('/api/universal-applications/activate', async (req, res) => {
+async function activateUniversalApplicationPaid(
+  admin: SupabaseClient,
+  params: { tenantId: string; paymentIntentId: string; amountCents: number; description: string },
+): Promise<{ universalApplicationId: string | null; alreadyProcessed: boolean }> {
+  const { tenantId, paymentIntentId, amountCents, description } = params
+
+  async function currentActiveId(): Promise<string | null> {
+    const { data } = await admin
+      .from('universal_applications')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    return (data as { id?: string } | null)?.id ?? null
+  }
+
+  // Expire any currently-active window, then open a fresh 6-month one.
+  async function openWindow(): Promise<string | null> {
+    await admin
+      .from('universal_applications')
+      .update({ status: 'expired' })
+      .eq('tenant_id', tenantId)
+      .eq('status', 'active')
+
+    const validUntil = new Date()
+    validUntil.setMonth(validUntil.getMonth() + 6)
+
+    const { data: inserted, error: insertError } = await admin
+      .from('universal_applications')
+      .insert({ tenant_id: tenantId, status: 'active', valid_until: validUntil.toISOString() })
+      .select('id')
+      .maybeSingle()
+    if (insertError) throw new Error(insertError.message)
+    return (inserted as { id?: string } | null)?.id ?? null
+  }
+
+  // Payment already recorded => activation ran (or partially ran) before. Return
+  // the active window, repairing it if a prior attempt recorded the payment but
+  // failed to open the window, so a paid tenant is never left without access.
+  async function resolveAlreadyPaid(): Promise<{ universalApplicationId: string | null; alreadyProcessed: boolean }> {
+    const activeId = await currentActiveId()
+    return { universalApplicationId: activeId ?? (await openWindow()), alreadyProcessed: true }
+  }
+
+  const { data: existingPayment } = await admin
+    .from('payments')
+    .select('id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+  if (existingPayment) {
+    return resolveAlreadyPaid()
+  }
+
+  const { error: paymentError } = await admin.from('payments').insert({
+    application_id: null,
+    stripe_payment_intent_id: paymentIntentId,
+    amount_cents: amountCents,
+    currency: 'usd',
+    status: 'succeeded',
+    payer_id: tenantId,
+    description,
+  })
+  if (paymentError) {
+    // Unique violation => a concurrent confirm/webhook already recorded this payment.
+    if ((paymentError as { code?: string }).code === '23505') {
+      return resolveAlreadyPaid()
+    }
+    throw new Error(paymentError.message)
+  }
+
+  return { universalApplicationId: await openWindow(), alreadyProcessed: false }
+}
+
+/**
+ * Create a Stripe Checkout Session for the tenant's one-time universal application fee.
+ * New window: $125. Renewal (already has an active window): $50.
+ */
+app.post('/api/stripe/universal-application/checkout', async (req, res) => {
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const stripe = getStripe()
+  if (!stripe) return res.status(500).json({ error: 'Payments are not configured' })
+
   const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
   const user = await authUser(token)
   if (!user) return res.status(401).json({ error: 'Authentication required' })
@@ -887,50 +992,157 @@ app.post('/api/universal-applications/activate', async (req, res) => {
     .eq('status', 'active')
     .gt('valid_until', nowIso)
     .limit(1)
-
   const hasExisting = (active ?? []).length > 0
-  const applicationFeeCents = hasExisting ? 5000 : 12500
+  const amountCents = hasExisting ? 5000 : 12500
 
-  // Record a successful payment event (no Stripe yet).
-  const { error: paymentError } = await admin.from('payments').insert({
-    application_id: null,
-    stripe_payment_intent_id: null,
-    amount_cents: applicationFeeCents,
-    currency: 'usd',
-    status: 'succeeded',
-    payer_id: tenantId,
-    description: hasExisting ? 'Universal application renewal' : 'Universal application activation',
-  })
-  if (paymentError) return res.status(500).json({ error: paymentError.message })
+  const origin =
+    req.headers.origin ||
+    (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
+  if (!origin) return res.status(500).json({ error: 'Unable to determine return URL' })
 
-  // Expire any currently-active universal application so there's only one active window at a time.
-  const { error: expireError } = await admin
-    .from('universal_applications')
-    .update({ status: 'expired' })
-    .eq('tenant_id', tenantId)
-    .eq('status', 'active')
-  if (expireError) return res.status(500).json({ error: expireError.message })
-
-  const now = new Date()
-  const validUntil = new Date(now)
-  validUntil.setMonth(validUntil.getMonth() + 6)
-  const validUntilIso = validUntil.toISOString()
-
-  const { data: inserted, error: insertError } = await admin
-    .from('universal_applications')
-    .insert({
-      tenant_id: tenantId,
-      status: 'active',
-      valid_until: validUntilIso,
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      customer_email: user.email ?? undefined,
+      client_reference_id: tenantId,
+      metadata: { tenantId, kind: 'universal_application', hasExisting: String(hasExisting) },
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: amountCents,
+            product_data: {
+              name: hasExisting ? 'Universal Application Renewal' : 'Universal Application',
+              description: hasExisting
+                ? 'Refresh your background and credit checks for another 6 months.'
+                : 'Background check, credit report, and 6 months of unlimited property applications.',
+            },
+          },
+        },
+      ],
+      success_url: `${origin}/applications/apply?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/applications/apply?checkout=cancel`,
     })
-    .select('id')
-    .maybeSingle()
-
-  if (insertError) return res.status(500).json({ error: insertError.message })
-
-  const universalApplicationId = (inserted as { id?: string } | null)?.id ?? null
-  return res.json({ universalApplicationId, applicationFeeCents, hasExisting })
+    return res.json({ url: session.url })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create checkout session' })
+  }
 })
+
+/**
+ * Confirm a completed Checkout Session on return from Stripe and activate the
+ * universal application window. Idempotent; safe to call alongside the webhook.
+ */
+app.post('/api/stripe/universal-application/confirm', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const stripe = getStripe()
+  if (!stripe) return res.status(500).json({ error: 'Payments are not configured' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { sessionId } = req.body as { sessionId?: string }
+  if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' })
+
+  let session: Stripe.Checkout.Session
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId)
+  } catch {
+    return res.status(400).json({ error: 'Invalid checkout session' })
+  }
+
+  if (session.metadata?.kind !== 'universal_application') {
+    return res.status(400).json({ error: 'This checkout session is not a universal application payment.' })
+  }
+  if (session.metadata?.tenantId !== user.id) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+  if (session.payment_status !== 'paid') {
+    return res.status(402).json({ error: 'Payment has not completed yet.' })
+  }
+
+  const amountTotal = session.amount_total
+  if (typeof amountTotal !== 'number' || !UNIVERSAL_APP_FEE_CENTS.includes(amountTotal)) {
+    return res.status(400).json({ error: 'Unexpected payment amount.' })
+  }
+
+  const paymentIntentId =
+    typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+  if (!paymentIntentId) return res.status(400).json({ error: 'No payment found for this session' })
+
+  const hasExisting = session.metadata?.hasExisting === 'true'
+  try {
+    const result = await activateUniversalApplicationPaid(admin, {
+      tenantId: user.id,
+      paymentIntentId,
+      amountCents: amountTotal,
+      description: hasExisting ? 'Universal application renewal' : 'Universal application activation',
+    })
+    return res.json(result)
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Activation failed' })
+  }
+})
+
+/**
+ * Stripe webhook (production reliability backstop). Registered with a raw body
+ * parser before express.json(). No-ops gracefully until STRIPE_WEBHOOK_SECRET is set.
+ */
+async function handleStripeWebhook(req: Request, res: Response) {
+  const stripe = getStripe()
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!stripe || !webhookSecret) {
+    return res.status(200).json({ received: true, skipped: true })
+  }
+
+  const sig = req.headers['stripe-signature']
+  const signature = Array.isArray(sig) ? sig[0] : sig
+  if (!signature) return res.status(400).json({ error: 'Missing signature' })
+
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(req.body as Buffer, signature, webhookSecret)
+  } catch {
+    return res.status(400).json({ error: 'Webhook signature verification failed' })
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session
+    const admin = getSupabaseAdmin()
+    const tenantId = session.metadata?.tenantId
+    const paymentIntentId =
+      typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+    const amountTotal = session.amount_total
+    if (
+      admin &&
+      tenantId &&
+      paymentIntentId &&
+      session.payment_status === 'paid' &&
+      session.metadata?.kind === 'universal_application' &&
+      typeof amountTotal === 'number' &&
+      UNIVERSAL_APP_FEE_CENTS.includes(amountTotal)
+    ) {
+      const hasExisting = session.metadata?.hasExisting === 'true'
+      try {
+        await activateUniversalApplicationPaid(admin, {
+          tenantId,
+          paymentIntentId,
+          amountCents: amountTotal,
+          description: hasExisting ? 'Universal application renewal' : 'Universal application activation',
+        })
+      } catch (err) {
+        console.error('Stripe webhook activation failed:', err)
+        return res.status(500).json({ error: 'Activation failed' })
+      }
+    }
+  }
+
+  return res.status(200).json({ received: true })
+}
 
 /**
  * Start (or reuse) a BackgroundChecks.com order for the tenant's latest universal application window.
