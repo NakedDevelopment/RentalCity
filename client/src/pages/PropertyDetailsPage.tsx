@@ -56,40 +56,42 @@ function AmenityItem({
 }) {
   return (
     <div className="flex items-center gap-3 text-sm text-gray-700">
-      <span className="text-gray-700">{icon}</span>
-      <span>{label}</span>
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-gray-500">
+        {icon}
+      </span>
+      <span className="leading-5">{label}</span>
     </div>
   )
 }
 
 const AMENITY_ICONS: Record<string, React.ReactNode> = {
   'Pet Friendly': (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 11c-2.5 0-4 1.5-4 3.5S6.5 18 9 18h6c2.5 0 4-1.5 4-3.5S17.5 11 15 11c-.7 0-1.3.1-1.9.4A3.5 3.5 0 006 11.5M7.5 8.5h.01M11 6h.01M14.5 8.5h.01M17 6h.01" />
     </svg>
   ),
   'Parking': (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 17l1-5a2 2 0 012-1h8a2 2 0 012 1l1 5M5 17h14M7 17v2m10-2v2M7 13h10" />
     </svg>
   ),
   'Laundry': (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 3h12a1 1 0 011 1v16a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1zm0 4h12M9 5h.01M12 5h.01M12 18a4 4 0 100-8 4 4 0 000 8z" />
     </svg>
   ),
   'Gym': (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
     </svg>
   ),
   'Balcony': (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
     </svg>
   ),
   'Yard': (
-    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
     </svg>
   ),
