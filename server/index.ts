@@ -1026,10 +1026,10 @@ app.post('/api/stripe/universal-application/checkout', async (req, res) => {
           },
         },
       ],
-      success_url: `${origin}/applications/apply?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/applications/apply?checkout=cancel`,
+      ui_mode: 'embedded',
+      return_url: `${origin}/applications/apply?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     })
-    return res.json({ url: session.url })
+    return res.json({ clientSecret: session.client_secret })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create checkout session' })
   }
@@ -1217,10 +1217,10 @@ app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
           },
         },
       ],
-      success_url: `${origin}/matches/tenant/${application.tenant_id}?application=${applicationId}&unlock=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/matches/tenant/${application.tenant_id}?application=${applicationId}&unlock=cancel`,
+      ui_mode: 'embedded',
+      return_url: `${origin}/matches/tenant/${application.tenant_id}?application=${applicationId}&unlock=success&session_id={CHECKOUT_SESSION_ID}`,
     })
-    return res.json({ url: session.url })
+    return res.json({ clientSecret: session.client_secret })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create checkout session' })
   }
@@ -1393,10 +1393,10 @@ app.post('/api/stripe/landlord/membership/checkout', async (req, res) => {
           },
         },
       ],
-      success_url: `${origin}/onboarding/property/intro?membership=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/onboarding/property/intro?membership=cancel`,
+      ui_mode: 'embedded',
+      return_url: `${origin}/onboarding/property/intro?membership=success&session_id={CHECKOUT_SESSION_ID}`,
     })
-    return res.json({ url: session.url })
+    return res.json({ clientSecret: session.client_secret })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create checkout session' })
   }

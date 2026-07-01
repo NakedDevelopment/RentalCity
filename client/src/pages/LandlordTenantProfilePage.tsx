@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TenantAvatar } from '../components/TenantAvatar'
 import {
@@ -15,6 +15,8 @@ import { BankVerificationCard, type PlaidVerificationRow } from '../components/B
 import { useAuth } from '../lib/useAuth'
 import { safeInternalPath } from '../lib/safeInternalPath'
 import { supabase } from '../lib/supabase'
+import StripeCheckoutModal from '../components/StripeCheckoutModal'
+import { stripeConfigured } from '../lib/stripe'
 import { fetchLandlordTenantUniversalApplication } from '../lib/matchesApi'
 import {
   computeUniversalApplicationDisplay,
@@ -112,7 +114,7 @@ export function LandlordTenantProfilePage() {
   const [pendingUnlockedAt, setPendingUnlockedAt] = useState<string | null>(null)
   const [messageThreadId, setMessageThreadId] = useState<string | null>(null)
   const [unlockPayModalOpen, setUnlockPayModalOpen] = useState(false)
-  const [unlockPayBusy, setUnlockPayBusy] = useState(false)
+  const [unlockCheckoutOpen, setUnlockCheckoutOpen] = useState(false)
   const [unlockPayError, setUnlockPayError] = useState<string | null>(null)
   const [tenantReviewsList, setTenantReviewsList] = useState<TenantProfileReviewRow[]>([])
   const [profileApplicationId, setProfileApplicationId] = useState<string | null>(null)
@@ -637,31 +639,35 @@ export function LandlordTenantProfilePage() {
 
   // Hand off to Stripe Checkout for the $200 full-profile access fee. The tenant's
   // profile is unlocked only after the payment is confirmed on return.
-  async function handleConfirmProfileUnlock() {
+  function handleConfirmProfileUnlock() {
     if (!pendingApplicationId || !user) return
     setUnlockPayError(null)
-    setUnlockPayBusy(true)
-    try {
-      const { data: sess } = await supabase.auth.getSession()
-      const accessToken = sess.session?.access_token
-      if (!accessToken) throw new Error('Your session expired. Please sign in again.')
-      const res = await fetch('/api/stripe/landlord/profile-unlock/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ applicationId: pendingApplicationId }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
-      }
-      const json = (await res.json()) as { url?: string }
-      if (!json.url) throw new Error('Could not start checkout. Please try again.')
-      window.location.href = json.url
-    } catch (e) {
-      setUnlockPayError(e instanceof Error ? e.message : 'Could not start checkout')
-      setUnlockPayBusy(false)
+    if (!stripeConfigured) {
+      setUnlockPayError('Payments are not configured yet. Please try again later.')
+      return
     }
+    setUnlockPayModalOpen(false)
+    setUnlockCheckoutOpen(true)
   }
+
+  const fetchProfileUnlockClientSecret = useCallback(async () => {
+    if (!pendingApplicationId) throw new Error('Missing application.')
+    const { data: sess } = await supabase.auth.getSession()
+    const accessToken = sess.session?.access_token
+    if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+    const res = await fetch('/api/stripe/landlord/profile-unlock/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ applicationId: pendingApplicationId }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
+    }
+    const json = (await res.json()) as { clientSecret?: string }
+    if (!json.clientSecret) throw new Error('Could not start checkout. Please try again.')
+    return json.clientSecret
+  }, [pendingApplicationId])
 
   return (
     <div className="flex min-h-full flex-col px-4 py-4">
@@ -1194,21 +1200,19 @@ export function LandlordTenantProfilePage() {
                     setUnlockPayError(null)
                     setUnlockPayModalOpen(false)
                   }}
-                  disabled={unlockPayBusy}
                   className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={unlockPayBusy}
-                  onClick={() => void handleConfirmProfileUnlock()}
+                  onClick={handleConfirmProfileUnlock}
                   className="inline-flex items-center justify-center gap-2 rounded-lg btn-primary px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c1.657 0 3-1.343 3-3V7a3 3 0 10-6 0v1c0 1.657 1.343 3 3 3zm-7 9h14a2 2 0 002-2v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a2 2 0 002 2z" />
                   </svg>
-                  {unlockPayBusy ? 'Redirecting…' : 'Continue to payment'}
+                  Continue to payment
                 </button>
               </div>
 
@@ -1219,6 +1223,13 @@ export function LandlordTenantProfilePage() {
           </div>
         </div>
       ) : null}
+
+      <StripeCheckoutModal
+        open={unlockCheckoutOpen}
+        onClose={() => setUnlockCheckoutOpen(false)}
+        fetchClientSecret={fetchProfileUnlockClientSecret}
+        title="Unlock full tenant profile"
+      />
 
       <TenantRentScoreBreakdownDialog
         open={tenantRentBreakdownOpen && tenant.tenantScore != null}

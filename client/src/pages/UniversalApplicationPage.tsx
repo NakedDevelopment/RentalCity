@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { startUniversalBackgroundCheck } from '../lib/backgroundChecksApi'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import StripeCheckoutModal from '../components/StripeCheckoutModal'
+import { stripeConfigured } from '../lib/stripe'
 
 const NEW_APPLICATION_FEE = 50
 const UPDATE_APPLICATION_FEE = 50
@@ -19,10 +21,10 @@ export function UniversalApplicationPage() {
   const [searchParams] = useSearchParams()
   const [hasExistingApplication, setHasExistingApplication] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const [loading, setLoading] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [canceled, setCanceled] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
   const applicationFee = hasExistingApplication ? UPDATE_APPLICATION_FEE : NEW_APPLICATION_FEE
 
   useEffect(() => {
@@ -99,43 +101,42 @@ export function UniversalApplicationPage() {
     }
   }, [searchParams, navigate])
 
-  async function handleCheckout() {
+  function handleCheckout() {
     setError(null)
     setCanceled(false)
     if (!user) {
       setError('Your session expired. Please sign in again.')
       return
     }
-    setLoading(true)
-    try {
-      const { data: session } = await supabase.auth.getSession()
-      const accessToken = session.session?.access_token
-      if (!accessToken) {
-        throw new Error('Your session expired. Please sign in again.')
-      }
-
-      const res = await fetch('/api/stripe/universal-application/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ tenantId: user.id }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
-      }
-      const json = (await res.json()) as { url?: string }
-      if (!json.url) throw new Error('Could not start checkout. Please try again.')
-
-      // Hand off to Stripe's hosted Checkout page.
-      window.location.href = json.url
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
-      setLoading(false)
+    if (!stripeConfigured) {
+      setError('Payments are not configured yet. Please try again later.')
+      return
     }
+    setCheckoutOpen(true)
   }
+
+  const fetchClientSecret = useCallback(async () => {
+    const { data: session } = await supabase.auth.getSession()
+    const accessToken = session.session?.access_token
+    if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+    if (!user) throw new Error('Your session expired. Please sign in again.')
+
+    const res = await fetch('/api/stripe/universal-application/checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ tenantId: user.id }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
+    }
+    const json = (await res.json()) as { clientSecret?: string }
+    if (!json.clientSecret) throw new Error('Could not start checkout. Please try again.')
+    return json.clientSecret
+  }, [user])
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -206,10 +207,10 @@ export function UniversalApplicationPage() {
                     <button
                       type="button"
                       onClick={handleCheckout}
-                      disabled={loading || loadingHistory}
+                      disabled={loadingHistory}
                       className="inline-flex w-full items-center justify-center gap-3 rounded-xl btn-primary py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {loading || loadingHistory ? (
+                      {loadingHistory ? (
                         'Processing…'
                       ) : (
                         <>
@@ -273,6 +274,13 @@ export function UniversalApplicationPage() {
           )}
         </div>
       </div>
+
+      <StripeCheckoutModal
+        open={checkoutOpen}
+        onClose={() => setCheckoutOpen(false)}
+        fetchClientSecret={fetchClientSecret}
+        title={hasExistingApplication ? 'Update your application' : 'Complete your application'}
+      />
     </div>
   )
 }
