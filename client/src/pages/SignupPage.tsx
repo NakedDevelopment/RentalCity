@@ -171,10 +171,10 @@ export function SignupPage() {
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-12">
-      <div className="w-full max-w-[360px]">
-        <div className="rounded-2xl border border-gray-200 bg-white px-6 py-7 shadow-sm">
+      <div className="w-full max-w-[440px]">
+        <div className="rounded-2xl border border-gray-200 bg-white px-8 py-10 shadow-sm">
           <h1 className="mb-2 text-center text-[2rem] font-medium text-gray-900">Sign Up</h1>
-          <p className="mb-7 text-center text-sm text-gray-600">
+          <p className="mb-8 text-center text-[0.95rem] text-gray-600">
             Create an account and find your perfect match!
           </p>
 
