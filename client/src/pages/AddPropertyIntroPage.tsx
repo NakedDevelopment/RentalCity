@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
@@ -54,6 +54,8 @@ export function AddPropertyIntroPage() {
   const [confirming, setConfirming] = useState(false)
   const [isMember, setIsMember] = useState(false)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [starting, setStarting] = useState(false)
   const [canceled, setCanceled] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -120,37 +122,48 @@ export function AddPropertyIntroPage() {
     }
   }, [searchParams, navigate])
 
-  function handleSubscribe() {
+  async function handleSubscribe() {
     setError(null)
     setCanceled(false)
     if (!user) {
       setError('Your session expired. Please sign in again.')
       return
     }
-    if (!stripeConfigured) {
-      setError('Payments are not configured yet. Please try again later.')
-      return
-    }
-    setCheckoutOpen(true)
-  }
+    setStarting(true)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const accessToken = sess.session?.access_token
+      if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+      const res = await fetch('/api/stripe/landlord/membership/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
+      }
+      const json = (await res.json()) as { clientSecret?: string; demo?: boolean }
 
-  const fetchClientSecret = useCallback(async () => {
-    const { data: sess } = await supabase.auth.getSession()
-    const accessToken = sess.session?.access_token
-    if (!accessToken) throw new Error('Your session expired. Please sign in again.')
-    const res = await fetch('/api/stripe/landlord/membership/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({}),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
+      // Demo bypass (dev only): membership granted server-side, no payment.
+      if (json.demo) {
+        setIsMember(true)
+        navigate('/onboarding/property/intro', { replace: true })
+        return
+      }
+
+      if (!json.clientSecret) throw new Error('Could not start checkout. Please try again.')
+      if (!stripeConfigured) {
+        throw new Error('Payments are not configured yet. Please try again later.')
+      }
+      setClientSecret(json.clientSecret)
+      setCheckoutOpen(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start checkout. Please try again.')
+    } finally {
+      setStarting(false)
     }
-    const json = (await res.json()) as { clientSecret?: string }
-    if (!json.clientSecret) throw new Error('Could not start checkout. Please try again.')
-    return json.clientSecret
-  }, [])
+  }
 
   if (loading || confirming) {
     return (
@@ -219,9 +232,10 @@ export function AddPropertyIntroPage() {
             <button
               type="button"
               onClick={handleSubscribe}
+              disabled={starting}
               className="mt-8 inline-flex items-center gap-2 rounded-lg btn-primary px-8 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {`Activate Membership — $${ANNUAL_MEMBERSHIP_FEE}/year`}
+              {starting ? 'Processing…' : `Activate Membership — $${ANNUAL_MEMBERSHIP_FEE}/year`}
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
@@ -238,8 +252,11 @@ export function AddPropertyIntroPage() {
 
         <StripeCheckoutModal
           open={checkoutOpen}
-          onClose={() => setCheckoutOpen(false)}
-          fetchClientSecret={fetchClientSecret}
+          onClose={() => {
+            setCheckoutOpen(false)
+            setClientSecret(null)
+          }}
+          clientSecret={clientSecret}
           title="Activate your membership"
         />
       </div>

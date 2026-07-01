@@ -5,20 +5,20 @@ type StripeCheckoutModalProps = {
   open: boolean
   onClose: () => void
   /**
-   * Called once when the modal opens. Should create a Checkout Session on the
-   * server (with `ui_mode: 'embedded'`) and resolve with its `client_secret`.
+   * The `client_secret` of a Checkout Session already created on the server
+   * (with `ui_mode: 'embedded'`). The modal only renders once this is present.
    */
-  fetchClientSecret: () => Promise<string>
+  clientSecret: string | null
   title?: string
 }
 
 export default function StripeCheckoutModal({
   open,
   onClose,
-  fetchClientSecret,
+  clientSecret,
   title = 'Complete your payment',
 }: StripeCheckoutModalProps) {
-  if (!open) return null
+  if (!open || !clientSecret) return null
 
   const stripePromise = getStripe()
 
@@ -44,7 +44,7 @@ export default function StripeCheckoutModal({
           </button>
         </div>
         <div className="px-3 py-4 sm:px-4">
-          <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
+          <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
             <EmbeddedCheckout />
           </EmbeddedCheckoutProvider>
         </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { TenantAvatar } from '../components/TenantAvatar'
 import {
@@ -115,6 +115,8 @@ export function LandlordTenantProfilePage() {
   const [messageThreadId, setMessageThreadId] = useState<string | null>(null)
   const [unlockPayModalOpen, setUnlockPayModalOpen] = useState(false)
   const [unlockCheckoutOpen, setUnlockCheckoutOpen] = useState(false)
+  const [unlockClientSecret, setUnlockClientSecret] = useState<string | null>(null)
+  const [unlockStarting, setUnlockStarting] = useState(false)
   const [unlockPayError, setUnlockPayError] = useState<string | null>(null)
   const [tenantReviewsList, setTenantReviewsList] = useState<TenantProfileReviewRow[]>([])
   const [profileApplicationId, setProfileApplicationId] = useState<string | null>(null)
@@ -639,35 +641,47 @@ export function LandlordTenantProfilePage() {
 
   // Hand off to Stripe Checkout for the $200 full-profile access fee. The tenant's
   // profile is unlocked only after the payment is confirmed on return.
-  function handleConfirmProfileUnlock() {
+  async function handleConfirmProfileUnlock() {
     if (!pendingApplicationId || !user) return
     setUnlockPayError(null)
-    if (!stripeConfigured) {
-      setUnlockPayError('Payments are not configured yet. Please try again later.')
-      return
-    }
-    setUnlockPayModalOpen(false)
-    setUnlockCheckoutOpen(true)
-  }
+    setUnlockStarting(true)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const accessToken = sess.session?.access_token
+      if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+      const res = await fetch('/api/stripe/landlord/profile-unlock/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ applicationId: pendingApplicationId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
+      }
+      const json = (await res.json()) as { clientSecret?: string; demo?: boolean }
 
-  const fetchProfileUnlockClientSecret = useCallback(async () => {
-    if (!pendingApplicationId) throw new Error('Missing application.')
-    const { data: sess } = await supabase.auth.getSession()
-    const accessToken = sess.session?.access_token
-    if (!accessToken) throw new Error('Your session expired. Please sign in again.')
-    const res = await fetch('/api/stripe/landlord/profile-unlock/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ applicationId: pendingApplicationId }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
+      // Demo bypass (dev only): profile unlocked server-side, no payment.
+      if (json.demo) {
+        setPendingUnlockedAt(new Date().toISOString())
+        setUnlockPayModalOpen(false)
+        const qs = pendingApplicationId ? `?application=${encodeURIComponent(pendingApplicationId)}` : ''
+        navigate(`/matches/tenant/${id}${qs}`, { replace: true, state: location.state })
+        return
+      }
+
+      if (!json.clientSecret) throw new Error('Could not start checkout. Please try again.')
+      if (!stripeConfigured) {
+        throw new Error('Payments are not configured yet. Please try again later.')
+      }
+      setUnlockClientSecret(json.clientSecret)
+      setUnlockPayModalOpen(false)
+      setUnlockCheckoutOpen(true)
+    } catch (err) {
+      setUnlockPayError(err instanceof Error ? err.message : 'Could not start checkout. Please try again.')
+    } finally {
+      setUnlockStarting(false)
     }
-    const json = (await res.json()) as { clientSecret?: string }
-    if (!json.clientSecret) throw new Error('Could not start checkout. Please try again.')
-    return json.clientSecret
-  }, [pendingApplicationId])
+  }
 
   return (
     <div className="flex min-h-full flex-col px-4 py-4">
@@ -1207,12 +1221,13 @@ export function LandlordTenantProfilePage() {
                 <button
                   type="button"
                   onClick={handleConfirmProfileUnlock}
+                  disabled={unlockStarting}
                   className="inline-flex items-center justify-center gap-2 rounded-lg btn-primary px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c1.657 0 3-1.343 3-3V7a3 3 0 10-6 0v1c0 1.657 1.343 3 3 3zm-7 9h14a2 2 0 002-2v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a2 2 0 002 2z" />
                   </svg>
-                  Continue to payment
+                  {unlockStarting ? 'Processing…' : 'Continue to payment'}
                 </button>
               </div>
 
@@ -1226,8 +1241,11 @@ export function LandlordTenantProfilePage() {
 
       <StripeCheckoutModal
         open={unlockCheckoutOpen}
-        onClose={() => setUnlockCheckoutOpen(false)}
-        fetchClientSecret={fetchProfileUnlockClientSecret}
+        onClose={() => {
+          setUnlockCheckoutOpen(false)
+          setUnlockClientSecret(null)
+        }}
+        clientSecret={unlockClientSecret}
         title="Unlock full tenant profile"
       />
 

@@ -53,6 +53,23 @@ function getStripe(): Stripe | null {
   return stripeSingleton
 }
 
+/**
+ * Demo-only payment bypass. When enabled, the checkout endpoints skip Stripe
+ * entirely and grant the paid entitlement directly — for click-through demos
+ * when a Stripe publishable key isn't available.
+ *
+ * HARD SAFETY: this can NEVER be active in production. Even if DEMO_BYPASS_PAYMENTS
+ * is accidentally left set, it is ignored unless NODE_ENV !== 'production'.
+ */
+function demoBypassEnabled(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.DEMO_BYPASS_PAYMENTS === 'true'
+}
+
+// Synthetic PaymentIntent id for demo fulfillment (kept distinct from real Stripe ids).
+function demoPaymentIntentId(): string {
+  return `demo_pi_${crypto.randomUUID()}`
+}
+
 app.use(cors({ origin: true }))
 
 // Stripe webhook needs the raw request body for signature verification, so it
@@ -999,6 +1016,22 @@ app.post('/api/stripe/universal-application/checkout', async (req, res) => {
   const hasExisting = (active ?? []).length > 0
   const amountCents = 5000
 
+  if (demoBypassEnabled()) {
+    try {
+      const result = await activateUniversalApplicationPaid(admin, {
+        tenantId,
+        paymentIntentId: demoPaymentIntentId(),
+        amountCents,
+        description: hasExisting
+          ? 'Universal application renewal (demo bypass)'
+          : 'Universal application activation (demo bypass)',
+      })
+      return res.json({ demo: true, ...result })
+    } catch (err) {
+      return res.status(500).json({ error: err instanceof Error ? err.message : 'Activation failed' })
+    }
+  }
+
   const origin =
     req.headers.origin ||
     (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
@@ -1192,6 +1225,20 @@ app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
     return res.status(409).json({ error: 'This application is no longer pending.' })
   }
 
+  if (demoBypassEnabled()) {
+    try {
+      const result = await activateLandlordProfileUnlockPaid(admin, {
+        landlordId: user.id,
+        applicationId,
+        paymentIntentId: demoPaymentIntentId(),
+        amountCents: LANDLORD_PROFILE_UNLOCK_CENTS,
+      })
+      return res.json({ demo: true, ...result })
+    } catch (err) {
+      return res.status(500).json({ error: err instanceof Error ? err.message : 'Unlock failed' })
+    }
+  }
+
   const origin =
     req.headers.origin ||
     (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
@@ -1364,6 +1411,26 @@ app.post('/api/stripe/landlord/membership/checkout', async (req, res) => {
     .maybeSingle()
   if (membershipIsActive(existing as { status?: string; current_period_end?: string | null } | null)) {
     return res.status(409).json({ error: 'You already have an active membership.' })
+  }
+
+  if (demoBypassEnabled()) {
+    const periodEnd = new Date()
+    periodEnd.setFullYear(periodEnd.getFullYear() + 1)
+    const { error: demoError } = await admin.from('landlord_memberships').upsert(
+      {
+        landlord_id: user.id,
+        stripe_customer_id: null,
+        stripe_subscription_id: `demo_sub_${crypto.randomUUID()}`,
+        status: 'active',
+        current_period_end: periodEnd.toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'landlord_id' },
+    )
+    if (demoError) {
+      return res.status(500).json({ error: demoError.message })
+    }
+    return res.json({ demo: true, active: true, currentPeriodEnd: periodEnd.toISOString() })
   }
 
   const origin =
