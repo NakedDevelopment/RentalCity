@@ -1,5 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
+import {
+  Waves,
+  Car,
+  WashingMachine,
+  Snowflake,
+  Sofa,
+  PawPrint,
+  Dumbbell,
+  Fence,
+  Utensils,
+  Layers,
+  Wifi,
+  Flame,
+  Trees,
+  Check,
+  type LucideIcon,
+} from 'lucide-react'
 import { formatBedrooms, formatBathrooms, formatCurrency } from '../lib/propertyDraft'
 import { supabase } from '../lib/supabase'
 
@@ -47,54 +64,33 @@ function Stat({
   )
 }
 
-function AmenityItem({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode
-  label: string
-}) {
+function getAmenityIcon(amenity: string): LucideIcon {
+  const a = amenity.toLowerCase()
+  if (a.includes('pool')) return Waves
+  if (a.includes('parking') || a.includes('garage')) return Car
+  if (a.includes('washer') || a.includes('dryer') || a.includes('laundry')) return WashingMachine
+  if (a.includes('air condition') || a.includes('a/c') || a.includes('cooling') || a.includes('conditioning'))
+    return Snowflake
+  if (a.includes('furnished') || a.includes('furniture')) return Sofa
+  if (a.includes('pet')) return PawPrint
+  if (a.includes('gym') || a.includes('fitness')) return Dumbbell
+  if (a.includes('balcony') || a.includes('patio') || a.includes('deck')) return Fence
+  if (a.includes('yard') || a.includes('garden') || a.includes('outdoor')) return Trees
+  if (a.includes('dishwasher') || a.includes('kitchen')) return Utensils
+  if (a.includes('floor') || a.includes('hardwood')) return Layers
+  if (a.includes('wifi') || a.includes('internet')) return Wifi
+  if (a.includes('fireplace') || a.includes('heat')) return Flame
+  return Check
+}
+
+function AmenityItem({ label }: { label: string }) {
+  const Icon = getAmenityIcon(label)
   return (
     <div className="flex items-center gap-3 text-sm text-gray-700">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-gray-500">
-        {icon}
-      </span>
+      <Icon className="h-5 w-5 shrink-0 text-gray-400" strokeWidth={2} />
       <span className="leading-5">{label}</span>
     </div>
   )
-}
-
-const AMENITY_ICONS: Record<string, React.ReactNode> = {
-  'Pet Friendly': (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 11c-2.5 0-4 1.5-4 3.5S6.5 18 9 18h6c2.5 0 4-1.5 4-3.5S17.5 11 15 11c-.7 0-1.3.1-1.9.4A3.5 3.5 0 006 11.5M7.5 8.5h.01M11 6h.01M14.5 8.5h.01M17 6h.01" />
-    </svg>
-  ),
-  'Parking': (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 17l1-5a2 2 0 012-1h8a2 2 0 012 1l1 5M5 17h14M7 17v2m10-2v2M7 13h10" />
-    </svg>
-  ),
-  'Laundry': (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 3h12a1 1 0 011 1v16a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1zm0 4h12M9 5h.01M12 5h.01M12 18a4 4 0 100-8 4 4 0 000 8z" />
-    </svg>
-  ),
-  'Gym': (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-    </svg>
-  ),
-  'Balcony': (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-    </svg>
-  ),
-  'Yard': (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-    </svg>
-  ),
 }
 
 function formatDate(date: string | null | undefined): string {
@@ -399,11 +395,7 @@ export function PropertyDetailsPage() {
         <h2 className="mb-5 text-[1.75rem] font-medium text-gray-900">Amenities</h2>
         <div className="grid gap-y-5 sm:grid-cols-2">
           {property.amenities.map((amenity) => (
-            <AmenityItem
-              key={amenity}
-              label={amenity}
-              icon={AMENITY_ICONS[amenity] ?? <span className="text-sm">•</span>}
-            />
+            <AmenityItem key={amenity} label={amenity} />
           ))}
         </div>
       </section>

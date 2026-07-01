@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { PawPrint, Car, WashingMachine, Dumbbell } from 'lucide-react'
 import { formatBedrooms, formatCurrency } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
@@ -337,10 +338,10 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [priceRange, setPriceRange] = useState<[number, number]>([500, 3000])
   const [amenities, setAmenities] = useState({ petFriendly: false, parking: false, laundry: false, gym: false })
   const AMENITY_LABELS: Record<string, string> = {
-    pet_friendly: '🐾',
-    parking: '🅿️',
-    laundry: '🧺',
-    gym: '🏋️',
+    pet_friendly: 'Pet-friendly',
+    parking: 'Parking',
+    laundry: 'Laundry',
+    gym: 'Gym',
   }
   const [savedIds, setSavedIds] = useState<Set<string>>(loadSavedIds)
   const [applicationIdByPropertyId, setApplicationIdByPropertyId] = useState<Record<string, string>>({})
@@ -461,7 +462,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     setTenantMatches(
       ((data ?? []) as PropRow[]).map((p) => {
         const amenityList = Array.isArray(p.amenities) ? p.amenities.map((a) => String(a)) : []
-        // Display emojis on match cards; filtering still uses the raw amenity keys.
+        // Display readable labels on match cards; filtering still uses the raw amenity keys.
         const amenityDisplay = amenityList.map((a) => AMENITY_LABELS[a] ?? a)
         const landlordRaw = p.landlord
         const landlord = Array.isArray(landlordRaw) ? landlordRaw[0] : landlordRaw
@@ -1774,11 +1775,11 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         <div className="flex flex-wrap gap-4">
           <span className="text-xs font-medium text-gray-500 self-end mb-1">Amenities</span>
           {[
-            { key: 'petFriendly' as const, label: '🐾 Pet-friendly' },
-            { key: 'parking' as const, label: '🅿️ Parking' },
-            { key: 'laundry' as const, label: '🧺 Laundry' },
-            { key: 'gym' as const, label: '🏋️ Gym' },
-          ].map(({ key, label }) => (
+            { key: 'petFriendly' as const, label: 'Pet-friendly', Icon: PawPrint },
+            { key: 'parking' as const, label: 'Parking', Icon: Car },
+            { key: 'laundry' as const, label: 'Laundry', Icon: WashingMachine },
+            { key: 'gym' as const, label: 'Gym', Icon: Dumbbell },
+          ].map(({ key, label, Icon }) => (
             <label key={key} className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -1786,6 +1787,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                 onChange={() => toggleAmenity(key)}
                 className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
               />
+              <Icon className="h-4 w-4 text-gray-500" strokeWidth={2} />
               <span className="text-sm text-gray-700">{label}</span>
             </label>
           ))}
