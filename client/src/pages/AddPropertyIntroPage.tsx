@@ -311,20 +311,22 @@ export function AddPropertyIntroPage() {
 
           <div className="mt-8 rounded-xl border border-gray-200 bg-gray-50 p-5 text-left">
             <h3 className="text-center text-base font-semibold text-gray-900">Why Add Your Property Now?</h3>
-            <div className="mt-4 grid gap-x-6 gap-y-3.5 sm:grid-cols-2">
+            <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2">
               {benefits.map((benefit, index) => (
-                <div key={benefit} className="flex items-start gap-2.5 text-sm leading-snug text-gray-700">
-                  <svg className="mt-0.5 h-[18px] w-[18px] flex-shrink-0 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {index === 0 ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    ) : index === 1 ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
-                    ) : index === 2 ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-1.414 1.414a4 4 0 01-5.657-5.657l1.414-1.414m5.657-1.414a4 4 0 00-5.657 0L7.757 8.17" />
-                    ) : (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    )}
-                  </svg>
+                <div key={benefit} className="flex items-center gap-3 text-sm font-medium leading-snug text-gray-700">
+                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm ring-1 ring-gray-200">
+                    <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      {index === 0 ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      ) : index === 1 ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      ) : index === 2 ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-1.414 1.414a4 4 0 01-5.657-5.657l1.414-1.414m5.657-1.414a4 4 0 00-5.657 0L7.757 8.17" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      )}
+                    </svg>
+                  </span>
                   <span>{benefit}</span>
                 </div>
               ))}
