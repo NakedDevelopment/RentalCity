@@ -882,8 +882,12 @@ app.get('/api/tenant/landlord-profile', async (req, res) => {
   return res.json({ profile })
 })
 
-// One-time universal application fee amounts (cents): renewal $50, new $125.
-const UNIVERSAL_APP_FEE_CENTS: number[] = [5000, 12500]
+// One-time tenant application fee (cents): flat $50, good for a 6-month window.
+const UNIVERSAL_APP_FEE_CENTS: number[] = [5000]
+// Landlord one-time fee to view a tenant's full profile (background/credit): $200.
+const LANDLORD_PROFILE_UNLOCK_CENTS = 20000
+// Landlord annual membership (auto-renewing subscription): $350/year.
+const LANDLORD_ANNUAL_CENTS = 35000
 
 /**
  * Shared, idempotent activation for a paid universal application window.
@@ -967,7 +971,7 @@ async function activateUniversalApplicationPaid(
 
 /**
  * Create a Stripe Checkout Session for the tenant's one-time universal application fee.
- * New window: $125. Renewal (already has an active window): $50.
+ * Flat $50, whether it is a first application or a renewal after the 6-month window.
  */
 app.post('/api/stripe/universal-application/checkout', async (req, res) => {
   const admin = getSupabaseAdmin()
@@ -993,7 +997,7 @@ app.post('/api/stripe/universal-application/checkout', async (req, res) => {
     .gt('valid_until', nowIso)
     .limit(1)
   const hasExisting = (active ?? []).length > 0
-  const amountCents = hasExisting ? 5000 : 12500
+  const amountCents = 5000
 
   const origin =
     req.headers.origin ||
@@ -1089,6 +1093,365 @@ app.post('/api/stripe/universal-application/confirm', async (req, res) => {
 })
 
 /**
+ * Idempotent activation for a paid landlord profile-unlock ($200). Keyed on the
+ * Stripe PaymentIntent id (payments.stripe_payment_intent_id is UNIQUE), so the
+ * confirm endpoint and the webhook can both run without double-charging or
+ * double-unlocking.
+ */
+async function activateLandlordProfileUnlockPaid(
+  admin: SupabaseClient,
+  params: { landlordId: string; applicationId: string; paymentIntentId: string; amountCents: number },
+): Promise<{ unlocked: boolean; alreadyProcessed: boolean }> {
+  const { landlordId, applicationId, paymentIntentId, amountCents } = params
+
+  async function ensureUnlocked(): Promise<void> {
+    await admin
+      .from('applications')
+      .update({ unlocked_at: new Date().toISOString() })
+      .eq('id', applicationId)
+      .is('unlocked_at', null)
+  }
+
+  const { data: existingPayment } = await admin
+    .from('payments')
+    .select('id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+  if (existingPayment) {
+    await ensureUnlocked()
+    return { unlocked: true, alreadyProcessed: true }
+  }
+
+  const { error: paymentError } = await admin.from('payments').insert({
+    application_id: applicationId,
+    stripe_payment_intent_id: paymentIntentId,
+    amount_cents: amountCents,
+    currency: 'usd',
+    status: 'succeeded',
+    payer_id: landlordId,
+    description: 'Landlord full tenant profile access',
+  })
+  if (paymentError) {
+    if ((paymentError as { code?: string }).code === '23505') {
+      await ensureUnlocked()
+      return { unlocked: true, alreadyProcessed: true }
+    }
+    throw new Error(paymentError.message)
+  }
+
+  await ensureUnlocked()
+  return { unlocked: true, alreadyProcessed: false }
+}
+
+// Verify the authenticated landlord owns the property tied to this application,
+// and return the application row (id, status, unlocked_at, tenant_id).
+async function loadLandlordApplication(
+  admin: SupabaseClient,
+  landlordId: string,
+  applicationId: string,
+): Promise<{ id: string; status: string; unlocked_at: string | null; tenant_id: string } | null> {
+  const { data } = await admin
+    .from('applications')
+    .select('id, status, unlocked_at, tenant_id, property:property_id(landlord_id)')
+    .eq('id', applicationId)
+    .maybeSingle()
+  if (!data) return null
+  const row = data as {
+    id: string
+    status: string
+    unlocked_at: string | null
+    tenant_id: string
+    property: { landlord_id?: string } | { landlord_id?: string }[] | null
+  }
+  const property = Array.isArray(row.property) ? row.property[0] : row.property
+  if (!property || property.landlord_id !== landlordId) return null
+  return { id: row.id, status: row.status, unlocked_at: row.unlocked_at, tenant_id: row.tenant_id }
+}
+
+/**
+ * Create a Stripe Checkout Session for a landlord to unlock (view) a tenant's
+ * full profile — background check, credit, contact, etc. One-time $200.
+ */
+app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const stripe = getStripe()
+  if (!stripe) return res.status(500).json({ error: 'Payments are not configured' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { applicationId } = req.body as { applicationId?: string }
+  if (!applicationId) return res.status(400).json({ error: 'Missing applicationId' })
+
+  const application = await loadLandlordApplication(admin, user.id, applicationId)
+  if (!application) return res.status(403).json({ error: 'You do not have access to this application.' })
+  if (application.unlocked_at) return res.status(409).json({ error: 'This profile is already unlocked.' })
+  if (application.status !== 'pending') {
+    return res.status(409).json({ error: 'This application is no longer pending.' })
+  }
+
+  const origin =
+    req.headers.origin ||
+    (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
+  if (!origin) return res.status(500).json({ error: 'Unable to determine return URL' })
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      customer_email: user.email ?? undefined,
+      client_reference_id: user.id,
+      metadata: { landlordId: user.id, applicationId, tenantId: application.tenant_id, kind: 'landlord_profile_unlock' },
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: LANDLORD_PROFILE_UNLOCK_CENTS,
+            product_data: {
+              name: 'Full Tenant Profile Access',
+              description: 'View this tenant\u2019s full profile: background check, credit report, and contact details.',
+            },
+          },
+        },
+      ],
+      success_url: `${origin}/matches/tenant/${application.tenant_id}?application=${applicationId}&unlock=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/matches/tenant/${application.tenant_id}?application=${applicationId}&unlock=cancel`,
+    })
+    return res.json({ url: session.url })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create checkout session' })
+  }
+})
+
+/**
+ * Confirm a completed profile-unlock Checkout Session on return from Stripe and
+ * unlock the tenant's full profile. Idempotent; safe to call alongside the webhook.
+ */
+app.post('/api/stripe/landlord/profile-unlock/confirm', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const stripe = getStripe()
+  if (!stripe) return res.status(500).json({ error: 'Payments are not configured' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { sessionId } = req.body as { sessionId?: string }
+  if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' })
+
+  let session: Stripe.Checkout.Session
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId)
+  } catch {
+    return res.status(400).json({ error: 'Invalid checkout session' })
+  }
+
+  if (session.metadata?.kind !== 'landlord_profile_unlock') {
+    return res.status(400).json({ error: 'This checkout session is not a profile-unlock payment.' })
+  }
+  if (session.metadata?.landlordId !== user.id) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+  if (session.payment_status !== 'paid') {
+    return res.status(402).json({ error: 'Payment has not completed yet.' })
+  }
+  if (session.amount_total !== LANDLORD_PROFILE_UNLOCK_CENTS) {
+    return res.status(400).json({ error: 'Unexpected payment amount.' })
+  }
+
+  const applicationId = session.metadata?.applicationId
+  if (!applicationId) return res.status(400).json({ error: 'Missing application reference.' })
+
+  const paymentIntentId =
+    typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+  if (!paymentIntentId) return res.status(400).json({ error: 'No payment found for this session' })
+
+  try {
+    const result = await activateLandlordProfileUnlockPaid(admin, {
+      landlordId: user.id,
+      applicationId,
+      paymentIntentId,
+      amountCents: session.amount_total,
+    })
+    return res.json(result)
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Unlock failed' })
+  }
+})
+
+// Map a Stripe subscription status to the coarse membership status we store.
+function mapSubscriptionStatus(status: string): string {
+  if (status === 'active' || status === 'trialing') return 'active'
+  if (status === 'past_due' || status === 'unpaid' || status === 'incomplete') return 'past_due'
+  return 'canceled'
+}
+
+// Retrieve the subscription from Stripe and upsert the landlord's membership row.
+async function syncLandlordMembership(
+  admin: SupabaseClient,
+  stripe: Stripe,
+  params: { landlordId: string; subscriptionId: string; customerId: string | null },
+): Promise<void> {
+  const sub = await stripe.subscriptions.retrieve(params.subscriptionId)
+  const currentPeriodEnd =
+    typeof sub.current_period_end === 'number'
+      ? new Date(sub.current_period_end * 1000).toISOString()
+      : null
+  await admin
+    .from('landlord_memberships')
+    .upsert(
+      {
+        landlord_id: params.landlordId,
+        stripe_customer_id: params.customerId,
+        stripe_subscription_id: params.subscriptionId,
+        status: mapSubscriptionStatus(sub.status),
+        current_period_end: currentPeriodEnd,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'landlord_id' },
+    )
+}
+
+// True when the row represents an active, unexpired membership.
+function membershipIsActive(row: { status?: string | null; current_period_end?: string | null } | null): boolean {
+  if (!row || row.status !== 'active') return false
+  if (!row.current_period_end) return true
+  return new Date(row.current_period_end).getTime() > Date.now()
+}
+
+/**
+ * Return the authenticated landlord's membership status.
+ */
+app.get('/api/stripe/landlord/membership', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { data } = await admin
+    .from('landlord_memberships')
+    .select('status, current_period_end')
+    .eq('landlord_id', user.id)
+    .maybeSingle()
+  const row = (data as { status?: string; current_period_end?: string | null } | null) ?? null
+  return res.json({ active: membershipIsActive(row), currentPeriodEnd: row?.current_period_end ?? null })
+})
+
+/**
+ * Create a Stripe Checkout Session (subscription mode) for the landlord's
+ * $350/year auto-renewing membership.
+ */
+app.post('/api/stripe/landlord/membership/checkout', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const stripe = getStripe()
+  if (!stripe) return res.status(500).json({ error: 'Payments are not configured' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { data: existing } = await admin
+    .from('landlord_memberships')
+    .select('status, current_period_end')
+    .eq('landlord_id', user.id)
+    .maybeSingle()
+  if (membershipIsActive(existing as { status?: string; current_period_end?: string | null } | null)) {
+    return res.status(409).json({ error: 'You already have an active membership.' })
+  }
+
+  const origin =
+    req.headers.origin ||
+    (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
+  if (!origin) return res.status(500).json({ error: 'Unable to determine return URL' })
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      customer_email: user.email ?? undefined,
+      client_reference_id: user.id,
+      metadata: { landlordId: user.id, kind: 'landlord_annual' },
+      subscription_data: { metadata: { landlordId: user.id, kind: 'landlord_annual' } },
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: LANDLORD_ANNUAL_CENTS,
+            recurring: { interval: 'year' },
+            product_data: {
+              name: 'Landlord Annual Membership',
+              description: 'List properties and receive tenant matches. Renews automatically each year.',
+            },
+          },
+        },
+      ],
+      success_url: `${origin}/onboarding/property/intro?membership=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/onboarding/property/intro?membership=cancel`,
+    })
+    return res.json({ url: session.url })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create checkout session' })
+  }
+})
+
+/**
+ * Confirm a completed membership Checkout Session on return from Stripe and record
+ * the landlord's subscription. Idempotent; safe to call alongside the webhook.
+ */
+app.post('/api/stripe/landlord/membership/confirm', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const stripe = getStripe()
+  if (!stripe) return res.status(500).json({ error: 'Payments are not configured' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { sessionId } = req.body as { sessionId?: string }
+  if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' })
+
+  let session: Stripe.Checkout.Session
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId)
+  } catch {
+    return res.status(400).json({ error: 'Invalid checkout session' })
+  }
+
+  if (session.metadata?.kind !== 'landlord_annual') {
+    return res.status(400).json({ error: 'This checkout session is not a membership payment.' })
+  }
+  if (session.metadata?.landlordId !== user.id) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+  const subscriptionId =
+    typeof session.subscription === 'string' ? session.subscription : session.subscription?.id
+  if (!subscriptionId) return res.status(402).json({ error: 'Subscription has not been created yet.' })
+  const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null
+
+  try {
+    await syncLandlordMembership(admin, stripe, { landlordId: user.id, subscriptionId, customerId })
+    const { data } = await admin
+      .from('landlord_memberships')
+      .select('status, current_period_end')
+      .eq('landlord_id', user.id)
+      .maybeSingle()
+    const row = (data as { status?: string; current_period_end?: string | null } | null) ?? null
+    return res.json({ active: membershipIsActive(row), currentPeriodEnd: row?.current_period_end ?? null })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Membership activation failed' })
+  }
+})
+
+/**
  * Stripe webhook (production reliability backstop). Registered with a raw body
  * parser before express.json(). No-ops gracefully until STRIPE_WEBHOOK_SECRET is set.
  */
@@ -1110,26 +1473,28 @@ async function handleStripeWebhook(req: Request, res: Response) {
     return res.status(400).json({ error: 'Webhook signature verification failed' })
   }
 
+  const admin = getSupabaseAdmin()
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
-    const admin = getSupabaseAdmin()
-    const tenantId = session.metadata?.tenantId
+    const kind = session.metadata?.kind
     const paymentIntentId =
       typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
     const amountTotal = session.amount_total
+
     if (
       admin &&
-      tenantId &&
+      kind === 'universal_application' &&
+      session.metadata?.tenantId &&
       paymentIntentId &&
       session.payment_status === 'paid' &&
-      session.metadata?.kind === 'universal_application' &&
       typeof amountTotal === 'number' &&
       UNIVERSAL_APP_FEE_CENTS.includes(amountTotal)
     ) {
       const hasExisting = session.metadata?.hasExisting === 'true'
       try {
         await activateUniversalApplicationPaid(admin, {
-          tenantId,
+          tenantId: session.metadata.tenantId,
           paymentIntentId,
           amountCents: amountTotal,
           description: hasExisting ? 'Universal application renewal' : 'Universal application activation',
@@ -1138,6 +1503,68 @@ async function handleStripeWebhook(req: Request, res: Response) {
         console.error('Stripe webhook activation failed:', err)
         return res.status(500).json({ error: 'Activation failed' })
       }
+    } else if (
+      admin &&
+      kind === 'landlord_profile_unlock' &&
+      session.metadata?.landlordId &&
+      session.metadata?.applicationId &&
+      paymentIntentId &&
+      session.payment_status === 'paid' &&
+      amountTotal === LANDLORD_PROFILE_UNLOCK_CENTS
+    ) {
+      try {
+        await activateLandlordProfileUnlockPaid(admin, {
+          landlordId: session.metadata.landlordId,
+          applicationId: session.metadata.applicationId,
+          paymentIntentId,
+          amountCents: amountTotal,
+        })
+      } catch (err) {
+        console.error('Stripe webhook profile-unlock failed:', err)
+        return res.status(500).json({ error: 'Unlock failed' })
+      }
+    } else if (admin && kind === 'landlord_annual' && session.metadata?.landlordId) {
+      const subscriptionId =
+        typeof session.subscription === 'string' ? session.subscription : session.subscription?.id
+      const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null
+      if (subscriptionId) {
+        try {
+          await syncLandlordMembership(admin, stripe, {
+            landlordId: session.metadata.landlordId,
+            subscriptionId,
+            customerId,
+          })
+        } catch (err) {
+          console.error('Stripe webhook membership activation failed:', err)
+          return res.status(500).json({ error: 'Membership activation failed' })
+        }
+      }
+    }
+  } else if (
+    admin &&
+    (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted')
+  ) {
+    // Keep membership status in sync with renewals, cancellations, and failed payments.
+    const sub = event.data.object as Stripe.Subscription
+    const landlordId = sub.metadata?.landlordId
+    const currentPeriodEnd =
+      typeof sub.current_period_end === 'number' ? new Date(sub.current_period_end * 1000).toISOString() : null
+    const status = event.type === 'customer.subscription.deleted' ? 'canceled' : mapSubscriptionStatus(sub.status)
+    try {
+      if (landlordId) {
+        await admin
+          .from('landlord_memberships')
+          .update({ status, current_period_end: currentPeriodEnd, updated_at: new Date().toISOString() })
+          .eq('landlord_id', landlordId)
+      } else {
+        await admin
+          .from('landlord_memberships')
+          .update({ status, current_period_end: currentPeriodEnd, updated_at: new Date().toISOString() })
+          .eq('stripe_subscription_id', sub.id)
+      }
+    } catch (err) {
+      console.error('Stripe webhook subscription sync failed:', err)
+      return res.status(500).json({ error: 'Subscription sync failed' })
     }
   }
 

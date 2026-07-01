@@ -185,6 +185,48 @@ export function LandlordTenantProfilePage() {
     pendingApplicationId && loadedApplicationStatus === 'pending' && !pendingUnlockedAt,
   )
 
+  // Confirm the $200 profile-unlock payment on return from Stripe Checkout.
+  useEffect(() => {
+    const unlock = searchParams.get('unlock')
+    const sessionId = searchParams.get('session_id')
+    if (unlock === 'cancel') {
+      setUnlockPayError('Payment canceled. You can unlock the full profile whenever you\u2019re ready.')
+      return
+    }
+    if (unlock !== 'success' || !sessionId) return
+    let active = true
+    ;(async () => {
+      try {
+        const { data: sess } = await supabase.auth.getSession()
+        const accessToken = sess.session?.access_token
+        if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+        const res = await fetch('/api/stripe/landlord/profile-unlock/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ sessionId }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error((err as { error?: string }).error || 'We could not confirm your payment.')
+        }
+        if (!active) return
+        setPendingUnlockedAt(new Date().toISOString())
+        setUnlockPayModalOpen(false)
+        const clean = new URLSearchParams()
+        const app = searchParams.get('application')
+        if (app) clean.set('application', app)
+        const qs = clean.toString()
+        navigate(`/matches/tenant/${id}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state })
+      } catch (e) {
+        if (active) setUnlockPayError(e instanceof Error ? e.message : 'Could not confirm payment')
+      }
+    })()
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, navigate, id])
+
   const inboxHref = useMemo(() => {
     const params = new URLSearchParams()
     if (messageThreadId) params.set('thread', messageThreadId)
@@ -593,33 +635,30 @@ export function LandlordTenantProfilePage() {
     navigate(`/matches/tenant/${tenant.id}${qs}`, { replace: true, state: location.state })
   }
 
+  // Hand off to Stripe Checkout for the $200 full-profile access fee. The tenant's
+  // profile is unlocked only after the payment is confirmed on return.
   async function handleConfirmProfileUnlock() {
     if (!pendingApplicationId || !user) return
     setUnlockPayError(null)
     setUnlockPayBusy(true)
     try {
-      const now = new Date().toISOString()
-      const { data, error } = await supabase
-        .from('applications')
-        .update({ unlocked_at: now })
-        .eq('id', pendingApplicationId)
-        .eq('status', 'pending')
-        .select('id')
-      if (error) throw error
-      if (!data?.length) {
-        setUnlockPayError('This application is no longer pending or could not be updated.')
-        return
+      const { data: sess } = await supabase.auth.getSession()
+      const accessToken = sess.session?.access_token
+      if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+      const res = await fetch('/api/stripe/landlord/profile-unlock/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ applicationId: pendingApplicationId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
       }
-      setPendingUnlockedAt(now)
-      setUnlockPayModalOpen(false)
-      const unlockQs = new URLSearchParams()
-      if (pendingApplicationId) unlockQs.set('application', pendingApplicationId)
-      if (applicationPropertyId) unlockQs.set('property', applicationPropertyId)
-      const qs = unlockQs.toString()
-      navigate(`/matches/tenant/${id}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state })
+      const json = (await res.json()) as { url?: string }
+      if (!json.url) throw new Error('Could not start checkout. Please try again.')
+      window.location.href = json.url
     } catch (e) {
-      setUnlockPayError(e instanceof Error ? e.message : 'Could not unlock')
-    } finally {
+      setUnlockPayError(e instanceof Error ? e.message : 'Could not start checkout')
       setUnlockPayBusy(false)
     }
   }
@@ -1122,20 +1161,20 @@ export function LandlordTenantProfilePage() {
 
             <div className="px-5 py-4">
               <div className="text-center">
-                <p className="text-[2.25rem] font-medium leading-none text-gray-900">$9.99</p>
-                <p className="mt-2 text-sm text-gray-500">One-time unlock</p>
+                <p className="text-[2.25rem] font-medium leading-none text-gray-900">$200</p>
+                <p className="mt-2 text-sm text-gray-500">One-time full-profile access</p>
               </div>
 
               <p className="mt-5 text-sm leading-7 text-gray-600">
-                Unlock this tenant&apos;s full profile including rental history, personality fit, and contact info.
+                View this tenant&apos;s full profile — background check, credit report, rental history, and contact info.
               </p>
 
               <ul className="mt-5 space-y-2 text-sm text-gray-600">
                 {[
+                  'Full background check',
+                  'Credit report',
                   'Complete rental history',
-                  'Personality compatibility details',
                   'Direct contact information',
-                  'Employment verification',
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-2">
                     <svg className="mt-1 h-4 w-4 flex-shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1169,7 +1208,7 @@ export function LandlordTenantProfilePage() {
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c1.657 0 3-1.343 3-3V7a3 3 0 10-6 0v1c0 1.657 1.343 3 3 3zm-7 9h14a2 2 0 002-2v-5a2 2 0 00-2-2H5a2 2 0 00-2 2v5a2 2 0 002 2z" />
                   </svg>
-                  {unlockPayBusy ? 'Unlocking…' : 'Confirm & Unlock'}
+                  {unlockPayBusy ? 'Redirecting…' : 'Continue to payment'}
                 </button>
               </div>
 

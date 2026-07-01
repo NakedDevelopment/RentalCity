@@ -460,8 +460,8 @@ export function AccountSettingsPage() {
         }
       >
         <div className="p-4 bg-gray-50 rounded-lg mb-4">
-          <p className="text-sm text-gray-600 mb-1">Current Fee: $125.00</p>
-          <p className="text-sm text-gray-500">Covers all applications for a 6 month time period.</p>
+          <p className="text-sm text-gray-600 mb-1">Current Fee: $50.00</p>
+          <p className="text-sm text-gray-500">One $50 application fee covers all applications for a 6 month time period.</p>
         </div>
         <Link
           to="/account/settings/payment-history"

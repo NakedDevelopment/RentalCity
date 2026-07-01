@@ -4,7 +4,7 @@ import { startUniversalBackgroundCheck } from '../lib/backgroundChecksApi'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 
-const NEW_APPLICATION_FEE = 125
+const NEW_APPLICATION_FEE = 50
 const UPDATE_APPLICATION_FEE = 50
 const INCLUDED_ITEMS = [
   'Professional background check',
@@ -153,8 +153,8 @@ export function UniversalApplicationPage() {
         </h1>
         <p className="mx-auto mb-8 max-w-2xl text-center text-sm leading-7 text-gray-600">
           {hasExistingApplication
-            ? 'A reduced update fee refreshes your application checks and keeps your profile current.'
-            : 'A one-time application fee covers background checks and gives you access to apply for any property for the next 6 months.'}
+            ? 'Your $50 application fee refreshes your background and credit checks and keeps your profile current for another 6 months.'
+            : 'One $50 application fee covers your background and credit checks and lets you apply to any property for the next 6 months.'}
         </p>
 
         <div className="mb-8 rounded-xl bg-gray-50 px-6 py-6 text-center">

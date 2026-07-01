@@ -666,11 +666,11 @@ function buildReportPage(
   <div class="rep-cta">
     <div class="k">Your next step</div>
     <h3>You know what it's worth. <em>Now fill it.</em></h3>
-    <p>List your property free on Rental City and get matched with pre-screened, qualified renters. No agents. No wasted showings.</p>
+    <p>List your property on Rental City and get matched with pre-screened, qualified renters. No agents. No wasted showings.</p>
     <a href="https://gorentalcity.com">List your property on Rental City
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
     </a>
-    <p class="reassure">Free to list · You only pay $350 when your unit is filled · Matched in 48 hours or it's free</p>
+    <p class="reassure">$350/year membership to list &amp; match with pre-screened renters · Matched in 48 hours</p>
   </div>`)
 
   // Methodology (static)
@@ -729,7 +729,7 @@ function buildReportPage(
     <div class="rep-head-cta">
       <div class="rhc-copy">
         <b>Know what it's worth? Now fill it.</b>
-        <span>List free and match with pre-screened renters — pay $350 only when it's filled.</span>
+        <span>List and match with pre-screened renters — $350/year membership.</span>
       </div>
       <a href="https://gorentalcity.com">List your property
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
