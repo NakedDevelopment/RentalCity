@@ -281,7 +281,7 @@ export function AddPropertyIntroPage() {
       <StepHeader />
 
       <div className="px-4 py-12">
-        <div className="mx-auto max-w-md rounded-2xl border border-gray-200 bg-white px-6 py-9 text-center shadow-sm sm:px-8">
+        <div className="mx-auto max-w-[510px] rounded-2xl border border-gray-200 bg-white px-8 py-10 text-center shadow-sm sm:px-12">
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
             <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
               <path d="M10.707 1.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 10h1v6a1 1 0 001 1h3a1 1 0 001-1v-3h2v3a1 1 0 001 1h3a1 1 0 001-1v-6h1a1 1 0 00.707-1.707l-7-7z" />
@@ -289,13 +289,13 @@ export function AddPropertyIntroPage() {
           </div>
 
           <h1 className="text-[26px] font-semibold tracking-tight text-gray-900">Add Your First Property</h1>
-          <p className="mx-auto mt-3 max-w-xs text-[15px] leading-relaxed text-gray-500">
+          <p className="mx-auto mt-3 max-w-sm text-[15px] leading-relaxed text-gray-500">
             Get your property listed and start receiving quality tenant matches in just a few minutes.
           </p>
 
           <h2 className="mt-9 text-lg font-semibold text-gray-900">Quick &amp; Simple Process</h2>
 
-          <div className="mx-auto mt-6 max-w-xs space-y-5 text-left">
+          <div className="mx-auto mt-6 max-w-sm space-y-5 text-left">
             {processSteps.map((item) => (
               <div key={item.number} className="flex items-start gap-3.5">
                 <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full gradient-primary text-sm font-semibold text-white">
@@ -346,7 +346,7 @@ export function AddPropertyIntroPage() {
           <p className="mt-4 text-sm text-gray-400">You can save your progress and continue later.</p>
         </div>
 
-        <div className="mx-auto mt-6 flex max-w-md items-center justify-center gap-2 px-2 text-center text-[13px] text-gray-400">
+        <div className="mx-auto mt-6 flex max-w-[510px] items-center justify-center gap-2 px-2 text-center text-[13px] text-gray-400">
           <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
