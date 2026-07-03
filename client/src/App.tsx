@@ -41,6 +41,7 @@ import { CompatibilitySurveyPage } from './pages/CompatibilitySurveyPage'
 import { ApplicationDetailsPage } from './pages/ApplicationDetailsPage'
 import { ReviewSubmittedPage } from './pages/ReviewSubmittedPage'
 import { UniversalApplicationPage } from './pages/UniversalApplicationPage'
+import { ApplicationFormPage } from './pages/ApplicationFormPage'
 import { PropertyDetailsPage } from './pages/PropertyDetailsPage'
 import { LandlordProfilePreviewPage } from './pages/LandlordProfilePreviewPage'
 import { LandlordPropertyDetailsPage } from './pages/LandlordPropertyDetailsPage'
@@ -97,6 +98,7 @@ export default function App() {
         <Route path="tenant-questionnaire" element={user ? <TenantQuestionnairePage /> : <Navigate to="/login" replace />} />
         <Route path="applications" element={user ? <Navigate to="/matches?tab=applied" replace /> : <Navigate to="/login" replace />} />
         <Route path="applications/apply" element={<UniversalApplicationPage />} />
+        <Route path="applications/form" element={user ? <ApplicationFormPage /> : <Navigate to="/login" replace />} />
         <Route path="property/:id" element={user ? <PropertyDetailsPage /> : <Navigate to="/login" replace />} />
         <Route path="properties" element={user ? <PropertiesPage /> : <Navigate to="/login" replace />} />
         <Route path="properties/:id" element={user ? <LandlordPropertyDetailsPage /> : <Navigate to="/login" replace />} />

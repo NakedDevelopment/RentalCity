@@ -967,23 +967,22 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const handleApplyNow = async (match: MatchCard) => {
     if (!user) return
 
-    // If the tenant does not have an active universal application, send them to the application page
+    // If the tenant does not have an active universal application, send them to set one up first
     if (hasActiveUniversalApplication === false) {
       navigate('/applications/apply')
       return
     }
 
-    const { error } = await supabase.from('applications').insert({
-      tenant_id: user.id,
-      property_id: match.id,
-      status: 'pending',
+    // Route through ApplicationFormPage which collects the $50 screening fee
+    // before submitting the application via /api/applications/submit.
+    // The direct supabase.from('applications').insert() is replaced by the
+    // server-side POST /api/applications/submit endpoint that verifies Stripe
+    // payment before inserting the application row.
+    const params = new URLSearchParams({
+      propertyId: match.id,
+      propertyTitle: match.title,
     })
-    if (error && error.code !== '23505') {
-      setError(error.message)
-      return
-    }
-    setAppliedIds((prev) => new Set(prev).add(match.id))
-    setSubmissionModal({ propertyTitle: match.title })
+    navigate(`/applications/form?${params.toString()}`)
   }
 
   const displayedMatches =

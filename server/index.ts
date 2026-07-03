@@ -928,6 +928,348 @@ app.get('/api/admin/directory', async (req, res) => {
   return res.json({ users: rows })
 })
 
+// ─── Stripe Payment Endpoints ────────────────────────────────────────────────
+// PLACEHOLDER: Set STRIPE_SECRET_KEY in environment before deploying to production.
+// All Stripe calls are gated behind the env var check below — the server boots fine
+// without it but payment endpoints will return 503.
+
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) return null
+  // Dynamic require so missing key doesn't crash startup
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Stripe = require('stripe')
+  return new Stripe(key, { apiVersion: '2024-04-10' }) as import('stripe').default
+}
+
+/**
+ * POST /api/payments/screening-intent
+ * Creates a Stripe PaymentIntent for the $50 tenant application screening fee.
+ * Called by the client before submitting an application.
+ * On success the client uses the returned clientSecret with Stripe.js to confirm
+ * the card, then sends the PaymentIntent id to /api/applications/submit.
+ */
+app.post('/api/payments/screening-intent', async (req, res) => {
+  const stripe = getStripe()
+  if (!stripe) return res.status(503).json({ error: 'Payment processing is not configured. Contact support.' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { propertyId } = req.body as { propertyId?: string }
+  if (!propertyId) return res.status(400).json({ error: 'propertyId is required' })
+
+  try {
+    const intent = await stripe.paymentIntents.create({
+      amount: 5000, // $50.00 in cents
+      currency: 'usd',
+      metadata: {
+        type: 'tenant_screening_fee',
+        tenant_id: user.id,
+        property_id: propertyId,
+      },
+      description: 'Application/Screening Fee — Rental City',
+    })
+    return res.json({ clientSecret: intent.client_secret, paymentIntentId: intent.id })
+  } catch (err) {
+    console.error('Stripe screening intent error:', err)
+    return res.status(500).json({ error: 'Failed to create payment session. Please try again.' })
+  }
+})
+
+/**
+ * POST /api/applications/submit
+ * Submits a tenant application after screening fee payment is confirmed.
+ * Requires a confirmed Stripe PaymentIntent id (status: succeeded).
+ */
+app.post('/api/applications/submit', async (req, res) => {
+  const stripe = getStripe()
+  if (!stripe) return res.status(503).json({ error: 'Payment processing is not configured. Contact support.' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { propertyId, paymentIntentId, message } = req.body as {
+    propertyId?: string
+    paymentIntentId?: string
+    message?: string
+  }
+  if (!propertyId || !paymentIntentId) {
+    return res.status(400).json({ error: 'propertyId and paymentIntentId are required' })
+  }
+
+  // Verify the PaymentIntent belongs to this tenant and is confirmed (succeeded)
+  let intent: import('stripe').default.PaymentIntent
+  try {
+    intent = await stripe.paymentIntents.retrieve(paymentIntentId)
+  } catch {
+    return res.status(400).json({ error: 'Invalid payment reference' })
+  }
+
+  if (intent.metadata?.tenant_id !== user.id || intent.metadata?.property_id !== propertyId) {
+    return res.status(403).json({ error: 'Payment does not match this application' })
+  }
+  if (intent.status !== 'succeeded') {
+    return res.status(402).json({ error: `Payment not completed (status: ${intent.status}). Please complete payment first.` })
+  }
+
+  // Record payment in DB
+  const { error: paymentError } = await admin.from('payments').insert({
+    application_id: null, // will update after application insert
+    stripe_payment_intent_id: paymentIntentId,
+    amount_cents: 5000,
+    currency: 'usd',
+    status: 'succeeded',
+    payer_id: user.id,
+    description: 'Application/Screening Fee',
+  })
+  if (paymentError && paymentError.code !== '23505') {
+    // 23505 = unique violation (duplicate submission) — safe to continue
+    console.error('Payment insert error:', paymentError)
+    return res.status(500).json({ error: 'Failed to record payment' })
+  }
+
+  // Insert the application
+  const { data: application, error: appError } = await admin.from('applications').insert({
+    tenant_id: user.id,
+    property_id: propertyId,
+    status: 'pending',
+    message: message ?? null,
+  }).select('id').single()
+
+  if (appError) {
+    if (appError.code === '23505') {
+      return res.status(409).json({ error: 'You have already applied to this property' })
+    }
+    return res.status(500).json({ error: appError.message })
+  }
+
+  // Link payment to application
+  await admin.from('payments').update({ application_id: application.id })
+    .eq('stripe_payment_intent_id', paymentIntentId)
+
+  return res.status(201).json({ applicationId: application.id })
+})
+
+/**
+ * POST /api/applications/:applicationId/accept
+ * Landlord accepts a tenant application. Triggers the $200 placement fee charge.
+ *
+ * PLACEHOLDER: Confirm with PM which party is charged for the placement fee
+ * (landlord or tenant). Currently charges the LANDLORD.
+ * To charge the tenant instead, replace `landlordId` with the tenant's
+ * Stripe customer id and update the description accordingly.
+ */
+app.post('/api/applications/:applicationId/accept', async (req, res) => {
+  const stripe = getStripe()
+  if (!stripe) return res.status(503).json({ error: 'Payment processing is not configured. Contact support.' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { applicationId } = req.params
+
+  // Verify the caller is the landlord for this application's property
+  const { data: app_row, error: appFetchErr } = await admin
+    .from('applications')
+    .select('id, tenant_id, property_id, status, properties!inner(landlord_id)')
+    .eq('id', applicationId)
+    .maybeSingle()
+
+  if (appFetchErr || !app_row) {
+    return res.status(404).json({ error: 'Application not found' })
+  }
+
+  const prop = Array.isArray(app_row.properties) ? app_row.properties[0] : app_row.properties
+  if (!prop || (prop as { landlord_id: string }).landlord_id !== user.id) {
+    return res.status(403).json({ error: 'Only the landlord may accept this application' })
+  }
+
+  if (app_row.status !== 'pending') {
+    return res.status(409).json({ error: `Application is already ${app_row.status}` })
+  }
+
+  // PLACEHOLDER: To charge the landlord via Stripe, the landlord needs a saved
+  // Stripe payment method. Until landlord payment methods are stored, this creates
+  // a PaymentIntent that requires additional confirmation from the landlord's browser.
+  // See the frontend TODO below for completing this flow.
+  let placementIntentClientSecret: string | null = null
+  try {
+    const placementIntent = await stripe.paymentIntents.create({
+      amount: 20000, // $200.00 in cents
+      currency: 'usd',
+      metadata: {
+        type: 'placement_fee',
+        landlord_id: user.id,
+        application_id: applicationId,
+        tenant_id: String(app_row.tenant_id),
+      },
+      description: 'Placement Fee — Rental City',
+    })
+    placementIntentClientSecret = placementIntent.client_secret
+
+    // Record pending payment
+    await admin.from('payments').insert({
+      application_id: applicationId,
+      stripe_payment_intent_id: placementIntent.id,
+      amount_cents: 20000,
+      currency: 'usd',
+      status: 'pending',
+      payer_id: user.id,
+      description: 'Placement Fee',
+    })
+  } catch (err) {
+    console.error('Stripe placement intent error:', err)
+    return res.status(500).json({ error: 'Failed to create placement fee session. Please try again.' })
+  }
+
+  // Update application status to accepted — placement fee confirmation happens async via webhook
+  const { error: updateErr } = await admin
+    .from('applications')
+    .update({ status: 'approved' })
+    .eq('id', applicationId)
+
+  if (updateErr) {
+    return res.status(500).json({ error: updateErr.message })
+  }
+
+  // PLACEHOLDER: Notify tenant of acceptance via email/notification here
+  // See email.ts or add a notifications insert
+
+  return res.json({
+    success: true,
+    applicationId,
+    // The frontend must confirm this PaymentIntent using Stripe.js to complete the placement fee charge
+    placementFeeClientSecret: placementIntentClientSecret,
+  })
+})
+
+/**
+ * POST /api/landlord/subscribe-annual
+ * Initiates or renews the $350 annual landlord membership fee.
+ * Call this on landlord account creation or when re-subscribing after expiry.
+ *
+ * PLACEHOLDER: Confirm trigger timing with PM — options:
+ *   (a) On landlord profile creation (first setup)
+ *   (b) On first property listing
+ *   (c) On a fixed annual billing date
+ * Currently sets up a one-time PaymentIntent; upgrade to Stripe Subscriptions
+ * for automatic annual renewal.
+ */
+app.post('/api/landlord/subscribe-annual', async (req, res) => {
+  const stripe = getStripe()
+  if (!stripe) return res.status(503).json({ error: 'Payment processing is not configured. Contact support.' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  // Verify the user is a landlord
+  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle()
+  if (!profile || profile.role !== 'landlord') {
+    return res.status(403).json({ error: 'Annual membership is for landlord accounts only' })
+  }
+
+  try {
+    const annualIntent = await stripe.paymentIntents.create({
+      amount: 35000, // $350.00 in cents
+      currency: 'usd',
+      metadata: {
+        type: 'annual_landlord_fee',
+        landlord_id: user.id,
+      },
+      description: 'Annual Landlord Membership Fee — Rental City',
+    })
+
+    // Record pending payment (no application linked for annual fee)
+    await admin.from('payments').insert({
+      application_id: null,
+      stripe_payment_intent_id: annualIntent.id,
+      amount_cents: 35000,
+      currency: 'usd',
+      status: 'pending',
+      payer_id: user.id,
+      description: 'Annual Landlord Membership Fee',
+    })
+
+    return res.json({
+      clientSecret: annualIntent.client_secret,
+      paymentIntentId: annualIntent.id,
+    })
+  } catch (err) {
+    console.error('Stripe annual intent error:', err)
+    return res.status(500).json({ error: 'Failed to create membership payment session. Please try again.' })
+  }
+})
+
+/**
+ * POST /api/webhooks/stripe
+ * Stripe webhook handler — confirms payments and updates DB status.
+ * Register this URL in the Stripe Dashboard under Webhooks.
+ * PLACEHOLDER: Set STRIPE_WEBHOOK_SECRET in environment.
+ */
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  const stripe = getStripe()
+  if (!stripe) return res.status(503).send('Payment processing not configured')
+
+  const sig = req.headers['stripe-signature'] as string
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!webhookSecret) return res.status(503).send('Webhook secret not configured')
+
+  let event: import('stripe').default.Event
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret)
+  } catch (err) {
+    console.error('Stripe webhook signature verification failed:', err)
+    return res.status(400).send('Webhook signature verification failed')
+  }
+
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).send('Server configuration error')
+
+  if (event.type === 'payment_intent.succeeded') {
+    const intent = event.data.object as import('stripe').default.PaymentIntent
+    await admin.from('payments')
+      .update({ status: 'succeeded' })
+      .eq('stripe_payment_intent_id', intent.id)
+
+    // For annual landlord fee — update profile membership status
+    if (intent.metadata?.type === 'annual_landlord_fee') {
+      const now = new Date()
+      const renewalDate = new Date(now)
+      renewalDate.setFullYear(renewalDate.getFullYear() + 1)
+      // Migration 20260703000001_fee_processing.sql adds landlord_membership_expires_at column
+      await admin.from('profiles')
+        .update({ landlord_membership_expires_at: renewalDate.toISOString() })
+        .eq('id', intent.metadata.landlord_id)
+      console.log(`Annual fee confirmed for landlord ${intent.metadata.landlord_id} — renewal: ${renewalDate.toISOString()}`)
+    }
+  }
+
+  if (event.type === 'payment_intent.payment_failed') {
+    const intent = event.data.object as import('stripe').default.PaymentIntent
+    await admin.from('payments')
+      .update({ status: 'failed' })
+      .eq('stripe_payment_intent_id', intent.id)
+    console.warn(`Payment failed for intent ${intent.id} (${intent.metadata?.type})`)
+  }
+
+  return res.json({ received: true })
+})
+
+// ─── End Stripe Payment Endpoints ────────────────────────────────────────────
+
 // In production, serve the built client static assets and SPA fallback
 if (process.env.NODE_ENV === 'production') {
   const __filename = fileURLToPath(import.meta.url)
