@@ -164,6 +164,23 @@ export function AddPropertyPreviewPage() {
       return
     }
 
+    // Fire-and-forget: let the server send the appropriate lifecycle email
+    // ("all uploaded" vs "come back for the rest"). Never blocks navigation.
+    void (async () => {
+      try {
+        const { data: sess } = await supabase.auth.getSession()
+        const accessToken = sess.session?.access_token
+        if (!accessToken) return
+        await fetch('/api/emails/landlord/property-published', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({}),
+        })
+      } catch {
+        // Best-effort only.
+      }
+    })()
+
     navigate('/properties', { state: { justPublishedId: data.id } })
   }
 

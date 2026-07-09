@@ -24,7 +24,7 @@ import {
 } from './plaid'
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
-import { sendReportEmail } from './email'
+import { sendReportEmail, buildLandlordLifecycleEmail, type LandlordLifecycleKind } from './email'
 import Stripe from 'stripe'
 import type { Request, Response } from 'express'
 
@@ -1523,6 +1523,170 @@ app.post('/api/stripe/landlord/membership/confirm', async (req, res) => {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Membership activation failed' })
   }
 })
+
+// ---------------------------------------------------------------------------
+// Landlord lifecycle emails
+// ---------------------------------------------------------------------------
+
+// Minimum number of published properties for each stated portfolio range to be
+// considered "all uploaded".
+const PROPERTY_RANGE_MINIMUMS: Record<string, number> = { '1': 1, '2-5': 2, '6-10': 6, '10+': 10 }
+
+function lifecycleAppUrl(req?: Request): string {
+  const origin =
+    (req?.headers.origin as string | undefined) ||
+    (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
+  return origin || 'http://localhost:5000'
+}
+
+/**
+ * Send one lifecycle email to a landlord, at most once per kind (deduped via a
+ * unique row in landlord_lifecycle_emails). Best-effort; never throws.
+ */
+async function sendLandlordLifecycleEmail(
+  admin: SupabaseClient,
+  landlordId: string,
+  kind: LandlordLifecycleKind,
+  appUrl: string,
+): Promise<boolean> {
+  // Claim the send first so concurrent requests can't double-send.
+  const { error: claimError } = await admin
+    .from('landlord_lifecycle_emails')
+    .insert({ landlord_id: landlordId, kind })
+  if (claimError) {
+    if (claimError.code !== '23505') {
+      console.error('lifecycle email claim failed:', claimError.message)
+    }
+    return false // already sent (or claim failed) — do nothing
+  }
+
+  // From here on, any failure must release the claim so a later attempt can retry.
+  async function releaseClaim() {
+    const { error } = await admin
+      .from('landlord_lifecycle_emails')
+      .delete()
+      .eq('landlord_id', landlordId)
+      .eq('kind', kind)
+    if (error) console.error('lifecycle email claim release failed:', error.message)
+  }
+
+  try {
+    const [{ data: profile }, { data: userRes }] = await Promise.all([
+      admin.from('profiles').select('display_name').eq('id', landlordId).maybeSingle(),
+      admin.auth.admin.getUserById(landlordId),
+    ])
+    const email = userRes?.user?.email
+    if (!email) {
+      console.warn('lifecycle email skipped: no email for landlord', landlordId)
+      await releaseClaim()
+      return false
+    }
+    const firstName =
+      ((profile as { display_name?: string | null } | null)?.display_name || '').trim().split(/\s+/)[0] || 'there'
+
+    const { subject, html } = buildLandlordLifecycleEmail(kind, { firstName, appUrl })
+    const sent = await sendReportEmail({ to: email, subject, html })
+    if (!sent) await releaseClaim()
+    return sent
+  } catch (err) {
+    console.error('lifecycle email error:', err instanceof Error ? err.message : String(err))
+    await releaseClaim()
+    return false
+  }
+}
+
+/**
+ * Called by the client right after a landlord publishes a property. Sends
+ * either the "all uploaded" or the "come back for the rest" email, once each.
+ */
+app.post('/api/emails/landlord/property-published', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const [{ count }, { data: profile }] = await Promise.all([
+    admin
+      .from('properties')
+      .select('id', { count: 'exact', head: true })
+      .eq('landlord_id', user.id)
+      .eq('status', 'active'),
+    admin.from('profiles').select('landlord_property_count_range').eq('id', user.id).maybeSingle(),
+  ])
+  const publishedCount = count ?? 0
+  if (publishedCount === 0) return res.json({ sent: null })
+
+  const range = (profile as { landlord_property_count_range?: string | null } | null)
+    ?.landlord_property_count_range
+  const needed = (range && PROPERTY_RANGE_MINIMUMS[range]) || 1
+  const kind: LandlordLifecycleKind = publishedCount >= needed ? 'all_uploaded' : 'partial_upload'
+
+  const sent = await sendLandlordLifecycleEmail(admin, user.id, kind, lifecycleAppUrl(req))
+  return res.json({ sent: sent ? kind : null })
+})
+
+/**
+ * Background sweep: landlords who signed up 24+ hours ago and still have no
+ * published properties get a one-time "don't forget to upload" reminder.
+ */
+async function sweepLandlordUploadReminders(): Promise<void> {
+  const admin = getSupabaseAdmin()
+  if (!admin) return
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const appUrl = lifecycleAppUrl()
+    const BATCH = 200
+    const MAX_BATCHES = 25
+    let cursor: string | null = null
+
+    // Paginate through ALL eligible landlords with a created_at cursor so
+    // already-emailed rows in one batch never starve older landlords.
+    for (let batch = 0; batch < MAX_BATCHES; batch++) {
+      let query = admin
+        .from('profiles')
+        .select('id, created_at')
+        .eq('role', 'landlord')
+        .lt('created_at', cutoff)
+        .order('created_at', { ascending: true })
+        .limit(BATCH)
+      if (cursor) query = query.gt('created_at', cursor)
+      const { data: landlords, error } = await query
+      if (error) {
+        console.error('upload reminder sweep query failed:', error.message)
+        return
+      }
+      if (!landlords || landlords.length === 0) return
+      const rows = landlords as { id: string; created_at: string }[]
+      cursor = rows[rows.length - 1].created_at
+      const ids = rows.map((l) => l.id)
+
+      const [{ data: props }, { data: sentRows }] = await Promise.all([
+        admin.from('properties').select('landlord_id').in('landlord_id', ids),
+        admin.from('landlord_lifecycle_emails').select('landlord_id').in('landlord_id', ids),
+      ])
+      const hasProperty = new Set(
+        ((props as { landlord_id: string }[] | null) ?? []).map((p) => p.landlord_id),
+      )
+      const alreadyEmailed = new Set(
+        ((sentRows as { landlord_id: string }[] | null) ?? []).map((r) => r.landlord_id),
+      )
+
+      for (const id of ids) {
+        if (hasProperty.has(id) || alreadyEmailed.has(id)) continue
+        await sendLandlordLifecycleEmail(admin, id, 'upload_reminder', appUrl)
+      }
+
+      if (rows.length < BATCH) return // last page
+    }
+  } catch (err) {
+    console.error('upload reminder sweep failed:', err instanceof Error ? err.message : String(err))
+  }
+}
+
+setTimeout(() => void sweepLandlordUploadReminders(), 60 * 1000)
+setInterval(() => void sweepLandlordUploadReminders(), 6 * 60 * 60 * 1000)
 
 /**
  * Stripe webhook (production reliability backstop). Registered with a raw body
