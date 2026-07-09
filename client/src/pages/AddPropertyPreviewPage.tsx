@@ -164,7 +164,7 @@ export function AddPropertyPreviewPage() {
       return
     }
 
-    navigate(`/properties/published?id=${data.id}`)
+    navigate('/properties', { state: { justPublishedId: data.id } })
   }
 
   return (

@@ -1506,6 +1506,28 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             })}
           </div>
 
+          {displayedLandlordMatches.length === 0 ? (
+            landlordMatches.length === 0 ? (
+              <div className="mx-auto mt-8 w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-6.93M15 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                </div>
+                <h2 className="mt-5 text-xl font-semibold text-gray-900">Your tenant matches are on the way</h2>
+                <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-gray-600">
+                  We&apos;re welcoming new renters to Rental City every day, and your property is already in the
+                  matching lineup. The moment we find tenants who fit what you&apos;re looking for, they&apos;ll
+                  appear right here — and we&apos;ll notify you the second they do.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-8 text-center">
+                <p className="text-sm text-gray-600">No matches for this filter. Try a different view.</p>
+              </div>
+            )
+          ) : null}
+
           {displayedLandlordMatches.length > MATCHES_PAGE_SIZE ? (
             <div className="mt-8 flex items-center justify-center gap-3">
               <button
@@ -2019,9 +2041,11 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             </>
           ) : profileRole === 'tenant' && tenantOverallScore != null ? (
             <>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">No matches right now</h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">Great homes are on the way</h2>
               <p className="text-gray-600 text-center max-w-md mb-8">
-                No properties match your profile yet. Try adjusting filters or check back later for new listings.
+                We&apos;re busy bringing new landlords and properties onto Rental City every day. We don&apos;t have
+                matches for you just yet — but the moment a property fits your profile, we&apos;ll notify you.
+                Your perfect place is worth the wait.
               </p>
             </>
           ) : (

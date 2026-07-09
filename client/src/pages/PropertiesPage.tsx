@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { formatBathrooms, formatBedrooms, formatCurrency } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
@@ -35,9 +35,47 @@ function PropertyStatusBadge({ status }: { status: PropertyStatus }) {
   )
 }
 
+const COUNT_RANGE_LABELS: Record<string, string> = {
+  '2-5': '2-5 properties',
+  '6-10': '6-10 properties',
+  '10+': '10+ properties',
+}
+
 export function PropertiesPage() {
   const { user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [properties, setProperties] = useState<PropertyCard[]>([])
+  const [addAnotherOpen, setAddAnotherOpen] = useState(false)
+  const [propertyCountRange, setPropertyCountRange] = useState<string | null>(null)
+
+  useEffect(() => {
+    const state = location.state as { justPublishedId?: string } | null
+    if (state?.justPublishedId) {
+      setAddAnotherOpen(true)
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.state, location.pathname, navigate])
+
+  useEffect(() => {
+    if (!user) return
+    let alive = true
+    supabase
+      .from('profiles')
+      .select('landlord_property_count_range')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (alive) {
+          setPropertyCountRange(
+            (data as { landlord_property_count_range?: string | null } | null)?.landlord_property_count_range ?? null,
+          )
+        }
+      })
+    return () => {
+      alive = false
+    }
+  }, [user])
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [statusFilter, setStatusFilter] = useState<ListingStatusFilter>('all')
@@ -333,6 +371,46 @@ export function PropertiesPage() {
         ) : null}
 
       </div>
+
+      {addAnotherOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8">
+          <div className="w-full max-w-[420px] rounded-2xl bg-white p-8 text-center shadow-xl">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <svg className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+
+            <h2 className="mt-5 text-2xl font-semibold tracking-tight text-gray-900">Your property is live!</h2>
+            <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-gray-600">
+              {propertyCountRange && COUNT_RANGE_LABELS[propertyCountRange]
+                ? `You mentioned you manage ${COUNT_RANGE_LABELS[propertyCountRange]} — let's get every one of them in front of quality tenants. Would you like to upload another property now?`
+                : 'The more properties you list, the more quality tenants we can match you with. Would you like to upload another property now?'}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAddAnotherOpen(false)
+                navigate('/onboarding/property/basic-info')
+              }}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg btn-primary px-6 py-3.5 text-base font-semibold text-white"
+            >
+              Upload Another Property
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddAnotherOpen(false)}
+              className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-gray-200 bg-white px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              No thanks, I&apos;ll do that later
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {deleteModalProperty ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8">

@@ -16,8 +16,7 @@ export function RoleSelectionPage() {
     setLoading(true)
     await supabase.from('profiles').update({ role }).eq('id', user.id)
     setLoading(false)
-    // Tenants → rental needs in app shell; Landlords → profile setup
-    navigate(role === 'tenant' ? '/rental-needs' : '/onboarding/profile')
+    navigate('/onboarding/profile')
   }
 
   return (
@@ -32,22 +31,10 @@ export function RoleSelectionPage() {
       </div>
 
       <h2 className="text-xl font-bold text-gray-900 mb-6 text-center">
-        Are you here to find a place to rent or list your property for others to rent?
+        List your property and let us match you with quality tenants
       </h2>
 
-      <div className="grid grid-cols-2 gap-4 mb-8">
-        <button
-          type="button"
-          onClick={() => setRole('tenant')}
-          className={`p-6 rounded-lg border-2 flex flex-col items-center gap-2 transition-colors ${
-            role === 'tenant' ? 'border-emerald-600 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'
-          }`}
-        >
-          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <span className="font-medium text-gray-900">I'm here to find a place to rent</span>
-        </button>
+      <div className="grid grid-cols-1 gap-4 mb-8">
         <button
           type="button"
           onClick={() => setRole('landlord')}

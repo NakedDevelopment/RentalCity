@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase'
 type Role = 'tenant' | 'landlord'
 
 export function SignupPage() {
-  const [role, setRole] = useState<Role>('tenant')
+  // Landlord-first launch: tenant self-signup is temporarily hidden.
+  const role: Role = 'landlord'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -128,83 +129,16 @@ export function SignupPage() {
     )
   }
 
-  function RoleCard({
-    value,
-    title,
-    description,
-    icon,
-  }: {
-    value: Role
-    title: string
-    description: string
-    icon: React.ReactNode
-  }) {
-    const isSelected = role === value
-
-    return (
-      <button
-        type="button"
-        onClick={() => setRole(value)}
-        className={`flex w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-left transition-colors ${
-          isSelected
-            ? 'border-blue-500 bg-blue-50/40 shadow-[0_0_0_1px_rgba(59,130,246,0.18)]'
-            : 'border-gray-200 bg-white hover:border-gray-300'
-        }`}
-      >
-        <span
-          className={`mt-1 flex h-4 w-4 items-center justify-center rounded-full border ${
-            isSelected ? 'border-blue-500 bg-white' : 'border-gray-300 bg-white'
-          }`}
-        >
-          {isSelected ? <span className="h-2.5 w-2.5 rounded-full gradient-primary" /> : null}
-        </span>
-        <span className="flex-1">
-          <span className="flex items-center gap-2 text-sm font-medium text-gray-900">
-            {icon}
-            {title}
-          </span>
-          <span className="mt-1 block text-sm leading-6 text-gray-500">{description}</span>
-        </span>
-      </button>
-    )
-  }
-
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-12">
       <div className="w-full max-w-[440px]">
         <div className="rounded-2xl border border-gray-200 bg-white px-8 py-10 shadow-sm">
           <h1 className="mb-2 text-center text-[2rem] font-medium text-gray-900">Sign Up</h1>
           <p className="mb-8 text-center text-[0.95rem] text-gray-600">
-            Create an account and find your perfect match!
+            Create your landlord account and start finding quality tenants!
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="mb-3 block text-sm text-gray-700">I am a</label>
-              <div className="space-y-3">
-                <RoleCard
-                  value="landlord"
-                  title="Landlord"
-                  description="I want to find tenants for my properties"
-                  icon={
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                    </svg>
-                  }
-                />
-                <RoleCard
-                  value="tenant"
-                  title="Tenant"
-                  description="I'm looking for a place to rent"
-                  icon={
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  }
-                />
-              </div>
-            </div>
-
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <label htmlFor="email" className="block text-sm text-gray-700">
