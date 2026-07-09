@@ -179,10 +179,10 @@ export function AddPropertyIntroPage() {
 
   if (!isMember) {
     const membershipBenefits = [
-      'List unlimited properties for a full year',
-      'Get matched with pre-screened, qualified renters',
+      'List unlimited properties — completely free for 6 months',
+      'Be first in line as we onboard pre-screened, qualified renters',
       'Access tenant applications and shareable links',
-      'Renews automatically each year — cancel anytime',
+      'After 6 months, membership is $350/year — cancel anytime',
     ]
     return (
       <div className="min-h-full">
@@ -197,16 +197,28 @@ export function AddPropertyIntroPage() {
 
             <h1 className="text-[2rem] font-medium text-gray-900">Activate Your Membership</h1>
             <p className="mx-auto mt-4 max-w-[420px] text-base leading-8 text-gray-600">
-              To list properties on Rental City, activate your annual landlord membership. This is required before you
-              can publish your first listing.
+              We&apos;re building Rental City&apos;s tenant network right now — and founding landlords get in free.
+              List your properties today so you&apos;re first in line when tenants start matching.
             </p>
 
-            <div className="mx-auto mt-7 max-w-[360px] rounded-xl bg-gray-50 px-6 py-6">
-              <div className="flex items-baseline justify-center gap-2 text-gray-900">
-                <span className="text-4xl font-semibold">${ANNUAL_MEMBERSHIP_FEE}</span>
-                <span className="text-lg text-gray-600">/year</span>
+            <div className="mx-auto mt-7 max-w-[360px] rounded-xl border border-emerald-200 bg-emerald-50 px-6 py-6">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Founding Landlord Offer
+              </span>
+              <div className="mt-3 flex items-baseline justify-center gap-3">
+                <span className="text-2xl font-medium text-gray-400 line-through decoration-2">
+                  ${ANNUAL_MEMBERSHIP_FEE}/year
+                </span>
+                <span className="text-4xl font-bold text-emerald-600">FREE</span>
               </div>
-              <p className="mt-2 text-sm text-gray-500">Auto-renewing annual membership</p>
+              <p className="mt-2 text-sm font-semibold text-emerald-700">for your first 6 months</p>
+              <p className="mt-2 text-sm text-gray-600">
+                Then ${ANNUAL_MEMBERSHIP_FEE}/year to keep your access. Cancel anytime before your free period ends
+                and you won&apos;t be charged.
+              </p>
             </div>
 
             <ul className="mx-auto mt-7 max-w-[360px] space-y-3 text-left">
@@ -235,7 +247,7 @@ export function AddPropertyIntroPage() {
               disabled={starting}
               className="mt-8 inline-flex items-center gap-2 rounded-lg btn-primary px-8 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {starting ? 'Processing…' : `Activate Membership — $${ANNUAL_MEMBERSHIP_FEE}/year`}
+              {starting ? 'Processing…' : 'Claim 6 Months Free'}
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
@@ -245,8 +257,12 @@ export function AddPropertyIntroPage() {
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              Secure payment processed by Stripe
+              $0 due today · Secure checkout by Stripe
             </div>
+            <p className="mx-auto mt-3 max-w-[380px] text-xs text-gray-400">
+              Card required at checkout. After your 6 free months, your membership renews automatically at $
+              {ANNUAL_MEMBERSHIP_FEE}/year unless you cancel before the free period ends.
+            </p>
           </div>
         </div>
 
@@ -257,7 +273,7 @@ export function AddPropertyIntroPage() {
             setClientSecret(null)
           }}
           clientSecret={clientSecret}
-          title="Activate your membership"
+          title="Claim your 6 months free"
         />
       </div>
     )

@@ -905,6 +905,8 @@ const UNIVERSAL_APP_FEE_CENTS: number[] = [5000]
 const LANDLORD_PROFILE_UNLOCK_CENTS = 20000
 // Landlord annual membership (auto-renewing subscription): $350/year.
 const LANDLORD_ANNUAL_CENTS = 35000
+// Launch promo: membership is free for the first 6 months, then billing begins.
+const LANDLORD_TRIAL_DAYS = 183
 
 /**
  * Shared, idempotent activation for a paid universal application window.
@@ -1445,7 +1447,10 @@ app.post('/api/stripe/landlord/membership/checkout', async (req, res) => {
       customer_email: user.email ?? undefined,
       client_reference_id: user.id,
       metadata: { landlordId: user.id, kind: 'landlord_annual' },
-      subscription_data: { metadata: { landlordId: user.id, kind: 'landlord_annual' } },
+      subscription_data: {
+        metadata: { landlordId: user.id, kind: 'landlord_annual' },
+        trial_period_days: LANDLORD_TRIAL_DAYS,
+      },
       line_items: [
         {
           quantity: 1,
@@ -1455,7 +1460,8 @@ app.post('/api/stripe/landlord/membership/checkout', async (req, res) => {
             recurring: { interval: 'year' },
             product_data: {
               name: 'Landlord Annual Membership',
-              description: 'List properties and receive tenant matches. Renews automatically each year.',
+              description:
+                'Free for your first 6 months, then $350/year. List properties and receive tenant matches. Renews automatically each year.',
             },
           },
         },

@@ -27,3 +27,8 @@ Authoritative fee model (client-confirmed):
 **Why:** allow click-through demos when the Stripe *publishable* (client) key is unavailable — embedded checkout can't render without it. (Server test key IS present, so real test-mode checkout still works when a pk is added.)
 **Non-negotiable policy:** the bypass must be OFF by default and can NEVER run in production. Enforced by a two-part gate — `NODE_ENV !== 'production'` in code AND the enabling flag scoped to the **development** environment only. Do not set the flag in shared/production scope.
 **Decision:** demo grants entitlements by reusing the exact `/confirm` fulfillment helpers (never a parallel code path), so demo access == paid access. Trade-off accepted: demo uses fresh synthetic payment ids per click, so it is NOT idempotent across repeated clicks (extra rows / re-opened windows) — fine for dev-only demos, do not rely on it for parity testing.
+
+## Launch promo: 6-month free trial (added July 2026)
+- Landlord membership checkout now sets `subscription_data.trial_period_days = 183` (~6 months) — $0 due today, card on file, Stripe auto-bills $350/yr after trial.
+- `mapSubscriptionStatus` treats `trialing` as `active`, so trial landlords get full access; confirm + webhook paths work without immediate payment.
+- Paywall UI shows crossed-out $350/yr + highlighted FREE for 6 months ("Founding Landlord Offer") with auto-renewal disclosure under the CTA.

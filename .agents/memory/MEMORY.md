@@ -1,1 +1,1 @@
-- [Stripe fee model & membership gating](stripe-fees.md) — tenant $50 / landlord $200 profile-unlock / $350-yr membership; membership enforced in UI (intro page) AND via RLS on properties.
+- [Stripe fee model & membership gating](stripe-fees.md) — tenant $50 / landlord $200 profile-unlock / $350-yr membership (6-mo free trial at launch); enforced in UI (intro page) AND via RLS on properties.
