@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/useAuth'
+import { MetaPixelTracker } from './components/MetaPixelTracker'
 import { AdminLayout } from './components/AdminLayout'
 import { Layout } from './components/Layout'
 import { OnboardingLayout } from './components/OnboardingLayout'
@@ -83,6 +84,8 @@ export default function App() {
   }
 
   return (
+    <>
+    <MetaPixelTracker />
     <Routes>
       <Route path="/" element={user ? <TenantLayout /> : <Layout />}>
         <Route index element={user ? <HomePage /> : <WelcomePage />} />
@@ -183,5 +186,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   )
 }
