@@ -72,6 +72,7 @@ export const landlordQuestions: LandlordQuestion[] = [
       { id: 'c', label: '1 eviction in the last 36 months' },
       { id: 'd', label: '1 eviction in the last 48 months' },
       { id: 'e', label: 'All of the above' },
+      { id: 'none', label: 'No, I would not accept any of the above', exclusive: true },
     ],
   },
   {
@@ -116,6 +117,7 @@ export const landlordQuestions: LandlordQuestion[] = [
       { id: 'c', label: 'In the last 36 months' },
       { id: 'd', label: 'In the last 48 months' },
       { id: 'e', label: 'All of the above' },
+      { id: 'none', label: 'No, I will not accept any of the above', exclusive: true },
     ],
   },
   {

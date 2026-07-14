@@ -1,6 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+
+const RECOVERY_TIMEOUT_MS = 10000
+
+// Supabase's recovery-link redirect carries `type=recovery` plus an actual
+// token (`access_token` for the implicit flow, `code` for PKCE) in the URL
+// hash/query. Requiring the token itself (not just the guessable `type=
+// recovery` string) is what distinguishes a real "came from the reset email"
+// visit from a plain logged-in session landing on this page directly.
+function looksLikeRecoveryLink(): boolean {
+  const hash = window.location.hash.replace(/^#/, '')
+  const hashParams = new URLSearchParams(hash)
+  const searchParams = new URLSearchParams(window.location.search)
+  const isRecoveryType = hashParams.get('type') === 'recovery' || searchParams.get('type') === 'recovery'
+  const hasToken = Boolean(hashParams.get('access_token') || searchParams.get('code'))
+  return isRecoveryType && hasToken
+}
 
 function ToggleButton({
   visible,
@@ -40,6 +56,52 @@ export function ResetPasswordPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [recoveryReady, setRecoveryReady] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!looksLikeRecoveryLink()) {
+      setLinkError('This reset link is invalid or has expired. Please request a new one.')
+      return
+    }
+
+    const markReady = () => {
+      if (cancelled) return
+      setRecoveryReady(true)
+      setLinkError(null)
+    }
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') markReady()
+    })
+
+    // Covers the case where the PASSWORD_RECOVERY event already fired (URL
+    // token parsed) before this listener was attached. Safe to trust
+    // getSession() here only because looksLikeRecoveryLink() already
+    // confirmed this page load came from a recovery-type redirect.
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled && data.session) markReady()
+    })
+
+    const timeout = setTimeout(() => {
+      if (!cancelled) {
+        setRecoveryReady((ready) => {
+          if (!ready) setLinkError('This reset link is invalid or has expired. Please request a new one.')
+          return ready
+        })
+      }
+    }, RECOVERY_TIMEOUT_MS)
+
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+      clearTimeout(timeout)
+    }
+  }, [])
 
   const requirements = [
     { label: 'At least 8 characters', met: newPassword.length >= 8 },
@@ -51,6 +113,11 @@ export function ResetPasswordPage() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
+
+    if (!recoveryReady) {
+      setError('Still verifying your reset link — please wait a moment and try again.')
+      return
+    }
 
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match')
@@ -142,14 +209,20 @@ export function ResetPasswordPage() {
               </div>
             </div>
 
+            {linkError ? (
+              <p className="text-sm text-red-500">
+                {linkError} <Link to="/forgot-password" className="underline">Request a new link</Link>
+              </p>
+            ) : null}
+
             {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !recoveryReady || !!linkError}
               className="w-full rounded-lg btn-primary py-3 text-sm font-medium text-white disabled:opacity-50"
             >
-              {loading ? 'Updating...' : 'Update Password'}
+              {linkError ? 'Link expired' : loading ? 'Updating...' : !recoveryReady ? 'Verifying reset link...' : 'Update Password'}
             </button>
           </form>
 

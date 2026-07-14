@@ -28,6 +28,36 @@ function formatAmenityLabel(label: string): string {
   return normalized.replace(/\b\w/g, (ch) => ch.toUpperCase())
 }
 
+// A malformed/unusable error string (empty, or just stray JSON punctuation
+// like the "]" this helper exists to prevent) vs. a real, specific,
+// human-readable message worth showing as-is (e.g. a unique-constraint
+// violation) rather than replacing with a generic fallback.
+function looksLikeReadableMessage(message: string): boolean {
+  const trimmed = message.trim()
+  return trimmed.length >= 4 && /[a-zA-Z]/.test(trimmed) && !/^[[\]{}]+$/.test(trimmed)
+}
+
+function friendlyPersistError(
+  error: { message?: string; code?: string } | null,
+  kind: 'upload' | 'save',
+): string {
+  const message = error?.message ?? ''
+  // Membership-gating RLS (`landlord_has_active_membership()`) only exists on
+  // the `properties` table insert/update policies — the storage bucket's
+  // policy is a plain path-ownership check with no membership condition, so a
+  // storage 403 is never a membership issue. Only attribute this specific
+  // message to the 'save' (insert) path, where Postgrest RLS violations use
+  // `.code === '42501'`.
+  const isMembershipRlsViolation = kind === 'save' && (error?.code === '42501' || /row-level security/i.test(message))
+  if (isMembershipRlsViolation) {
+    return "Your landlord membership isn't active, so this listing can't be published. Renew your membership and try again."
+  }
+  if (looksLikeReadableMessage(message)) return message
+  return kind === 'upload'
+    ? 'We could not upload one of your photos. Please try a different image or try again.'
+    : 'We could not save this property. Please try again, and contact support if the problem continues.'
+}
+
 function AmenityItem({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2 text-sm text-gray-800">
@@ -112,7 +142,7 @@ export function AddPropertyPreviewPage() {
           .from(PROPERTY_IMAGES_BUCKET)
           .upload(path, photo.file, { upsert: true })
         if (uploadError) {
-          setError(uploadError.message)
+          setError(friendlyPersistError(uploadError, 'upload'))
           setSubmitting(false)
           return
         }
@@ -153,7 +183,7 @@ export function AddPropertyPreviewPage() {
     setSubmitting(false)
 
     if (insertError) {
-      setError(insertError.message)
+      setError(friendlyPersistError(insertError, 'save'))
       return
     }
 
