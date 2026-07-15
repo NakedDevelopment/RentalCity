@@ -1710,6 +1710,9 @@ app.post('/api/support/notify', async (req, res) => {
   const requestId = typeof req.body?.requestId === 'string' ? req.body.requestId : null
   if (!requestId) return res.status(400).json({ error: 'requestId is required' })
 
+  // Per-user rate limit so a burst of tickets can't flood the support inbox.
+  if (!supportNotifyAllowed(user.id)) return res.json({ sent: false })
+
   const supportInbox = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || ''
   if (!supportInbox) {
     console.error('Support notification skipped: SUPPORT_EMAIL / FROM_EMAIL not configured')
@@ -1733,10 +1736,64 @@ app.post('/api/support/notify', async (req, res) => {
   if (!claimed) return res.json({ sent: false }) // already notified or not the owner
 
   const row = claimed as { id: string; subject: string; message: string }
+  const sent = await deliverSupportNotification(
+    admin,
+    { ...row, user_id: user.id },
+    supportInbox,
+    // Never derive email links from request headers (Origin is attacker
+    // controlled); use the canonical env-based app URL instead.
+    lifecycleAppUrl(),
+    user.email || null,
+  )
+  return res.json({ sent })
+})
+
+type SupportNotifyRow = { id: string; subject: string; message: string; user_id: string }
+
+// Sliding-window rate limit: at most 3 support notifications per user per hour.
+const SUPPORT_NOTIFY_WINDOW_MS = 60 * 60 * 1000
+const SUPPORT_NOTIFY_MAX_PER_WINDOW = 3
+const supportNotifyHits = new Map<string, number[]>()
+function supportNotifyAllowed(userId: string): boolean {
+  const now = Date.now()
+  const hits = (supportNotifyHits.get(userId) ?? []).filter(
+    (t) => now - t < SUPPORT_NOTIFY_WINDOW_MS,
+  )
+  if (hits.length >= SUPPORT_NOTIFY_MAX_PER_WINDOW) {
+    supportNotifyHits.set(userId, hits)
+    return false
+  }
+  hits.push(now)
+  supportNotifyHits.set(userId, hits)
+  // Opportunistic cleanup so the map can't grow unboundedly.
+  if (supportNotifyHits.size > 10000) {
+    for (const [k, v] of supportNotifyHits) {
+      if (v.every((t) => now - t >= SUPPORT_NOTIFY_WINDOW_MS)) supportNotifyHits.delete(k)
+    }
+  }
+  return true
+}
+
+/**
+ * Sends the support-team email for an already-claimed support request.
+ * Releases the notified_at claim on failure so a later retry can deliver it.
+ */
+async function deliverSupportNotification(
+  admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  row: SupportNotifyRow,
+  supportInbox: string,
+  appUrl: string,
+  knownEmail: string | null,
+): Promise<boolean> {
+  let senderEmail = knownEmail
+  if (!senderEmail) {
+    const { data: userData } = await admin.auth.admin.getUserById(row.user_id)
+    senderEmail = userData?.user?.email || null
+  }
   const { data: profile } = await admin
     .from('profiles')
     .select('display_name')
-    .eq('id', user.id)
+    .eq('id', row.user_id)
     .maybeSingle()
   const senderName =
     (profile as { display_name?: string | null } | null)?.display_name || 'Rental City user'
@@ -1745,21 +1802,63 @@ app.post('/api/support/notify', async (req, res) => {
     subject: row.subject,
     message: row.message,
     senderName,
-    senderEmail: user.email || 'unknown',
-    appUrl: lifecycleAppUrl(req),
+    senderEmail: senderEmail || 'unknown',
+    appUrl,
   })
   const sent = await sendReportEmail({ to: supportInbox, subject, html })
 
   if (!sent) {
-    // Release the claim so a later retry can deliver the notification.
-    await admin
-      .from('support_requests')
-      .update({ notified_at: null })
-      .eq('id', row.id)
+    // Release the claim so a later retry (client call or sweep) can deliver it.
+    await admin.from('support_requests').update({ notified_at: null }).eq('id', row.id)
     console.error('Support notification email failed for request', row.id)
   }
-  return res.json({ sent })
-})
+  return sent
+}
+
+/**
+ * Background sweep: retries support-ticket notifications that were never
+ * delivered (e.g. MailerSend quota exhausted or transient failures). Any row
+ * with notified_at IS NULL is claimed and re-attempted.
+ */
+async function sweepUnnotifiedSupportRequests(): Promise<void> {
+  const admin = getSupabaseAdmin()
+  if (!admin) return
+  const supportInbox = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || ''
+  if (!supportInbox) return
+  try {
+    const { data: rows, error } = await admin
+      .from('support_requests')
+      .select('id, subject, message, user_id')
+      .is('notified_at', null)
+      .order('created_at', { ascending: true })
+      .limit(50)
+    if (error) {
+      console.error('Support notify sweep query failed:', error.message)
+      return
+    }
+    const appUrl = lifecycleAppUrl()
+    for (const raw of (rows ?? []) as SupportNotifyRow[]) {
+      // Claim atomically; skip if another worker already claimed it.
+      const { data: claimed } = await admin
+        .from('support_requests')
+        .update({ notified_at: new Date().toISOString() })
+        .eq('id', raw.id)
+        .is('notified_at', null)
+        .select('id')
+        .maybeSingle()
+      if (!claimed) continue
+      const sent = await deliverSupportNotification(admin, raw, supportInbox, appUrl, null)
+      // If the provider is failing (e.g. daily quota), stop early — the next
+      // sweep will pick the remaining rows up.
+      if (!sent) return
+    }
+  } catch (err) {
+    console.error('Support notify sweep failed:', err instanceof Error ? err.message : String(err))
+  }
+}
+
+setTimeout(() => void sweepUnnotifiedSupportRequests(), 90 * 1000)
+setInterval(() => void sweepUnnotifiedSupportRequests(), 60 * 60 * 1000)
 
 /**
  * Stripe webhook (production reliability backstop). Registered with a raw body
