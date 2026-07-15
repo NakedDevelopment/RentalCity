@@ -24,7 +24,12 @@ import {
 } from './plaid'
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
-import { sendReportEmail, buildLandlordLifecycleEmail, type LandlordLifecycleKind } from './email'
+import {
+  sendReportEmail,
+  buildLandlordLifecycleEmail,
+  buildSupportNotificationEmail,
+  type LandlordLifecycleKind,
+} from './email'
 import Stripe from 'stripe'
 import type { Request, Response } from 'express'
 
@@ -1687,6 +1692,74 @@ async function sweepLandlordUploadReminders(): Promise<void> {
 
 setTimeout(() => void sweepLandlordUploadReminders(), 60 * 1000)
 setInterval(() => void sweepLandlordUploadReminders(), 6 * 60 * 60 * 1000)
+
+/**
+ * Email the support team when a new support request is submitted.
+ * Deduped via support_requests.notified_at using a claim-then-send pattern:
+ * the row is atomically claimed (notified_at set while still null), the email
+ * is sent, and on failure the claim is released so a retry can succeed.
+ */
+app.post('/api/support/notify', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const requestId = typeof req.body?.requestId === 'string' ? req.body.requestId : null
+  if (!requestId) return res.status(400).json({ error: 'requestId is required' })
+
+  const supportInbox = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || ''
+  if (!supportInbox) {
+    console.error('Support notification skipped: SUPPORT_EMAIL / FROM_EMAIL not configured')
+    return res.json({ sent: false })
+  }
+
+  // Atomically claim the notification. Only the ticket owner may trigger it,
+  // and the `is('notified_at', null)` guard makes duplicate calls no-ops.
+  const { data: claimed, error: claimError } = await admin
+    .from('support_requests')
+    .update({ notified_at: new Date().toISOString() })
+    .eq('id', requestId)
+    .eq('user_id', user.id)
+    .is('notified_at', null)
+    .select('id, subject, message')
+    .maybeSingle()
+  if (claimError) {
+    console.error('Support notify claim failed:', claimError.message)
+    return res.status(500).json({ error: 'Failed to process notification' })
+  }
+  if (!claimed) return res.json({ sent: false }) // already notified or not the owner
+
+  const row = claimed as { id: string; subject: string; message: string }
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .maybeSingle()
+  const senderName =
+    (profile as { display_name?: string | null } | null)?.display_name || 'Rental City user'
+
+  const { subject, html } = buildSupportNotificationEmail({
+    subject: row.subject,
+    message: row.message,
+    senderName,
+    senderEmail: user.email || 'unknown',
+    appUrl: lifecycleAppUrl(req),
+  })
+  const sent = await sendReportEmail({ to: supportInbox, subject, html })
+
+  if (!sent) {
+    // Release the claim so a later retry can deliver the notification.
+    await admin
+      .from('support_requests')
+      .update({ notified_at: null })
+      .eq('id', row.id)
+    console.error('Support notification email failed for request', row.id)
+  }
+  return res.json({ sent })
+})
 
 /**
  * Stripe webhook (production reliability backstop). Registered with a raw body

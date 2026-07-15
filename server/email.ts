@@ -142,6 +142,47 @@ export function buildLandlordLifecycleEmail(
   }
 }
 
+export function buildSupportNotificationEmail(params: {
+  subject: string
+  message: string
+  senderName: string
+  senderEmail: string
+  appUrl: string
+}): { subject: string; html: string } {
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return {
+    subject: `New support request: ${params.subject}`,
+    html: `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:24px 0;">
+      <tr><td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;">
+          <tr><td style="background-color:#0F1E3D;padding:20px 32px;">
+            <span style="color:#ffffff;font-size:18px;font-weight:bold;">Rental City — Support</span>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <p style="margin:0 0 16px;font-size:16px;color:#111827;">A new support request was submitted.</p>
+            <p style="margin:0 0 4px;font-size:14px;color:#374151;"><strong>From:</strong> ${esc(params.senderName)} (${esc(params.senderEmail)})</p>
+            <p style="margin:0 0 16px;font-size:14px;color:#374151;"><strong>Subject:</strong> ${esc(params.subject)}</p>
+            <div style="border-left:3px solid #3A7AFE;padding:8px 16px;background-color:#f9fafb;">
+              <p style="margin:0;font-size:14px;line-height:22px;color:#374151;white-space:pre-wrap;">${esc(params.message)}</p>
+            </div>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px;">
+              <tr><td style="border-radius:8px;background-color:#3A7AFE;">
+                <a href="${params.appUrl}/admin/issues" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:bold;color:#ffffff;text-decoration:none;">Open in Admin Panel</a>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`,
+  }
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')

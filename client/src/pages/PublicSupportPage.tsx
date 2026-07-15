@@ -3,6 +3,7 @@ import { useAuth } from '../lib/useAuth'
 import { useEffect, useState } from 'react'
 import { fetchSiteSettingsMerged } from '../lib/siteSettings'
 import { supabase } from '../lib/supabase'
+import { notifySupportTeam } from '../lib/notifySupportTeam'
 
 export function PublicSupportPage() {
   const { user } = useAuth()
@@ -51,11 +52,15 @@ export function PublicSupportPage() {
 
     setSubmitting(true)
 
-    const { error: insertError } = await supabase.from('support_requests').insert({
-      user_id: user.id,
-      subject: subject.trim(),
-      message: message.trim(),
-    })
+    const { data: inserted, error: insertError } = await supabase
+      .from('support_requests')
+      .insert({
+        user_id: user.id,
+        subject: subject.trim(),
+        message: message.trim(),
+      })
+      .select('id')
+      .single()
 
     setSubmitting(false)
 
@@ -63,6 +68,10 @@ export function PublicSupportPage() {
       setError(insertError.message)
       return
     }
+
+    // Best-effort email notification to the support team; the ticket itself
+    // is already saved, so a notification failure never blocks the user.
+    void notifySupportTeam(inserted?.id)
 
     setSubject('')
     setMessage('')
