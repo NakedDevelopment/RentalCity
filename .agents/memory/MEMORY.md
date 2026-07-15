@@ -1,2 +1,3 @@
 - [Stripe fee model & membership gating](stripe-fees.md) — tenant $50 / landlord $200 profile-unlock / $350-yr membership (6-mo free trial at launch); enforced in UI (intro page) AND via RLS on properties.
 - [Landlord lifecycle emails](landlord-lifecycle-emails.md) — 3 one-time onboarding emails; claim-then-send dedupe pattern; publish-triggered + 6h sweep.
+- [Password recovery routing](password-recovery-routing.md) — Supabase reset links can fall back to Site URL root; global RecoveryLinkHandler must catch them before role redirects; add prod URLs to Supabase allow-list.

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/useAuth'
 import { MetaPixelTracker } from './components/MetaPixelTracker'
+import { RecoveryLinkHandler } from './components/RecoveryLinkHandler'
 import { AdminLayout } from './components/AdminLayout'
 import { Layout } from './components/Layout'
 import { OnboardingLayout } from './components/OnboardingLayout'
@@ -79,6 +80,7 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <span className="text-gray-500">Loading...</span>
+        <RecoveryLinkHandler />
       </div>
     )
   }
@@ -86,6 +88,7 @@ export default function App() {
   return (
     <>
     <MetaPixelTracker />
+    <RecoveryLinkHandler />
     <Routes>
       <Route path="/" element={user ? <TenantLayout /> : <Layout />}>
         <Route index element={user ? <HomePage /> : <WelcomePage />} />
