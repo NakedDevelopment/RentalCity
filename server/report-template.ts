@@ -667,7 +667,7 @@ function buildReportPage(
     <div class="k">Your next step</div>
     <h3>You know what it's worth. <em>Now fill it.</em></h3>
     <p>List your property on Rental City and get matched with pre-screened, qualified renters. No agents. No wasted showings.</p>
-    <a href="https://www.gorentalcity.com/">List your property on Rental City
+    <a href="https://www.gorentalcity.com/" onclick="if(window.fbq){fbq('trackCustom','ListPropertyClick',{placement:'report_cta'})}">List your property on Rental City
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
     </a>
     <p class="reassure">$350/year membership to list &amp; match with pre-screened renters · Matched in 48 hours</p>
@@ -708,6 +708,23 @@ function buildReportPage(
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Meta Pixel Code -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1644132773295647');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none"
+src="https://www.facebook.com/tr?id=1644132773295647&ev=PageView&noscript=1"
+/></noscript>
+<!-- End Meta Pixel Code -->
 <style>${REPORT_CSS}</style>
 </head>
 <body>
@@ -731,7 +748,7 @@ function buildReportPage(
         <b>Know what it's worth? Now fill it.</b>
         <span>List and match with pre-screened renters — $350/year membership.</span>
       </div>
-      <a href="https://www.gorentalcity.com/">List your property
+      <a href="https://www.gorentalcity.com/" onclick="if(window.fbq){fbq('trackCustom','ListPropertyClick',{placement:'report_header'})}">List your property
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
       </a>
     </div>

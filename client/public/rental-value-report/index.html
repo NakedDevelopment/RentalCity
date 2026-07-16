@@ -643,6 +643,15 @@ function renderResult(r, beds, baths, sqft, email) {
   var form = document.getElementById('rentForm');
   var btn = document.getElementById('submitBtn');
 
+  var leadTracked = false;
+  function trackLeadOnce() {
+    if (leadTracked) return;
+    leadTracked = true;
+    if (typeof fbq === 'function') {
+      try { fbq('track', 'Lead'); } catch (err) {}
+    }
+  }
+
   var addressEl = document.getElementById('address');
   var ptypeEl = document.getElementById('ptype');
   var bedsEl = document.getElementById('beds');
@@ -830,6 +839,7 @@ function renderResult(r, beds, baths, sqft, email) {
 
     function fallback() {
       setLoading(false);
+      trackLeadOnce();
       renderResult(demoEstimate(address + ptypeEl.value, beds, baths, sqft), beds, baths, sqft, email);
     }
 
@@ -843,6 +853,7 @@ function renderResult(r, beds, baths, sqft, email) {
       try { data = JSON.parse(xhr.responseText); } catch (err) { data = null; }
       if (xhr.status >= 200 && xhr.status < 300 && data && data.rent != null) {
         setLoading(false);
+        trackLeadOnce();
         renderResult(data, beds, baths, sqft, email);
       } else {
         fallback();
