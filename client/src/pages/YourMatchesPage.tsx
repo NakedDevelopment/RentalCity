@@ -1285,18 +1285,36 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
 
           {displayedLandlordMatches.length === 0 ? (
             landlordMatches.length === 0 ? (
-              <div className="mx-auto mt-8 w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+              <div className="mx-auto mt-8 w-full max-w-2xl rounded-2xl border border-gray-200 bg-white px-8 py-12 text-center shadow-sm sm:px-12">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                   <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-6.93M15 7a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
                 </div>
-                <h2 className="mt-5 text-xl font-semibold text-gray-900">Your tenant matches are on the way</h2>
-                <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-gray-600">
-                  We&apos;re welcoming new renters to Rental City every day, and your property is already in the
-                  matching lineup. The moment we find tenants who fit what you&apos;re looking for, they&apos;ll
-                  appear right here — and we&apos;ll notify you the second they do.
+                <h2 className="mt-6 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Welcome to Rental City!</h2>
+                <p className="mx-auto mt-3 max-w-xl text-lg leading-relaxed text-gray-700">
+                  We&apos;re onboarding landlords in your area right now. Once we hit the target number, we
+                  unlock the tenant side — meaning faster matches, lower vacancy, and higher ROI for early
+                  adopters.
                 </p>
+                <p className="mx-auto mt-4 max-w-xl text-lg leading-relaxed text-gray-700">
+                  You&apos;re part of the first wave shaping this new rental tech.
+                </p>
+                <div className="mx-auto mt-10 max-w-xl border-t border-gray-200 pt-8">
+                  <p className="text-base leading-relaxed text-gray-600">
+                    Help speed the launch: share with landlord friends{' '}
+                    <span aria-hidden="true">👉</span>{' '}
+                    <a
+                      href="https://www.gorentalcity.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-700"
+                    >
+                      www.gorentalcity.com
+                    </a>
+                    . The sooner they join, the sooner everyone wins.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-8 text-center">
