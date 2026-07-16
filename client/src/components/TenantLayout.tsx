@@ -1,26 +1,31 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutGrid, User, Mail, Settings as SettingsIcon, Building2, Bell, type LucideIcon } from 'lucide-react'
+import { LayoutGrid, User, Mail, Settings as SettingsIcon, Building2, Bell, Calculator, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { useRedeemPendingLandlordInvite } from '../lib/useRedeemPendingLandlordInvite'
 import { useTenantInviteRestriction } from '../lib/useTenantInviteRestriction'
+import { TENANT_SIDE_ENABLED } from '../lib/featureFlags'
 import { TenantInviteBanner } from './TenantInviteBanner'
+import { TenantSideComingSoon } from './TenantSideComingSoon'
 import { UserMenu } from './UserMenu'
 
-const tenantNavItems: { path: string; label: string; icon: LucideIcon }[] = [
+type NavItem = { path: string; label: string; icon: LucideIcon; external?: boolean }
+
+const tenantNavItems: NavItem[] = [
   { path: '/matches', label: 'Matches', icon: LayoutGrid },
   { path: '/account', label: 'My Profile', icon: User },
   { path: '/messages', label: 'Inbox', icon: Mail },
   { path: '/account/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
-const landlordNavItems: { path: string; label: string; icon: LucideIcon }[] = [
+const landlordNavItems: NavItem[] = [
   { path: '/matches', label: 'Matches', icon: LayoutGrid },
   { path: '/properties', label: 'Properties', icon: Building2 },
   { path: '/messages', label: 'Inbox', icon: Mail },
   { path: '/account', label: 'My Profile', icon: User },
   { path: '/account/settings', label: 'Settings', icon: SettingsIcon },
+  { path: 'https://value.gorentalcity.com/', label: 'Rental Value', icon: Calculator, external: true },
 ]
 
 // For /account/settings, we need to match when path is exactly /account/settings
@@ -100,6 +105,13 @@ export function TenantLayout() {
     return <Navigate to="/admin" replace />
   }
 
+  // Launch sequencing: tenant side stays hidden behind the flag until there's
+  // enough landlord inventory. Short-circuits before any tenant-only routes,
+  // nav items, or data fetches below ever mount.
+  if (profileRole === 'tenant' && !TENANT_SIDE_ENABLED) {
+    return <TenantSideComingSoon />
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F8FAFD] text-gray-600" style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* Top Header */}
@@ -128,19 +140,25 @@ export function TenantLayout() {
           <nav className="flex-1 px-4 py-6 space-y-1.5">
             {navItems.map((item) => {
               const Icon = item.icon
-              const isActive = isNavActive(location.pathname, item.path)
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-3.5 px-4 py-3 rounded-xl transition-all font-semibold text-sm ${
-                    isActive
-                      ? 'bg-[#EEF4FE] text-[#3A7AFE]'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-[#0F1E3D]'
-                  }`}
-                >
+              const isActive = !item.external && isNavActive(location.pathname, item.path)
+              const className = `flex items-center gap-3.5 px-4 py-3 rounded-xl transition-all font-semibold text-sm ${
+                isActive
+                  ? 'bg-[#EEF4FE] text-[#3A7AFE]'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-[#0F1E3D]'
+              }`
+              const content = (
+                <>
                   <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
                   {item.label}
+                </>
+              )
+              return item.external ? (
+                <a key={item.path} href={item.path} target="_blank" rel="noopener noreferrer" className={className}>
+                  {content}
+                </a>
+              ) : (
+                <Link key={item.path} to={item.path} className={className}>
+                  {content}
                 </Link>
               )
             })}
@@ -164,17 +182,23 @@ export function TenantLayout() {
           <nav className="md:hidden flex items-center gap-1.5 overflow-x-auto bg-white border-b border-gray-200/60 px-4 py-2">
             {navItems.map((item) => {
               const Icon = item.icon
-              const isActive = isNavActive(location.pathname, item.path)
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${
-                    isActive ? 'bg-[#EEF4FE] text-[#3A7AFE]' : 'text-gray-500'
-                  }`}
-                >
+              const isActive = !item.external && isNavActive(location.pathname, item.path)
+              const className = `flex items-center gap-2 px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${
+                isActive ? 'bg-[#EEF4FE] text-[#3A7AFE]' : 'text-gray-500'
+              }`
+              const content = (
+                <>
                   <Icon className="w-4 h-4" />
                   {item.label}
+                </>
+              )
+              return item.external ? (
+                <a key={item.path} href={item.path} target="_blank" rel="noopener noreferrer" className={className}>
+                  {content}
+                </a>
+              ) : (
+                <Link key={item.path} to={item.path} className={className}>
+                  {content}
                 </Link>
               )
             })}

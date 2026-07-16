@@ -108,8 +108,10 @@ export function LandlordTenantProfilePage() {
   const [applicationPropertyId, setApplicationPropertyId] = useState<string | null>(null)
   const [accepting, setAccepting] = useState(false)
   const [declining, setDeclining] = useState(false)
+  const [undoingDecline, setUndoingDecline] = useState(false)
   const [acceptError, setAcceptError] = useState<string | null>(null)
   const [declineError, setDeclineError] = useState<string | null>(null)
+  const [undoDeclineError, setUndoDeclineError] = useState<string | null>(null)
   const [loadedApplicationStatus, setLoadedApplicationStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null)
   const [pendingUnlockedAt, setPendingUnlockedAt] = useState<string | null>(null)
   const [messageThreadId, setMessageThreadId] = useState<string | null>(null)
@@ -597,6 +599,7 @@ export function LandlordTenantProfilePage() {
       }
       setMessageThreadId(threadId)
 
+      setLoadedApplicationStatus('approved')
       setPendingApplicationId(null)
       setAcceptModalOpen(true)
     } catch (e) {
@@ -622,13 +625,60 @@ export function LandlordTenantProfilePage() {
 
       if (error) throw error
 
+      const appId = pendingApplicationId
+      setLoadedApplicationStatus('rejected')
       setPendingApplicationId(null)
       setDeclineModalOpen(false)
-      navigate(`/matches/tenant/${tenant.id}`, { replace: true, state: location.state })
+      // Keep ?application= in the URL (unlike a bare navigate, which would drop
+      // matchDecisionContext and bounce this page into its browse-only mode).
+      navigate(`/matches/tenant/${tenant.id}?application=${encodeURIComponent(appId)}`, {
+        replace: true,
+        state: location.state,
+      })
     } catch (e) {
       setDeclineError(e instanceof Error ? e.message : 'Failed to decline this match')
     } finally {
       setDeclining(false)
+    }
+  }
+
+  async function handleUndoDecline() {
+    if (!profileApplicationId) return
+    setUndoDeclineError(null)
+    setUndoingDecline(true)
+    try {
+      const { data: prior, error: priorErr } = await supabase
+        .from('applications')
+        .select('unlocked_at')
+        .eq('id', profileApplicationId)
+        .eq('status', 'rejected')
+        .maybeSingle()
+      if (priorErr) throw priorErr
+      const { data: updated, error } = await supabase
+        .from('applications')
+        .update({
+          status: 'pending',
+          ...(prior?.unlocked_at ? { unlocked_at: prior.unlocked_at } : {}),
+        })
+        .eq('id', profileApplicationId)
+        .eq('status', 'rejected')
+        .select('id')
+      if (error) throw error
+      if (!updated?.length) {
+        throw new Error('This application could not be restored. It may have already changed.')
+      }
+
+      setLoadedApplicationStatus('pending')
+      setPendingApplicationId(profileApplicationId)
+      setPendingUnlockedAt(prior?.unlocked_at ?? null)
+      navigate(`/matches/tenant/${tenant.id}?application=${encodeURIComponent(profileApplicationId)}`, {
+        replace: true,
+        state: location.state,
+      })
+    } catch (e) {
+      setUndoDeclineError(e instanceof Error ? e.message : 'Could not restore application')
+    } finally {
+      setUndoingDecline(false)
     }
   }
 
@@ -1033,6 +1083,22 @@ export function LandlordTenantProfilePage() {
                     )}
                   </button>
                 </div>
+              </div>
+            ) : null}
+
+            {matchDecisionContext && isDeclined ? (
+              <div className="mt-5 space-y-3">
+                {undoDeclineError ? (
+                  <p className="text-sm text-red-600">{undoDeclineError}</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={handleUndoDecline}
+                  disabled={undoingDecline}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  {undoingDecline ? 'Restoring…' : 'Undo decline'}
+                </button>
               </div>
             ) : null}
       </div>

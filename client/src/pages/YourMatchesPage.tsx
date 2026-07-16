@@ -144,9 +144,10 @@ const LANDLORD_MATCH_STATUS_LABEL: Record<LandlordMatchStatus, string> = {
   declined: 'Declined',
 }
 
-/** Opens landlord view of tenant profile (browse-only). Unlock / accept / decline stay on Your matches. */
+/** Opens the landlord's view of a tenant profile — unlock/approve/decline live there, not on this card. */
 function landlordTenantProfilePath(match: LandlordMatchCard): string {
-  return `/matches/tenant/${encodeURIComponent(match.tenantId)}`
+  const qs = match.applicationId ? `?application=${encodeURIComponent(match.applicationId)}` : ''
+  return `/matches/tenant/${encodeURIComponent(match.tenantId)}${qs}`
 }
 
 /** Tenant opens the public-style landlord profile (mirrors landlord → tenant profile link). */
@@ -370,8 +371,6 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [matchByPropertyId, setMatchByPropertyId] = useState<Record<string, MatchResult>>({})
   const [matchByTenantId, setMatchByTenantId] = useState<Record<string, MatchResult>>({})
   const [matchLoading, setMatchLoading] = useState(false)
-  const [landlordCardBusyId, setLandlordCardBusyId] = useState<string | null>(null)
-  const [landlordCardError, setLandlordCardError] = useState<{ cardId: string; message: string } | null>(null)
 
   const commitTenantMatchesTab = useCallback(
     (tab: 'all' | 'saved' | 'applied') => {
@@ -719,172 +718,6 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     setLandlordProperties(list)
     return list
   }, [user])
-
-  const reloadLandlordMatchesData = useCallback(async () => {
-    const props = await loadLandlordProperties()
-    const ids = props?.map((p) => p.id) ?? []
-    const targetIds =
-      landlordProperty && ids.includes(landlordProperty) ? [landlordProperty] : ids
-    if (targetIds.length > 0) await loadLandlordMatches(targetIds)
-    else {
-      setLandlordMatches([])
-    }
-  }, [landlordProperty, loadLandlordMatches, loadLandlordProperties])
-
-  const handleLandlordCardUnlock = useCallback(
-    async (match: LandlordMatchCard) => {
-      if (!user || !match.applicationId) return
-      setLandlordCardError(null)
-      setLandlordCardBusyId(match.id)
-      try {
-        const now = new Date().toISOString()
-        const { data, error } = await supabase
-          .from('applications')
-          .update({ unlocked_at: now })
-          .eq('id', match.applicationId)
-          .eq('status', 'pending')
-          .select('id')
-        if (error) throw error
-        if (!data?.length) {
-          throw new Error('This application could not be unlocked. It may no longer be pending.')
-        }
-        await reloadLandlordMatchesData()
-      } catch (e) {
-        setLandlordCardError({
-          cardId: match.id,
-          message: e instanceof Error ? e.message : 'Could not unlock',
-        })
-      } finally {
-        setLandlordCardBusyId(null)
-      }
-    },
-    [user, reloadLandlordMatchesData],
-  )
-
-  const handleLandlordCardUndoDecline = useCallback(
-    async (match: LandlordMatchCard) => {
-      if (!user || !match.applicationId) return
-      setLandlordCardError(null)
-      setLandlordCardBusyId(match.id)
-      try {
-        const { data: prior, error: priorErr } = await supabase
-          .from('applications')
-          .select('unlocked_at')
-          .eq('id', match.applicationId)
-          .eq('status', 'rejected')
-          .maybeSingle()
-        if (priorErr) throw priorErr
-        const unlockToKeep =
-          prior?.unlocked_at ??
-          (match.applicationUnlockedAt?.trim() ? match.applicationUnlockedAt : null)
-        const { error } = await supabase
-          .from('applications')
-          .update({
-            status: 'pending',
-            ...(unlockToKeep ? { unlocked_at: unlockToKeep } : {}),
-          })
-          .eq('id', match.applicationId)
-          .eq('status', 'rejected')
-        if (error) throw error
-        await reloadLandlordMatchesData()
-      } catch (e) {
-        setLandlordCardError({
-          cardId: match.id,
-          message: e instanceof Error ? e.message : 'Could not restore application',
-        })
-      } finally {
-        setLandlordCardBusyId(null)
-      }
-    },
-    [user, reloadLandlordMatchesData],
-  )
-
-  const handleLandlordCardApprove = useCallback(
-    async (match: LandlordMatchCard) => {
-      if (!user || !match.applicationId) return
-      setLandlordCardError(null)
-      setLandlordCardBusyId(match.id)
-      try {
-        const { data: updated, error: updateErr } = await supabase
-          .from('applications')
-          .update({ status: 'approved' })
-          .eq('id', match.applicationId)
-          .eq('status', 'pending')
-          .not('unlocked_at', 'is', null)
-          .select('id')
-        if (updateErr) throw updateErr
-        if (!updated?.length) {
-          throw new Error('This application could not be approved. It may no longer be pending.')
-        }
-
-        const { data: existing } = await supabase
-          .from('message_threads')
-          .select('id')
-          .eq('tenant_id', match.tenantId)
-          .eq('landlord_id', user.id)
-          .maybeSingle()
-
-        if (existing) {
-          const { error: touchErr } = await supabase
-            .from('message_threads')
-            .update({
-              property_id: match.propertyId,
-              application_id: match.applicationId,
-            })
-            .eq('id', existing.id)
-          if (touchErr) throw touchErr
-        } else {
-          const { error: insertErr } = await supabase.from('message_threads').insert({
-            application_id: match.applicationId,
-            tenant_id: match.tenantId,
-            landlord_id: user.id,
-            property_id: match.propertyId,
-          })
-          if (insertErr) throw insertErr
-        }
-
-        await reloadLandlordMatchesData()
-      } catch (e) {
-        setLandlordCardError({
-          cardId: match.id,
-          message: e instanceof Error ? e.message : 'Could not approve',
-        })
-      } finally {
-        setLandlordCardBusyId(null)
-      }
-    },
-    [user, reloadLandlordMatchesData],
-  )
-
-  const handleLandlordCardDecline = useCallback(
-    async (match: LandlordMatchCard) => {
-      if (!user || !match.applicationId) return
-      setLandlordCardError(null)
-      setLandlordCardBusyId(match.id)
-      try {
-        const { data: updated, error } = await supabase
-          .from('applications')
-          .update({ status: 'rejected' })
-          .eq('id', match.applicationId)
-          .eq('status', 'pending')
-          .not('unlocked_at', 'is', null)
-          .select('id')
-        if (error) throw error
-        if (!updated?.length) {
-          throw new Error('This application could not be declined. It may no longer be pending.')
-        }
-        await reloadLandlordMatchesData()
-      } catch (e) {
-        setLandlordCardError({
-          cardId: match.id,
-          message: e instanceof Error ? e.message : 'Could not decline',
-        })
-      } finally {
-        setLandlordCardBusyId(null)
-      }
-    },
-    [user, reloadLandlordMatchesData],
-  )
 
   // Load match scores for landlord applicant list
   useEffect(() => {
@@ -1436,69 +1269,13 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                 {match.hasApplication &&
                 (workflow === 'locked' || workflow === 'declined' || workflow === 'unlocked') ? (
                   <div className="mt-4 border-t border-gray-100 pt-4">
-                    {landlordCardError?.cardId === match.id ? (
-                      <p className="mb-3 text-sm text-red-600">{landlordCardError.message}</p>
-                    ) : null}
-                    <div className="flex w-full flex-col gap-2">
-                      {workflow === 'locked' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleLandlordCardUnlock(match)}
-                          disabled={landlordCardBusyId !== null}
-                          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg btn-primary px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {landlordCardBusyId === match.id ? 'Unlocking…' : 'Unlock profile'}
-                        </button>
-                      ) : null}
-                      {workflow === 'unlocked' ? (
-                        <div className="grid w-full grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleLandlordCardApprove(match)}
-                            disabled={landlordCardBusyId !== null}
-                            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg btn-primary px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {landlordCardBusyId === match.id ? (
-                              'Approving…'
-                            ) : (
-                              <>
-                                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Approve
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLandlordCardDecline(match)}
-                            disabled={landlordCardBusyId !== null}
-                            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {landlordCardBusyId === match.id ? (
-                              'Declining…'
-                            ) : (
-                              <>
-                                <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                                Decline
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      ) : null}
-                      {workflow === 'declined' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleLandlordCardUndoDecline(match)}
-                          disabled={landlordCardBusyId !== null}
-                          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {landlordCardBusyId === match.id ? 'Restoring…' : 'Undo decline'}
-                        </button>
-                      ) : null}
-                    </div>
+                    <Link
+                      to={landlordTenantProfilePath(match)}
+                      state={tenantProfileNavState}
+                      className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg btn-primary px-4 py-3 text-sm font-medium text-white"
+                    >
+                      {workflow === 'locked' ? 'Review to unlock profile' : 'Review to decide'}
+                    </Link>
                   </div>
                 ) : null}
               </div>
