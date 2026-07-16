@@ -54,4 +54,3 @@ build = ["npm", "run", "build"]
 PLAID_ENV = "sandbox"
 
 [userenv.development]
-DEMO_BYPASS_PAYMENTS = "true"
