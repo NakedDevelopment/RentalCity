@@ -173,7 +173,7 @@ function buildEmail(
   let logo: string
   const origin = isAbsoluteUrl(reportUrl) ? originOf(reportUrl) : null
   if (origin) {
-    logo = `<img src="${htmlEscape(origin)}/brand/rental-city-wordmark-white.svg" alt="Rental City" height="22" style="height:22px;display:block;border:0;margin:0 0 22px;" />`
+    logo = `<img src="${htmlEscape(origin)}/brand/rental-city-wordmark-white.png" alt="Rental City" width="89" height="22" style="height:22px;width:auto;display:block;border:0;margin:0 0 22px;" />`
   } else {
     logo = `<div style="font-size:20px;font-weight:800;color:#ffffff;letter-spacing:-0.02em;margin:0 0 22px;">Rental City</div>`
   }
