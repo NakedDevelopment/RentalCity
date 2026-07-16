@@ -398,7 +398,7 @@ const REPORT_CSS = `
   .rec .gain { font-size: 14px; font-weight: 800; color: var(--accepted-text); white-space: nowrap; }
 
   .rep-cta { background: var(--gradient-primary); padding: 44px; color: #fff; position: relative; overflow: hidden; text-align: center; }
-  .rep-cta::after { content:""; position:absolute; inset:0; background: radial-gradient(500px 240px at 50% 130%, rgba(255,255,255,0.18), transparent 60%); }
+  .rep-cta::after { content:""; position:absolute; inset:0; pointer-events: none; background: radial-gradient(500px 240px at 50% 130%, rgba(255,255,255,0.18), transparent 60%); }
   .rep-cta > * { position: relative; }
   .rep-cta .k { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.9; }
   .rep-cta h3 { color: #fff; font-size: clamp(24px,3vw,30px); font-weight: 800; letter-spacing: -0.03em; margin: 12px 0 0; }
