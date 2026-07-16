@@ -253,7 +253,7 @@ function buildEmail(
         <p style="font-size:15px;color:#404040;margin:0 0 16px;">Your full report breaks down every comparable, your local market trend, and three specific ways to push your rent higher.</p>
         <div style="text-align:center;padding:6px 0 4px;">
           <a href="${buttonHref}" style="display:block;background:${GRADIENT};color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:16px;border-radius:11px;">View your full rental report →</a>
-          <p style="font-size:13px;color:#737373;margin:12px 0 0;">Ready to fill it? <a href="https://gorentalcity.com/signup" style="color:#3A7AFE;font-weight:700;text-decoration:none;">List your property free on Rental City →</a></p>
+          <p style="font-size:13px;color:#737373;margin:12px 0 0;">Ready to fill it? <a href="https://www.gorentalcity.com/" style="color:#3A7AFE;font-weight:700;text-decoration:none;">List your property free on Rental City →</a></p>
         </div>
       </td></tr>
       <tr><td style="padding:24px 32px 30px;border-top:1px solid #E5E5E5;margin-top:22px;font-size:12px;color:#737373;line-height:1.6;">
@@ -667,7 +667,7 @@ function buildReportPage(
     <div class="k">Your next step</div>
     <h3>You know what it's worth. <em>Now fill it.</em></h3>
     <p>List your property on Rental City and get matched with pre-screened, qualified renters. No agents. No wasted showings.</p>
-    <a href="https://gorentalcity.com/signup">List your property on Rental City
+    <a href="https://www.gorentalcity.com/">List your property on Rental City
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
     </a>
     <p class="reassure">$350/year membership to list &amp; match with pre-screened renters · Matched in 48 hours</p>
@@ -731,7 +731,7 @@ function buildReportPage(
         <b>Know what it's worth? Now fill it.</b>
         <span>List and match with pre-screened renters — $350/year membership.</span>
       </div>
-      <a href="https://gorentalcity.com/signup">List your property
+      <a href="https://www.gorentalcity.com/">List your property
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
       </a>
     </div>
