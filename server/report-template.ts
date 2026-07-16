@@ -670,7 +670,7 @@ function buildReportPage(
     <a href="https://www.gorentalcity.com/" onclick="if(window.fbq){fbq('trackCustom','ListPropertyClick',{placement:'report_cta'})}">List your property on Rental City
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
     </a>
-    <p class="reassure">$350/year membership to list &amp; match with pre-screened renters · Matched in 48 hours</p>
+    <p class="reassure">First 6 months free, then $350/year membership</p>
   </div>`)
 
   // Methodology (static)
@@ -746,7 +746,7 @@ src="https://www.facebook.com/tr?id=1644132773295647&ev=PageView&noscript=1"
     <div class="rep-head-cta">
       <div class="rhc-copy">
         <b>Know what it's worth? Now fill it.</b>
-        <span>List and match with pre-screened renters — $350/year membership.</span>
+        <span>List and match with pre-screened renters — first 6 months free, then $350/year membership.</span>
       </div>
       <a href="https://www.gorentalcity.com/" onclick="if(window.fbq){fbq('trackCustom','ListPropertyClick',{placement:'report_header'})}">List your property
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
