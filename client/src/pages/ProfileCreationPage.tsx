@@ -309,13 +309,6 @@ export function ProfileCreationPage() {
                 >
                   {loading ? 'Saving...' : 'Continue'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/onboarding/survey/intro')}
-                  className="w-full text-sm font-medium text-gray-500 underline underline-offset-2 hover:text-gray-700"
-                >
-                  Skip for now
-                </button>
               </div>
             </div>
 

@@ -284,13 +284,6 @@ export function CompatibilitySurveyPage() {
               Back
             </button>
 
-            <Link
-              to="/matches"
-              className="text-sm font-medium text-gray-600 hover:text-gray-900"
-            >
-              Skip for now
-            </Link>
-
             {step < totalQuestions ? (
               <button
                 type="button"

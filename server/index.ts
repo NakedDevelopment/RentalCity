@@ -1272,6 +1272,7 @@ app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
         },
       ],
       ui_mode: 'embedded',
+      allow_promotion_codes: true,
       return_url: `${origin}/matches/tenant/${application.tenant_id}?application=${applicationId}&unlock=success&session_id={CHECKOUT_SESSION_ID}`,
     })
     return res.json({ clientSecret: session.client_secret })
@@ -1310,18 +1311,28 @@ app.post('/api/stripe/landlord/profile-unlock/confirm', async (req, res) => {
   if (session.metadata?.landlordId !== user.id) {
     return res.status(403).json({ error: 'Forbidden' })
   }
-  if (session.payment_status !== 'paid') {
+  // 'no_payment_required' occurs when a 100%-off promotion code brings the total
+  // to $0 — Stripe completes the session without charging.
+  if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
     return res.status(402).json({ error: 'Payment has not completed yet.' })
   }
-  if (session.amount_total !== LANDLORD_PROFILE_UNLOCK_CENTS) {
+  // Full price, or a smaller (possibly $0) total when a promotion code was applied.
+  const discounted = (session.total_details?.amount_discount ?? 0) > 0
+  if (
+    session.amount_total !== LANDLORD_PROFILE_UNLOCK_CENTS &&
+    !(discounted && typeof session.amount_total === 'number' && session.amount_total < LANDLORD_PROFILE_UNLOCK_CENTS)
+  ) {
     return res.status(400).json({ error: 'Unexpected payment amount.' })
   }
 
   const applicationId = session.metadata?.applicationId
   if (!applicationId) return res.status(400).json({ error: 'Missing application reference.' })
 
+  // $0 sessions have no PaymentIntent; use a synthetic id keyed on the session so
+  // fulfillment stays idempotent (payments.stripe_payment_intent_id is UNIQUE).
   const paymentIntentId =
-    typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+    (typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id) ||
+    (session.amount_total === 0 ? `promo_${session.id}` : null)
   if (!paymentIntentId) return res.status(400).json({ error: 'No payment found for this session' })
 
   try {
@@ -1445,6 +1456,23 @@ app.post('/api/stripe/landlord/membership/checkout', async (req, res) => {
     (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
   if (!origin) return res.status(500).json({ error: 'Unable to determine return URL' })
 
+  // Optional promotion code (e.g. internal testing). When a valid code is supplied
+  // we apply it server-side and only collect a card if the discounted total needs
+  // one; regular checkouts (no code) always collect a card so trial-end renewals work.
+  const promoCodeInput = typeof req.body?.promoCode === 'string' ? req.body.promoCode.trim() : ''
+  let promotionCodeId: string | null = null
+  if (promoCodeInput) {
+    try {
+      const found = await stripe.promotionCodes.list({ code: promoCodeInput, active: true, limit: 1 })
+      promotionCodeId = found.data[0]?.id ?? null
+    } catch {
+      promotionCodeId = null
+    }
+    if (!promotionCodeId) {
+      return res.status(400).json({ error: 'That promo code is not valid or has expired.' })
+    }
+  }
+
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -1472,6 +1500,11 @@ app.post('/api/stripe/landlord/membership/checkout', async (req, res) => {
         },
       ],
       ui_mode: 'embedded',
+      // A server-applied promotion code cannot be combined with the user-facing
+      // promo code field, so we set exactly one of the two.
+      ...(promotionCodeId
+        ? { discounts: [{ promotion_code: promotionCodeId }], payment_method_collection: 'if_required' as const }
+        : { allow_promotion_codes: true }),
       return_url: `${origin}/onboarding/property/intro?membership=success&session_id={CHECKOUT_SESSION_ID}`,
     })
     return res.json({ clientSecret: session.client_secret })
@@ -1917,15 +1950,17 @@ async function handleStripeWebhook(req: Request, res: Response) {
       kind === 'landlord_profile_unlock' &&
       session.metadata?.landlordId &&
       session.metadata?.applicationId &&
-      paymentIntentId &&
-      session.payment_status === 'paid' &&
-      amountTotal === LANDLORD_PROFILE_UNLOCK_CENTS
+      (session.payment_status === 'paid' || session.payment_status === 'no_payment_required') &&
+      typeof amountTotal === 'number' &&
+      (amountTotal === LANDLORD_PROFILE_UNLOCK_CENTS ||
+        ((session.total_details?.amount_discount ?? 0) > 0 && amountTotal < LANDLORD_PROFILE_UNLOCK_CENTS)) &&
+      (paymentIntentId || amountTotal === 0)
     ) {
       try {
         await activateLandlordProfileUnlockPaid(admin, {
           landlordId: session.metadata.landlordId,
           applicationId: session.metadata.applicationId,
-          paymentIntentId,
+          paymentIntentId: paymentIntentId || `promo_${session.id}`,
           amountCents: amountTotal,
         })
       } catch (err) {

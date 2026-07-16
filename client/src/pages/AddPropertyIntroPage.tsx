@@ -134,10 +134,11 @@ export function AddPropertyIntroPage() {
       const { data: sess } = await supabase.auth.getSession()
       const accessToken = sess.session?.access_token
       if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+      const promoCode = searchParams.get('promo')?.trim() || undefined
       const res = await fetch('/api/stripe/landlord/membership/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({}),
+        body: JSON.stringify(promoCode ? { promoCode } : {}),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))

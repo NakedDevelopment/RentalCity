@@ -134,12 +134,6 @@ export function LandlordMatchPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </Link>
-          <Link
-            to="/matches"
-            className="text-sm font-medium text-gray-600 hover:text-gray-900"
-          >
-            Skip for now
-          </Link>
         </div>
 
           <p className="mt-5 text-sm text-gray-500">Takes about 10 minutes • You can save and continue later</p>
