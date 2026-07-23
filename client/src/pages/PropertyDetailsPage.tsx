@@ -23,6 +23,7 @@ import { supabase } from '../lib/supabase'
 type PropertyDetails = {
   id: string
   title: string
+  location: string
   price: string
   beds: string
   baths: string
@@ -106,6 +107,7 @@ export function PropertyDetailsPage() {
   const [property, setProperty] = useState<PropertyDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activePhotoIdx, setActivePhotoIdx] = useState(0)
 
   useEffect(() => {
     async function loadProperty() {
@@ -200,9 +202,13 @@ export function PropertyDetailsPage() {
       const photoUrls = Array.isArray(row.photo_urls) ? row.photo_urls.map((u) => String(u)).filter(Boolean) : []
       const photoLabels = Array.isArray(row.photo_labels) ? row.photo_labels.map((l) => String(l)) : []
 
+      const location = [row.city, row.state].filter(Boolean).join(', ')
+
+      setActivePhotoIdx(0)
       setProperty({
         id: row.id,
         title,
+        location,
         price,
         beds,
         baths,
@@ -266,11 +272,28 @@ export function PropertyDetailsPage() {
     )
   }
 
-  function PropertyThumb({ url, alt }: { url: string; alt: string }) {
+  function PropertyThumb({
+    url,
+    alt,
+    active,
+    onSelect,
+  }: {
+    url: string
+    alt: string
+    active: boolean
+    onSelect: () => void
+  }) {
     const [broken, setBroken] = useState(false)
     if (broken) return null
     return (
-      <div className="aspect-[6/3.5] overflow-hidden rounded-lg bg-gray-100">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-label={`Show ${alt}`}
+        className={`aspect-[6/3.5] overflow-hidden rounded-lg bg-gray-100 transition ${
+          active ? 'ring-2 ring-blue-500 ring-offset-1' : 'hover:opacity-85'
+        }`}
+      >
         <img
           src={url}
           alt={alt}
@@ -278,7 +301,7 @@ export function PropertyDetailsPage() {
           loading="lazy"
           onError={() => setBroken(true)}
         />
-      </div>
+      </button>
     )
   }
 
@@ -295,6 +318,15 @@ export function PropertyDetailsPage() {
               <span className="text-gray-700">Property Details</span>
             </nav>
             <h1 className="text-[2.1rem] font-medium text-gray-900">{property.title}</h1>
+            {property.location ? (
+              <p className="mt-1 flex items-center gap-1.5 text-base text-gray-600">
+                <svg className="h-4 w-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {property.location}
+              </p>
+            ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <span className="text-[2rem] font-medium text-gray-900">{property.price}</span>
               <Stat
@@ -318,8 +350,9 @@ export function PropertyDetailsPage() {
           </div>
 
           <PropertyHeroPhoto
-            url={property.photoUrls[0] ?? null}
-            alt={property.photoLabels[0] || 'Main property photo'}
+            key={property.photoUrls[activePhotoIdx] ?? 'none'}
+            url={property.photoUrls[activePhotoIdx] ?? property.photoUrls[0] ?? null}
+            alt={property.photoLabels[activePhotoIdx] || 'Main property photo'}
           />
 
           {property.photoUrls.length > 1 ? (
@@ -329,6 +362,8 @@ export function PropertyDetailsPage() {
                   key={`${url}-${idx}`}
                   url={url}
                   alt={property.photoLabels[idx] || `Property photo ${idx + 1}`}
+                  active={idx === activePhotoIdx}
+                  onSelect={() => setActivePhotoIdx(idx)}
                 />
               ))}
             </div>
