@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { TENANT_SIDE_ENABLED } from '../lib/featureFlags'
 
 type Role = 'tenant' | 'landlord'
 
 export function SignupPage() {
-  // Landlord-first launch: tenant self-signup is temporarily hidden.
-  const role: Role = 'landlord'
+  // Landlord-first launch: tenant self-signup is hidden unless the tenant side
+  // is enabled (always on in development for testing).
+  const [role, setRole] = useState<Role>('landlord')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -135,8 +137,33 @@ export function SignupPage() {
         <div className="rounded-2xl border border-gray-200 bg-white px-8 py-10 shadow-sm">
           <h1 className="mb-2 text-center text-[2rem] font-medium text-gray-900">Sign Up</h1>
           <p className="mb-8 text-center text-[0.95rem] text-gray-600">
-            Create your landlord account and start finding quality tenants!
+            {role === 'landlord'
+              ? 'Create your landlord account and start finding quality tenants!'
+              : 'Create your tenant account and get matched with your next home!'}
           </p>
+
+          {TENANT_SIDE_ENABLED ? (
+            <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
+              <button
+                type="button"
+                onClick={() => setRole('landlord')}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  role === 'landlord' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                I&apos;m a landlord
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole('tenant')}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  role === 'tenant' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                I&apos;m a tenant
+              </button>
+            </div>
+          ) : null}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
