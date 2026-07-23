@@ -854,10 +854,15 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         m.monthly_rent_cents >= priceRange[0] * 100 &&
         m.monthly_rent_cents <= priceRange[1] * 100,
     )
-    if (amenities.petFriendly) list = list.filter((m) => m.amenitiesList.includes('pet_friendly'))
-    if (amenities.parking) list = list.filter((m) => m.amenitiesList.includes('parking'))
-    if (amenities.laundry) list = list.filter((m) => m.amenitiesList.includes('laundry'))
-    if (amenities.gym) list = list.filter((m) => m.amenitiesList.includes('gym'))
+    const hasAmenity = (m: MatchCard, terms: string[]) =>
+      m.amenitiesList.some((a) => {
+        const lower = a.toLowerCase()
+        return terms.some((t) => lower.includes(t))
+      })
+    if (amenities.petFriendly) list = list.filter((m) => hasAmenity(m, ['pet']))
+    if (amenities.parking) list = list.filter((m) => hasAmenity(m, ['parking', 'garage']))
+    if (amenities.laundry) list = list.filter((m) => hasAmenity(m, ['laundry', 'washer', 'dryer']))
+    if (amenities.gym) list = list.filter((m) => hasAmenity(m, ['gym', 'fitness']))
     return list
   }, [displayedMatches, bedrooms, priceRange, amenities])
 
