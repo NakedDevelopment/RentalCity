@@ -783,6 +783,24 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     loadLandlordProperties,
   ])
 
+  useEffect(() => {
+    if (!user || profileRole !== 'tenant') return
+    let cancelled = false
+    supabase
+      .from('tenant_preferences')
+      .select('has_pets')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data?.has_pets === true) {
+          setAmenities((prev) => ({ ...prev, petFriendly: true }))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user, profileRole])
+
   const toggleAmenity = (key: keyof typeof amenities) =>
     setAmenities((prev) => ({ ...prev, [key]: !prev[key] }))
 
