@@ -21,6 +21,8 @@ import {
   createLinkToken,
   exchangePublicToken,
   fetchFinancialSummary,
+  createIdentityVerificationSession,
+  getIdentityVerificationSession,
 } from './plaid'
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
@@ -2503,6 +2505,9 @@ function verificationRow(row: {
   debts_verified?: boolean | null
   dti_ratio?: number | string | null
   identity_verified?: boolean | null
+  monthly_income_range_low_cents?: number | null
+  monthly_income_range_high_cents?: number | null
+  asset_tier?: string | null
   last_verified_at: string | null
 }) {
   const num = (v: number | string | null | undefined) =>
@@ -2516,6 +2521,10 @@ function verificationRow(row: {
     debtsVerified: Boolean(row.debts_verified),
     dtiRatio: num(row.dti_ratio ?? null),
     identityVerified: Boolean(row.identity_verified),
+
+    monthlyIncomeRangeLowCents: num(row.monthly_income_range_low_cents),
+    monthlyIncomeRangeHighCents: num(row.monthly_income_range_high_cents),
+    assetTier: row.asset_tier ?? null,
 
     lastVerifiedAt: row.last_verified_at,
   }
@@ -2618,6 +2627,135 @@ app.post('/api/plaid/refresh', async (req, res) => {
   }
 })
 
+// --- Plaid Identity Verification endpoints ---
+
+app.post('/api/plaid/identity-verification/create', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const client = getPlaidClient()
+  if (!client) return plaidUnavailable(res)
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  try {
+    const session = await createIdentityVerificationSession(client, user.id)
+
+    // Persist the session id + initial status so we can query it later
+    await admin
+      .from('profiles')
+      .update({
+        identity_verification_session_id: session.sessionId,
+        identity_verification_status: session.status,
+      })
+      .eq('id', user.id)
+
+    return res.json({
+      sessionId: session.sessionId,
+      status: session.status,
+      shareableUrl: session.shareableUrl,
+    })
+  } catch (err) {
+    const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
+    console.error('Plaid IDV create error:', msg || (err as Error)?.message)
+    return res.status(502).json({ error: msg || 'Could not start identity verification' })
+  }
+})
+
+app.get('/api/plaid/identity-verification/status', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const client = getPlaidClient()
+  if (!client) return plaidUnavailable(res)
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('identity_verification_session_id, identity_verification_status, identity_verified_at')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (!profile?.identity_verification_session_id) {
+    return res.status(404).json({ error: 'No identity verification session found' })
+  }
+
+  // If already confirmed success, return cached state without hitting Plaid
+  if (profile.identity_verified_at) {
+    return res.json({
+      sessionId: profile.identity_verification_session_id,
+      status: 'success',
+      shareableUrl: null,
+    })
+  }
+
+  try {
+    const session = await getIdentityVerificationSession(
+      client,
+      profile.identity_verification_session_id as string,
+    )
+
+    // Sync status back to the profile
+    const updatePayload: Record<string, unknown> = {
+      identity_verification_status: session.status,
+    }
+    if (session.status === 'success' && !profile.identity_verified_at) {
+      updatePayload.identity_verified_at = new Date().toISOString()
+    }
+    await admin.from('profiles').update(updatePayload).eq('id', user.id)
+
+    return res.json({
+      sessionId: session.sessionId,
+      status: session.status,
+      shareableUrl: session.shareableUrl,
+    })
+  } catch (err) {
+    const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
+    console.error('Plaid IDV status error:', msg || (err as Error)?.message)
+    return res.status(502).json({ error: msg || 'Could not get identity verification status' })
+  }
+})
+
+// Plaid webhook for identity_verification.status_updated events
+app.post('/api/plaid/identity-verification/webhook', express.json(), async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body = req.body as any
+  const webhookType: string = body?.webhook_type ?? ''
+  const webhookCode: string = body?.webhook_code ?? ''
+  const sessionId: string = body?.identity_verification_id ?? ''
+
+  if (
+    webhookType !== 'IDENTITY_VERIFICATION' ||
+    webhookCode !== 'STATUS_UPDATED' ||
+    !sessionId
+  ) {
+    return res.json({ received: true })
+  }
+
+  const client = getPlaidClient()
+  if (!client) return res.json({ received: true })
+
+  try {
+    const session = await getIdentityVerificationSession(client, sessionId)
+    const updatePayload: Record<string, unknown> = {
+      identity_verification_status: session.status,
+    }
+    if (session.status === 'success') {
+      updatePayload.identity_verified_at = new Date().toISOString()
+    }
+    await admin
+      .from('profiles')
+      .update(updatePayload)
+      .eq('identity_verification_session_id', sessionId)
+  } catch (err) {
+    console.error('Plaid IDV webhook error:', (err as Error)?.message)
+  }
+
+  return res.json({ received: true })
+})
+
 async function storeVerification(
   admin: SupabaseClient,
   userId: string,
@@ -2639,6 +2777,10 @@ async function storeVerification(
     debts_verified: summary.debtsVerified,
     dti_ratio: summary.dtiRatio,
     identity_verified: summary.identityVerified,
+
+    monthly_income_range_low_cents: summary.monthlyIncomeRangeLowCents,
+    monthly_income_range_high_cents: summary.monthlyIncomeRangeHighCents,
+    asset_tier: summary.assetTier,
 
     environment: env,
     last_verified_at: new Date().toISOString(),

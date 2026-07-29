@@ -11,6 +11,8 @@ export type UseProfileRoleResult = {
   landlordSurveyCompletedAt: string | null
   /** Set when role is tenant and they have completed the compatibility survey */
   tenantSurveyCompletedAt: string | null
+  /** Set when the tenant has passed Plaid Identity Verification */
+  identityVerifiedAt: string | null
   loading: boolean
   /** Call to refetch profile (e.g. after completing questionnaire so matches page has fresh survey state) */
   refetch: () => Promise<void>
@@ -28,6 +30,7 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
   const [displayName, setDisplayName] = useState<string | null>(null)
   const [landlordSurveyCompletedAt, setLandlordSurveyCompletedAt] = useState<string | null>(null)
   const [tenantSurveyCompletedAt, setTenantSurveyCompletedAt] = useState<string | null>(null)
+  const [identityVerifiedAt, setIdentityVerifiedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(!!user)
 
   const refetch = useCallback(async () => {
@@ -35,7 +38,7 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
     setLoading(true)
     const { data } = await supabase
       .from('profiles')
-      .select('role, display_name, landlord_survey_completed_at, tenant_survey_completed_at')
+      .select('role, display_name, landlord_survey_completed_at, tenant_survey_completed_at, identity_verified_at')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -51,6 +54,7 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
     setDisplayName(data?.display_name?.trim() || null)
     setLandlordSurveyCompletedAt(data?.landlord_survey_completed_at ?? null)
     setTenantSurveyCompletedAt(data?.tenant_survey_completed_at ?? null)
+    setIdentityVerifiedAt(data?.identity_verified_at ?? null)
     setLoading(false)
   }, [user])
 
@@ -64,6 +68,7 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
       setDisplayName(null)
       setLandlordSurveyCompletedAt(null)
       setTenantSurveyCompletedAt(null)
+      setIdentityVerifiedAt(null)
       setLoading(false)
       return
     }
@@ -74,7 +79,7 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
     async function load() {
       const { data } = await supabase
         .from('profiles')
-        .select('role, display_name, landlord_survey_completed_at, tenant_survey_completed_at')
+        .select('role, display_name, landlord_survey_completed_at, tenant_survey_completed_at, identity_verified_at')
         .eq('id', userId)
         .maybeSingle()
 
@@ -99,6 +104,7 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
       setDisplayName(data?.display_name?.trim() || null)
       setLandlordSurveyCompletedAt(data?.landlord_survey_completed_at ?? null)
       setTenantSurveyCompletedAt(data?.tenant_survey_completed_at ?? null)
+      setIdentityVerifiedAt(data?.identity_verified_at ?? null)
       setLoading(false)
     }
 
@@ -108,5 +114,5 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
     }
   }, [userId])
 
-  return { role, displayName, landlordSurveyCompletedAt, tenantSurveyCompletedAt, loading, refetch }
+  return { role, displayName, landlordSurveyCompletedAt, tenantSurveyCompletedAt, identityVerifiedAt, loading, refetch }
 }

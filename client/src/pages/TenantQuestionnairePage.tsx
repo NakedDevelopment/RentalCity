@@ -98,7 +98,7 @@ export function TenantQuestionnairePage() {
       .update({ tenant_survey_completed_at: new Date().toISOString() })
       .eq('id', user.id)
 
-    navigate('/matches')
+    navigate('/onboarding/identity-verification')
   }
 
   if (!user) {

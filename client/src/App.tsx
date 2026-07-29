@@ -40,6 +40,7 @@ import { YourMatchesPage } from './pages/YourMatchesPage'
 import { LandlordMatchPage } from './pages/LandlordMatchPage'
 import { LeasePreferencesPage } from './pages/LeasePreferencesPage'
 import { TenantQuestionnairePage } from './pages/TenantQuestionnairePage'
+import { IdentityVerificationPage } from './pages/IdentityVerificationPage'
 import { CompatibilitySurveyPage } from './pages/CompatibilitySurveyPage'
 import { ApplicationDetailsPage } from './pages/ApplicationDetailsPage'
 import { ReviewSubmittedPage } from './pages/ReviewSubmittedPage'
@@ -144,6 +145,7 @@ export default function App() {
         <Route path="rental-needs" element={<Navigate to="/rental-needs" replace />} />
         <Route path="lease-preferences" element={<Navigate to="/lease-preferences" replace />} />
         <Route path="tenant-questionnaire" element={<Navigate to="/tenant-questionnaire" replace />} />
+        <Route path="identity-verification" element={<IdentityVerificationPage />} />
         <Route path="profile" element={<ProfileCreationPage />} />
         <Route path="survey" element={<CompatibilitySurveyPage />} />
         <Route path="survey/intro" element={<LandlordMatchPage />} />

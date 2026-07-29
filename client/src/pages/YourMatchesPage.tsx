@@ -331,7 +331,7 @@ export function YourMatchesPage() {
     [location.pathname, location.search],
   )
   const { user } = useAuth()
-const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyCompletedAt, loading: roleLoading, refetch: refetchProfile } = useProfileRole(user)
+const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyCompletedAt, identityVerifiedAt, loading: roleLoading, refetch: refetchProfile } = useProfileRole(user)
   const [activeTab, setActiveTab] = useState<'all' | 'saved' | 'applied'>(() =>
     initialTenantMatchesTab(searchParams),
   )
@@ -1376,6 +1376,49 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         </div>
 
       </>
+    )
+  }
+
+  // Tenant: survey done but identity not verified → require IDV before showing matches
+  if (
+    tenantSurveyCompletedAt &&
+    profileRole === 'tenant' &&
+    !identityVerifiedAt &&
+    !roleLoading
+  ) {
+    return (
+      <div className="space-y-6">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+          <div className="flex flex-col items-center text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-gray-900 text-white">
+              <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600">
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              2–3 min
+            </span>
+            <h2 className="mt-4 text-2xl font-semibold text-gray-900">Verify your identity</h2>
+            <p className="mt-3 max-w-[480px] text-sm leading-7 text-gray-600">
+              A quick identity check is required before you can browse listings. Your information stays with Plaid — never stored on our servers.
+            </p>
+          </div>
+          <div className="mt-6 text-center">
+            <Link
+              to="/onboarding/identity-verification"
+              className="inline-flex items-center gap-2 rounded-lg btn-primary px-6 py-3 text-sm font-medium text-white"
+            >
+              Verify my identity
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      </div>
     )
   }
 

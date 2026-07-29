@@ -8,7 +8,25 @@ export type PlaidVerification = {
   dtiRatio: number | null
   identityVerified: boolean
 
+  monthlyIncomeRangeLowCents: number | null
+  monthlyIncomeRangeHighCents: number | null
+  assetTier: string | null
+
   lastVerifiedAt: string | null
+}
+
+export type PlaidIdentityVerificationStatus =
+  | 'pending'
+  | 'active'
+  | 'success'
+  | 'failed'
+  | 'expired'
+  | 'canceled'
+
+export type PlaidIdentityVerificationResult = {
+  sessionId: string
+  status: PlaidIdentityVerificationStatus
+  shareableUrl: string | null
 }
 
 async function parseError(res: Response, fallback: string): Promise<never> {
@@ -59,4 +77,25 @@ export async function refreshPlaidVerification(accessToken: string): Promise<Pla
   })
   if (!res.ok) await parseError(res, 'Could not refresh verification')
   return (await res.json()) as PlaidVerification
+}
+
+export async function createPlaidIdentityVerification(
+  accessToken: string,
+): Promise<PlaidIdentityVerificationResult> {
+  const res = await fetch('/api/plaid/identity-verification/create', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) await parseError(res, 'Could not start identity verification')
+  return (await res.json()) as PlaidIdentityVerificationResult
+}
+
+export async function getPlaidIdentityStatus(
+  accessToken: string,
+): Promise<PlaidIdentityVerificationResult> {
+  const res = await fetch('/api/plaid/identity-verification/status', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) await parseError(res, 'Could not get identity verification status')
+  return (await res.json()) as PlaidIdentityVerificationResult
 }

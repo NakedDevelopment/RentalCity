@@ -6,6 +6,9 @@ export type PlaidVerificationRow = {
   debts_verified: boolean | null
   dti_ratio: number | string | null
   identity_verified: boolean | null
+  monthly_income_range_low_cents: number | null
+  monthly_income_range_high_cents: number | null
+  asset_tier: string | null
   last_verified_at: string | null
 }
 
@@ -40,13 +43,52 @@ function formatDate(iso: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function formatMoney(cents: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(cents / 100)
+}
+
+const ASSET_TIER_LABELS: Record<string, string> = {
+  low: '< 1 month reserves',
+  moderate: '1–3 months reserves',
+  high: '3–6 months reserves',
+  very_high: '6+ months reserves',
+}
+
+function LockIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+      />
+    </svg>
+  )
+}
+
 /**
  * Read-only bank-verification scorecard shown to landlords on a tenant profile.
- * Renders ONLY verification signals (income / identity / funds + DTI%) — never
- * raw figures or PII, matching the tenant-side scorecard and the data-minimized
- * `plaid_financial_verifications` table.
+ *
+ * - When `unlocked` is false (or omitted): shows verification signals only
+ *   (Income ✓ / Identity ✓ / Funds ✓) with specific numbers hidden behind a
+ *   blur overlay and an "Unlock to view details" prompt.
+ * - When `unlocked` is true: shows signals + income range, asset tier, and DTI.
+ *
+ * Raw figures and PII are never stored or returned; the extra detail here
+ * comes from the range/tier columns added in the 20260729 migration.
  */
-export function BankVerificationCard({ verification }: { verification: PlaidVerificationRow | null }) {
+export function BankVerificationCard({
+  verification,
+  unlocked = false,
+}: {
+  verification: PlaidVerificationRow | null
+  unlocked?: boolean
+}) {
   const v = verification
   const hasAny = !!(
     v &&
@@ -56,13 +98,17 @@ export function BankVerificationCard({ verification }: { verification: PlaidVeri
   const dtiPct = Number.isFinite(dtiNum) ? Math.round(dtiNum * 100) : null
   const verifiedAt = v?.last_verified_at ? formatDate(v.last_verified_at) : null
 
+  const hasIncomeRange =
+    v?.monthly_income_range_low_cents != null && v?.monthly_income_range_high_cents != null
+  const hasAssetTier = !!v?.asset_tier
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5">
       <h2 className="mb-1 text-base font-semibold tracking-tight text-gray-900">Bank verification</h2>
 
       {!hasAny ? (
         <p className="mt-3 text-sm text-gray-500">
-          This tenant hasn’t verified their finances with a bank yet.
+          This tenant hasn't verified their finances with a bank yet.
         </p>
       ) : (
         <>
@@ -71,9 +117,10 @@ export function BankVerificationCard({ verification }: { verification: PlaidVeri
               ? `Verified via ${v!.institution_name}${
                   v!.accounts_count ? ` · ${v!.accounts_count} account${v!.accounts_count === 1 ? '' : 's'}` : ''
                 }`
-              : 'Verified via the tenant’s bank (Plaid).'}
+              : "Verified via the tenant\u2019s bank (Plaid)."}
           </p>
 
+          {/* Signals row — always visible */}
           <dl className="divide-y divide-gray-100 rounded-lg border border-gray-100">
             <ScoreRow label="Income" ok={!!v!.income_verified} />
             <ScoreRow label="Identity" ok={!!v!.identity_verified} />
@@ -95,6 +142,45 @@ export function BankVerificationCard({ verification }: { verification: PlaidVeri
               </dd>
             </div>
           </dl>
+
+          {/* Detailed numbers — visible when unlocked, blurred otherwise */}
+          {(hasIncomeRange || hasAssetTier) && (
+            <div className="relative mt-3">
+              <dl
+                className={`divide-y divide-gray-100 rounded-lg border border-gray-100 ${
+                  !unlocked ? 'select-none blur-sm' : ''
+                }`}
+                aria-hidden={!unlocked}
+              >
+                {hasIncomeRange && (
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <dt className="text-sm text-gray-700">Monthly income range</dt>
+                    <dd className="text-sm font-medium text-gray-900">
+                      {formatMoney(v!.monthly_income_range_low_cents!)}–
+                      {formatMoney(v!.monthly_income_range_high_cents!)}
+                    </dd>
+                  </div>
+                )}
+                {hasAssetTier && (
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <dt className="text-sm text-gray-700">Asset reserves</dt>
+                    <dd className="text-sm font-medium text-gray-900">
+                      {ASSET_TIER_LABELS[v!.asset_tier!] ?? v!.asset_tier}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+
+              {!unlocked && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/60">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-sm">
+                    <LockIcon />
+                    Unlock profile to view
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           <p className="mt-3 text-xs text-gray-400">
             Only verification signals are shared — never account numbers, balances, or transactions.
