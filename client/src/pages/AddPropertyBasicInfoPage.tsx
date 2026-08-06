@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { loadPropertyDraft, savePropertyDraft } from '../lib/propertyDraft'
+import { US_STATES } from '../lib/usStates'
 
 export function AddPropertyBasicInfoPage() {
   const navigate = useNavigate()
@@ -131,10 +132,11 @@ export function AddPropertyBasicInfoPage() {
                     className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-4 py-3 pr-10 text-sm text-gray-700 focus:border-gray-300 focus:outline-none"
                   >
                     <option value="">Select</option>
-                    <option value="CA">CA</option>
-                    <option value="NY">NY</option>
-                    <option value="TX">TX</option>
-                    <option value="FL">FL</option>
+                    {US_STATES.map((code) => (
+                      <option key={code} value={code}>
+                        {code}
+                      </option>
+                    ))}
                   </select>
                   <svg className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
