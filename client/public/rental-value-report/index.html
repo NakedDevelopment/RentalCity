@@ -378,11 +378,32 @@ src="https://www.facebook.com/tr?id=1644132773295647&ev=PageView&noscript=1"
         <form id="rentForm" novalidate>
           <div class="form-grid">
             <div class="field full">
-              <label for="address">Property address <span class="req">*</span></label>
+              <label for="address">Street address <span class="req">*</span></label>
               <div class="addr-wrap">
-                <input id="address" name="address" type="text" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addrSuggest" placeholder="123 Main Street, Tampa, Florida 33647" />
+                <input id="address" name="address" type="text" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="addrSuggest" placeholder="123 Main Street" />
                 <ul id="addrSuggest" class="addr-suggest" role="listbox" hidden></ul>
               </div>
+            </div>
+            <div class="field">
+              <label for="city">City <span class="req">*</span></label>
+              <input id="city" name="city" type="text" autocomplete="address-level2" placeholder="Tampa" />
+            </div>
+            <div class="field">
+              <label for="state">State <span class="req">*</span></label>
+              <select id="state" name="state">
+                <option value="">Select</option>
+                <option>AK</option><option>AL</option><option>AR</option><option>AZ</option><option>CA</option>
+                <option>CO</option><option>CT</option><option>DC</option><option>DE</option><option>FL</option>
+                <option>GA</option><option>HI</option><option>IA</option><option>ID</option><option>IL</option>
+                <option>IN</option><option>KS</option><option>KY</option><option>LA</option><option>MA</option>
+                <option>MD</option><option>ME</option><option>MI</option><option>MN</option><option>MO</option>
+                <option>MS</option><option>MT</option><option>NC</option><option>ND</option><option>NE</option>
+                <option>NH</option><option>NJ</option><option>NM</option><option>NV</option><option>NY</option>
+                <option>OH</option><option>OK</option><option>OR</option><option>PA</option><option>RI</option>
+                <option>SC</option><option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+                <option>VA</option><option>VT</option><option>WA</option><option>WI</option><option>WV</option>
+                <option>WY</option>
+              </select>
             </div>
             <div class="field">
               <label for="ptype">Property type <span class="req">*</span></label>
@@ -653,6 +674,9 @@ function renderResult(r, beds, baths, sqft, email) {
   }
 
   var addressEl = document.getElementById('address');
+  var cityEl = document.getElementById('city');
+  var stateEl = document.getElementById('state');
+  var selectedZip = '';
   var ptypeEl = document.getElementById('ptype');
   var bedsEl = document.getElementById('beds');
   var bathsEl = document.getElementById('baths');
@@ -723,7 +747,12 @@ function renderResult(r, beds, baths, sqft, email) {
   function choose(idx) {
     var item = currentItems[idx];
     if (!item) return;
-    addressEl.value = item.address;
+    /* Only the street line goes in the address box; city & state get their own fields. */
+    var street = String(item.address || '').split(',')[0].trim();
+    addressEl.value = street || item.address;
+    if (item.city) cityEl.value = item.city;
+    if (item.state) setSelectIfOption(stateEl, item.state);
+    selectedZip = item.zipCode ? String(item.zipCode) : '';
     applyDetails(item);
     clearInvalid();
     hideSuggest();
@@ -773,6 +802,7 @@ function renderResult(r, beds, baths, sqft, email) {
   }
 
   addressEl.addEventListener('input', function () {
+    selectedZip = ''; /* manual street edits invalidate any suggestion zip */
     var q = (addressEl.value || '').trim();
     if (addrTimer) clearTimeout(addrTimer);
     if (q.length < 5) { hideSuggest(); return; }
@@ -791,13 +821,17 @@ function renderResult(r, beds, baths, sqft, email) {
 
   addressEl.addEventListener('blur', function () { setTimeout(hideSuggest, 120); });
 
+  /* Manual edits to city/state mean the suggestion's zip may no longer apply. */
+  cityEl.addEventListener('input', function () { selectedZip = ''; });
+  stateEl.addEventListener('change', function () { selectedZip = ''; });
+
   sqftEl.addEventListener('blur', function () {
     var d = digits(sqftEl.value);
     sqftEl.value = d ? money(parseInt(d, 10)).replace('$', '') : '';
   });
 
   function clearInvalid() {
-    var els = [addressEl, bedsEl, bathsEl, emailEl];
+    var els = [addressEl, cityEl, stateEl, bedsEl, bathsEl, emailEl];
     for (var i = 0; i < els.length; i++) els[i].className = els[i].className.replace(' invalid', '');
   }
   function markInvalid(el) { if (el.className.indexOf('invalid') < 0) el.className += ' invalid'; }
@@ -813,20 +847,26 @@ function renderResult(r, beds, baths, sqft, email) {
     e.preventDefault();
     clearInvalid();
 
-    var address = (addressEl.value || '').trim();
+    var street = (addressEl.value || '').trim();
+    var city = (cityEl.value || '').trim();
+    var stateVal = stateEl.value || '';
     var beds  = bedsEl.value === ''  ? null : parseFloat(bedsEl.value);
     var baths = bathsEl.value === '' ? null : parseFloat(bathsEl.value);
     var sqft  = digits(sqftEl.value) ? parseInt(digits(sqftEl.value), 10) : null;
     var email = (emailEl.value || '').trim();
 
     var ok = true;
-    if (address.length < 6) { markInvalid(addressEl); ok = false; }
+    if (street.length < 4) { markInvalid(addressEl); ok = false; }
+    if (city.length < 2) { markInvalid(cityEl); ok = false; }
+    if (!stateVal) { markInvalid(stateEl); ok = false; }
     if (beds === null)  { markInvalid(bedsEl);  ok = false; }
     if (baths === null) { markInvalid(bathsEl); ok = false; }
     if (!emailValid(email)) { markInvalid(emailEl); ok = false; }
     if (!ok) return;
 
     setLoading(true);
+
+    var address = street + ', ' + city + ', ' + stateVal + (selectedZip ? ' ' + selectedZip : '');
 
     var payload = {
       address: address,
