@@ -1,59 +1,126 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { supabase } from '../../lib/supabase'
 import { AdminPageHeader, admin } from './adminUi'
 
-type CountState = { loading: boolean; error: string | null; values: Record<string, number> }
+const DAY_MS = 24 * 60 * 60 * 1000
+const TREND_DAYS = 30
+
+type SignupDay = { date: string; landlord: number; tenant: number }
+
+type DashboardState = {
+  loading: boolean
+  error: string | null
+  activeListings: number
+  activeListingsNew: number
+  totalLandlords: number
+  newLandlords: number
+  openSupport: number
+  newSignups: number
+  signupTrend: SignupDay[]
+  propertiesByStatus: { status: string; count: number }[]
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  active: '#3A7AFE',
+  inactive: '#F59E0B',
+  draft: '#9CA3AF',
+}
+
+function dayKey(iso: string) {
+  return iso.slice(0, 10)
+}
 
 export function AdminDashboardPage() {
-  const [state, setState] = useState<CountState>({ loading: true, error: null, values: {} })
+  const [state, setState] = useState<DashboardState>({
+    loading: true,
+    error: null,
+    activeListings: 0,
+    activeListingsNew: 0,
+    totalLandlords: 0,
+    newLandlords: 0,
+    openSupport: 0,
+    newSignups: 0,
+    signupTrend: [],
+    propertiesByStatus: [],
+  })
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      const cutoff = new Date(Date.now() - TREND_DAYS * DAY_MS).toISOString()
+
       try {
         const [
-          totalRes,
+          activeRes,
+          activeNewRes,
           landlordsRes,
-          tenantsRes,
-          adminsRes,
+          newLandlordsRes,
           supportOpenRes,
-          reportsPendingRes,
+          recentProfilesRes,
+          allPropertiesRes,
         ] = await Promise.all([
-          supabase.from('profiles').select('*', { count: 'exact', head: true }),
+          supabase.from('properties').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+          supabase.from('properties').select('*', { count: 'exact', head: true }).eq('status', 'active').gte('created_at', cutoff),
           supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'landlord'),
-          supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'tenant'),
-          supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
+          supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'landlord').gte('created_at', cutoff),
           supabase.from('support_requests').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_progress']),
-          supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+          supabase.from('profiles').select('role, created_at').gte('created_at', cutoff),
+          supabase.from('properties').select('status'),
         ])
         if (cancelled) return
+
         const err =
-          totalRes.error?.message ||
+          activeRes.error?.message ||
+          activeNewRes.error?.message ||
           landlordsRes.error?.message ||
-          tenantsRes.error?.message ||
-          adminsRes.error?.message ||
+          newLandlordsRes.error?.message ||
           supportOpenRes.error?.message ||
-          reportsPendingRes.error?.message
+          recentProfilesRes.error?.message ||
+          allPropertiesRes.error?.message
         if (err) {
-          setState({ loading: false, error: err, values: {} })
+          setState((s) => ({ ...s, loading: false, error: err }))
           return
         }
+
+        const byDay = new Map<string, { landlord: number; tenant: number }>()
+        for (let i = TREND_DAYS - 1; i >= 0; i -= 1) {
+          const key = dayKey(new Date(Date.now() - i * DAY_MS).toISOString())
+          byDay.set(key, { landlord: 0, tenant: 0 })
+        }
+        for (const row of recentProfilesRes.data ?? []) {
+          const key = dayKey(row.created_at as string)
+          const bucket = byDay.get(key)
+          if (!bucket) continue
+          if (row.role === 'landlord') bucket.landlord += 1
+          else if (row.role === 'tenant') bucket.tenant += 1
+        }
+        const signupTrend: SignupDay[] = Array.from(byDay.entries()).map(([date, v]) => ({ date, ...v }))
+        const newSignups = signupTrend.reduce((sum, d) => sum + d.landlord + d.tenant, 0)
+
+        const statusCounts = new Map<string, number>()
+        for (const row of allPropertiesRes.data ?? []) {
+          const status = (row.status as string) ?? 'unknown'
+          statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1)
+        }
+        const propertiesByStatus = Array.from(statusCounts.entries()).map(([status, count]) => ({ status, count }))
+
         setState({
           loading: false,
           error: null,
-          values: {
-            profiles: totalRes.count ?? 0,
-            landlords: landlordsRes.count ?? 0,
-            tenants: tenantsRes.count ?? 0,
-            admins: adminsRes.count ?? 0,
-            supportOpen: supportOpenRes.count ?? 0,
-            reportsPending: reportsPendingRes.count ?? 0,
-          },
+          activeListings: activeRes.count ?? 0,
+          activeListingsNew: activeNewRes.count ?? 0,
+          totalLandlords: landlordsRes.count ?? 0,
+          newLandlords: newLandlordsRes.count ?? 0,
+          openSupport: supportOpenRes.count ?? 0,
+          newSignups,
+          signupTrend,
+          propertiesByStatus,
         })
       } catch (e) {
         if (!cancelled) {
-          setState({ loading: false, error: e instanceof Error ? e.message : 'Failed to load', values: {} })
+          setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : 'Failed to load dashboard' }))
         }
       }
     })()
@@ -62,53 +129,123 @@ export function AdminDashboardPage() {
     }
   }, [])
 
-  const v = state.values
-
   return (
     <div>
-      <AdminPageHeader
-        title="Dashboard"
-        description="Overview of users and open operational work."
-      />
+      <AdminPageHeader title="Dashboard" description="Business health at a glance." />
 
       {state.loading ? (
         <p className={`${admin.contentTop} ${admin.loading}`}>Loading metrics…</p>
       ) : state.error ? (
         <p className={`${admin.contentTop} ${admin.error}`}>{state.error}</p>
       ) : (
-        <div className={`${admin.contentTop} grid gap-4 sm:grid-cols-2 lg:grid-cols-3`}>
-          <MetricCard title="Total profiles" value={v.profiles} to="/admin/users" />
-          <MetricCard title="Tenants" value={v.tenants} to="/admin/users" />
-          <MetricCard title="Landlords" value={v.landlords} to="/admin/users" />
-          <MetricCard title="Admins" value={v.admins} to="/admin/users" />
-          <MetricCard title="Open support requests" value={v.supportOpen} to="/admin/issues" highlight />
-          <MetricCard title="Pending reports" value={v.reportsPending} to="/admin/issues" highlight />
-        </div>
+        <>
+          <div className={`${admin.contentTop} grid gap-4 sm:grid-cols-2 lg:grid-cols-4`}>
+            <KpiCard
+              title="Active Listings"
+              value={state.activeListings}
+              trend={`+${state.activeListingsNew} in last 30 days`}
+              to="/admin/properties?status=active"
+            />
+            <KpiCard
+              title="Total Landlords"
+              value={state.totalLandlords}
+              trend={`+${state.newLandlords} new in last 30 days`}
+              to="/admin/users?role=landlord"
+            />
+            <KpiCard
+              title="Open Support Requests"
+              value={state.openSupport}
+              trend="Needs attention"
+              to="/admin/issues"
+              highlight={state.openSupport > 0}
+            />
+            <KpiCard
+              title="New Sign-ups (30d)"
+              value={state.newSignups}
+              trend="Landlords + tenants"
+              to="/admin/users"
+            />
+          </div>
+
+          <div className={`${admin.contentTop} grid gap-4 lg:grid-cols-2`}>
+            <div className={admin.panelPaddedLg}>
+              <h2 className={admin.detailTitle}>Sign-up trend (30 days)</h2>
+              <div className="mt-4 h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={state.signupTrend}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(d: string) => d.slice(5)}
+                      tick={{ fontSize: 11, fill: '#6B7280' }}
+                      interval={4}
+                    />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="landlord" name="Landlords" stackId="signups" fill="#3A7AFE" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="tenant" name="Tenants" stackId="signups" fill="#00BBFF" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className={admin.panelPaddedLg}>
+              <h2 className={admin.detailTitle}>Properties by status</h2>
+              <div className="mt-4 h-64">
+                {state.propertiesByStatus.length === 0 ? (
+                  <p className={admin.emptyState}>No properties yet.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={state.propertiesByStatus}
+                        dataKey="count"
+                        nameKey="status"
+                        innerRadius={55}
+                        outerRadius={85}
+                        paddingAngle={2}
+                      >
+                        {state.propertiesByStatus.map((entry) => (
+                          <Cell key={entry.status} fill={STATUS_COLORS[entry.status] ?? '#9CA3AF'} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
 }
 
-function MetricCard({
+function KpiCard({
   title,
   value,
+  trend,
   to,
   highlight,
 }: {
   title: string
   value: number
+  trend: string
   to: string
   highlight?: boolean
 }) {
   return (
     <Link
       to={to}
-      className={`${admin.panel} p-5 transition hover:shadow-md ${
-        highlight ? admin.metricHighlight : admin.metricDefault
-      }`}
+      className={`${admin.panel} p-5 transition hover:shadow-md ${highlight ? admin.metricHighlight : admin.metricDefault}`}
     >
       <p className={admin.metricTitle}>{title}</p>
       <p className={admin.metricValue}>{value}</p>
+      <p className="mt-1 text-xs text-gray-500">{trend}</p>
+      <span className="mt-2 inline-block text-xs font-medium text-[#3A7AFE]">View all →</span>
     </Link>
   )
 }

@@ -168,3 +168,84 @@ errors. `npm run build`: clean production build (client + server bundle).
 
 ### Database
 No schema changes.
+
+---
+
+## Run — 2026-08-07 (Pulse automation)
+
+Processed 4 admin-portal code_tasks (5 Pulse tickets, 2 merged as duplicates):
+
+1. **AdminLayout redesign** (`c95e8f2e`) — `client/src/components/AdminLayout.tsx` rebuilt to
+   match `TenantLayout.tsx`'s shell: sticky `h-16` header, `w-64` Lucide-icon sidebar
+   (`bg-[#EEF4FE] text-[#3A7AFE]` active state), matching footer. Replaced the old hand-rolled
+   inline-SVG `NavIcon` map entirely.
+2. **Admin Properties browse + detail** (`ffc0465c` + `8771d7af` — merged) — Pulse had two
+   overlapping tickets for the same feature (a simple read-only table vs. a fuller Zillow-style
+   card grid with filters/sort/search + detail page). Built the superset (`8771d7af`'s spec)
+   once and marked both done together rather than building the table first and immediately
+   replacing it. New: `AdminPropertiesPage.tsx` (card grid, status/bedroom/rent filters, search,
+   sort, reuses `PropertyCard` without its self-wrapping `Link` since the admin destination
+   differs) + `AdminPropertyDetailPage.tsx` (read-only, works for any status, no Apply/Message
+   CTAs — deliberately NOT reusing consumer `PropertyDetailsPage.tsx`, which hardcodes
+   `.eq('status','active')` and has application CTAs; mirrors the existing
+   admin-detail-page-separate-from-consumer pattern already set by `AdminUserDetailPage.tsx`).
+   Landlord email/name joined via the existing `fetchAdminDirectory()` pattern, not a new
+   server route. Routes registered at `/admin/properties` and `/admin/properties/:id`.
+3. **Admin dashboard KPI cards + charts** (`a24b4370`) — `AdminDashboardPage.tsx` rewritten: 4
+   KPI cards (Active Listings, Total Landlords, Open Support Requests, New Sign-ups 30d) each
+   with a real Supabase count query and a working drill-down link; added `?status=`/`?role=`
+   query-param read support to `AdminPropertiesPage`/`AdminUsersPage` so the drill-down links
+   actually pre-filter. Added `recharts` (new dependency, ticket explicitly authorized install)
+   for a 30-day sign-up trend stacked bar chart (landlord vs tenant) and a properties-by-status
+   donut — brand colors only (`#3A7AFE`/`#00BBFF`/existing amber/gray tokens).
+4. **Landlord phone number in Admin view** (`0113bfbc`) — schema check found `profiles.phone`
+   already existed (no migration needed, contrary to the ticket's Step 2b assumption). Missing
+   piece was capture-at-signup: added a Phone Number field to the landlord branch of
+   `ProfileCreationPage.tsx` (the actual onboarding-after-signup step), saved via the existing
+   profile-update call. Displayed in `AdminUserDetailPage.tsx` next to Email (existing users
+   show "Not provided" until they update their profile — expected, per the ticket's own note).
+
+### Motion Designer (single instance)
+No new Hooked moments. This is internal admin CRUD/reporting tooling (staff-only, not a
+consumer engagement surface) — none of the 12 Hooked moments meaningfully apply (no
+onboarding/reward loop for admin users). Per the decision checklist's own test ("does removing
+this hurt the experience? If no — remove it"), no animation was added; existing
+hover/transition-colors conventions already in `adminUi.tsx` were reused as-is.
+
+### QA — two-instance adversarial loop (reconciled)
+Instance A (happy path): all Supabase queries/mutations traced to real code paths (no mock
+data), routing and drill-down params wired correctly, admin-role guard intact. No FAILs.
+Instance B (adversarial) found no HARD FAILs. Two soft issues investigated directly:
+- `AdminPropertiesPage.tsx` renders `sqft ?? 0` as "0 Ft" for properties with a null sqft
+  (reads as a real zero rather than "unknown"). Verified this matches the pre-existing
+  convention already in `HomePage.tsx` (`sqft: p.sqft ?? 0`) — not a new regression, not fixed,
+  since fixing it would mean changing the shared `PropertyCard` component beyond this task's
+  scope.
+- `status`/`role` filter state is seeded from the URL query param only at mount. Confirmed
+  unreachable today (dashboard drill-down links always remount the target route under
+  `AdminLayout`'s `<Outlet>`), so not a live bug — noted here as a known latent limitation if a
+  future same-route query-param-only link is ever added.
+Schema references (`properties.sqft/bathrooms/photo_urls/amenities/photo_labels`,
+`profiles.phone`, `support_requests.status`) all verified against real migrations/live schema.
+
+### PM Visual Verification — two-instance loop (reconciled)
+Both instances independently VERIFIED. Items initially flagged by either instance (green
+"Active" status badges appearing to conflict with the "no off-brand greens" redesign rule;
+inline-SVG field icons on `ProfileCreationPage.tsx` instead of Lucide) were checked against
+the actual codebase and confirmed to be pre-existing conventions used elsewhere in the admin
+portal / that page, not new regressions. Chart colors are brand-only
+(`#3A7AFE`/`#00BBFF`/existing amber/gray). `AdminPropertiesPage`'s reuse of `PropertyCard`
+matches `HomePage.tsx`'s usage (same props; omits consumer-only `perfectFit`/`postedAgo`
+badges, which is admin-appropriate). **VERIFIED.**
+
+### Build gate
+`npx tsc --noEmit` (root, server-only tsconfig) and `cd client && npx tsc --noEmit`: zero
+errors. `npm run build`: clean production build (client + server bundle).
+
+### Dependencies
+Added `recharts` (explicitly authorized by the `a24b4370` ticket). `package-lock.json` was
+regenerated via the standard workaround (Replit firewall URLs unreachable from this Mac
+automation environment) and committed this time since a dependency genuinely changed.
+
+### Database
+No schema changes — `profiles.phone` already existed live; no migration needed.

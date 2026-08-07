@@ -11,6 +11,7 @@ export function ProfileCreationPage() {
   const navigate = useNavigate()
   const { role: profileRole, loading: roleLoading } = useProfileRole(user)
   const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [propertyCount, setPropertyCount] = useState('')
   const [experienceLevel, setExperienceLevel] = useState('')
@@ -27,11 +28,12 @@ export function ProfileCreationPage() {
 
       const { data } = await supabase
         .from('profiles')
-        .select('display_name, avatar_url')
+        .select('display_name, avatar_url, phone')
         .eq('id', user.id)
         .maybeSingle()
 
       setFullName(data?.display_name?.trim() || '')
+      setPhone(data?.phone?.trim() || '')
       setAvatarUrl(data?.avatar_url?.trim() || null)
     }
 
@@ -97,6 +99,7 @@ export function ProfileCreationPage() {
         display_name: fullName.trim() || null,
         ...(profileRole === 'landlord'
           ? {
+              phone: phone.trim() || null,
               business_name: businessName.trim() || null,
               landlord_property_count_range: propertyCount || null,
               landlord_experience_level: experienceLevel || null,
@@ -230,6 +233,25 @@ export function ProfileCreationPage() {
                     />
                     <svg className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="phone" className="mb-2 block text-sm font-medium text-gray-700">
+                    Phone Number
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="phone"
+                      type="tel"
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value)}
+                      placeholder="Enter your phone number"
+                      className="w-full rounded-lg border border-gray-200 px-4 py-3 pr-10 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
+                    />
+                    <svg className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h2.28a2 2 0 011.897 1.368l1.156 3.47a2 2 0 01-.455 2.11l-1.274 1.274a16 16 0 006.364 6.364l1.274-1.274a2 2 0 012.11-.455l3.47 1.156A2 2 0 0121 18.72V21a2 2 0 01-2 2h-1C9.716 23 1 14.284 1 3V2a2 2 0 012-2z" />
                     </svg>
                   </div>
                 </div>

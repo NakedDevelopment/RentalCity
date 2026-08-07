@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { fetchAdminDirectory, type AdminDirectoryUser } from '../../lib/adminApi'
 import { AdminPageHeader, AdminSearchInput, admin } from './adminUi'
 
 const PAGE_SIZE = 25
+type RoleFilter = 'all' | 'landlord' | 'tenant' | 'admin'
 
 function matchesSearch(u: AdminDirectoryUser, q: string): boolean {
   if (!q) return true
@@ -21,10 +22,16 @@ function matchesSearch(u: AdminDirectoryUser, q: string): boolean {
 }
 
 export function AdminUsersPage() {
+  const [searchParams] = useSearchParams()
+  const roleParam = searchParams.get('role')
+  const initialRole: RoleFilter =
+    roleParam === 'landlord' || roleParam === 'tenant' || roleParam === 'admin' ? roleParam : 'all'
+
   const [users, setUsers] = useState<AdminDirectoryUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [role, setRole] = useState<RoleFilter>(initialRole)
   const [page, setPage] = useState(1)
 
   useEffect(() => {
@@ -51,13 +58,12 @@ export function AdminUsersPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim()
-    if (!q) return users
-    return users.filter((u) => matchesSearch(u, q))
-  }, [users, search])
+    return users.filter((u) => (role === 'all' || u.role === role) && matchesSearch(u, q))
+  }, [users, search, role])
 
   useEffect(() => {
     setPage(1)
-  }, [search])
+  }, [search, role])
 
   const total = filtered.length
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -90,13 +96,25 @@ export function AdminUsersPage() {
           <div
             className={`${admin.contentTop} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}
           >
-            <AdminSearchInput
-              id="admin-users-search"
-              label="Search users"
-              value={search}
-              onChange={setSearch}
-              placeholder="Search email, name, role, phone, or id…"
-            />
+            <div className="flex flex-1 items-center gap-3">
+              <AdminSearchInput
+                id="admin-users-search"
+                label="Search users"
+                value={search}
+                onChange={setSearch}
+                placeholder="Search email, name, role, phone, or id…"
+              />
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as RoleFilter)}
+                className={admin.btnChip}
+              >
+                <option value="all">All roles</option>
+                <option value="landlord">Landlords</option>
+                <option value="tenant">Tenants</option>
+                <option value="admin">Admins</option>
+              </select>
+            </div>
             <p className="text-sm tabular-nums text-gray-600">
               {total === 0 ? (
                 'No matches'

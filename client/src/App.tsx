@@ -70,6 +70,8 @@ import { LandlordRatingsReceivedPage } from './pages/LandlordRatingsReceivedPage
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'
 import { AdminUsersPage } from './pages/admin/AdminUsersPage'
 import { AdminUserDetailPage } from './pages/admin/AdminUserDetailPage'
+import { AdminPropertiesPage } from './pages/admin/AdminPropertiesPage'
+import { AdminPropertyDetailPage } from './pages/admin/AdminPropertyDetailPage'
 import { AdminIssuesPage } from './pages/admin/AdminIssuesPage'
 import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage'
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage'
@@ -187,6 +189,8 @@ export default function App() {
         <Route index element={<AdminDashboardPage />} />
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="users/:id" element={<AdminUserDetailPage />} />
+        <Route path="properties" element={<AdminPropertiesPage />} />
+        <Route path="properties/:id" element={<AdminPropertyDetailPage />} />
         <Route path="issues" element={<AdminIssuesPage />} />
         <Route path="notifications" element={<AdminNotificationsPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />

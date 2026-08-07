@@ -101,6 +101,10 @@ export function AdminUserDetailPage() {
           <p className="mt-1 text-gray-800">{row.display_name ?? '—'}</p>
         </div>
         <div>
+          <p className={admin.fieldLabel}>Phone</p>
+          <p className="mt-1 text-gray-800">{row.phone ?? 'Not provided'}</p>
+        </div>
+        <div>
           <p className={admin.fieldLabel}>Role</p>
           <p className="mt-1 text-gray-800">{row.role}</p>
         </div>

@@ -1,61 +1,30 @@
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { LayoutGrid, Users, AlertTriangle, Bell, Settings, User, Building2, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { UserMenu } from './UserMenu'
 
-const navItems = [
-  { path: '/admin', label: 'Dashboard', exact: true },
-  { path: '/admin/users', label: 'Users', exact: false },
-  { path: '/admin/issues', label: 'Issues', exact: false },
-  { path: '/admin/notifications', label: 'Notifications', exact: false },
-  { path: '/admin/settings', label: 'Settings', exact: false },
-  { path: '/admin/profile', label: 'Profile', exact: false },
+type NavItem = { path: string; label: string; icon: LucideIcon; exact: boolean }
+
+const navItems: NavItem[] = [
+  { path: '/admin', label: 'Dashboard', icon: LayoutGrid, exact: true },
+  { path: '/admin/users', label: 'Users', icon: Users, exact: false },
+  { path: '/admin/properties', label: 'Properties', icon: Building2, exact: false },
+  { path: '/admin/issues', label: 'Issues', icon: AlertTriangle, exact: false },
+  { path: '/admin/notifications', label: 'Notifications', icon: Bell, exact: false },
+  { path: '/admin/settings', label: 'Settings', icon: Settings, exact: false },
+  { path: '/admin/profile', label: 'Profile', icon: User, exact: false },
 ] as const
 
-function NavIcon({ name }: { name: string }) {
-  const icons: Record<string, React.ReactNode> = {
-    dashboard: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-      </svg>
-    ),
-    users: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-    ),
-    issues: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-      </svg>
-    ),
-    bell: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-      </svg>
-    ),
-    settings: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-    person: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-      </svg>
-    ),
-  }
-  return icons[name] ?? icons.dashboard
-}
-
-const iconByPath: Record<string, string> = {
-  '/admin': 'dashboard',
-  '/admin/users': 'users',
-  '/admin/issues': 'issues',
-  '/admin/notifications': 'bell',
-  '/admin/settings': 'settings',
-  '/admin/profile': 'person',
+function Logo() {
+  return (
+    <Link to="/admin" className="flex items-center gap-3">
+      <img src="/brand/rental-city-wordmark-gradient.svg" alt="Rental City" className="h-7 w-auto" />
+      <span className="rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
+        Admin
+      </span>
+    </Link>
+  )
 }
 
 export function AdminLayout() {
@@ -65,7 +34,7 @@ export function AdminLayout() {
 
   if (authLoading || loading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8FAFD]">
         <span className="text-gray-500">Loading...</span>
       </div>
     )
@@ -78,81 +47,79 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
-      <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col pl-2 pr-4">
-        <header className="relative z-10 shrink-0 border-b bg-white -mx-4 pl-2 pr-4">
-          <div className="flex items-center">
-            <Link to="/admin" className="flex items-center py-3">
-              <img src="/brand/rental-city-wordmark-gradient.svg" alt="Rental City" className="h-7 w-auto" />
-            </Link>
-            <span className="ml-3 rounded-md bg-gray-100 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600">
-              Admin
-            </span>
-            <div className="mr-4 w-56 shrink-0" aria-hidden />
-            <div className="flex min-w-0 flex-1 justify-end">
-              <nav className="flex items-center gap-2 py-4">
-                <UserMenu />
-              </nav>
-            </div>
-          </div>
-        </header>
-
-        <div className="-ml-4 -mr-4 flex min-h-0 flex-1">
-          <aside className="relative z-10 mr-4 flex w-56 shrink-0 flex-col bg-white text-gray-900 border-r border-gray-100">
-            <nav className="flex-1 space-y-1 p-4 pt-4">
-              {navItems.map((item) => {
-                const active = item.exact
-                  ? location.pathname === item.path
-                  : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
-                const icon = iconByPath[item.path] ?? 'dashboard'
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm transition-colors ${
-                      active ? 'gradient-primary text-white' : 'text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900'
-                    }`}
-                  >
-                    <NavIcon name={icon} />
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </nav>
-          </aside>
-
-          <div className="flex min-w-0 flex-1 flex-col">
-            <main className="min-w-0 flex-1 overflow-auto">
-              <div className="w-full shrink-0 pt-4 pb-6">
-                <Outlet />
-              </div>
-            </main>
-          </div>
+    <div className="min-h-screen flex flex-col bg-[#F8FAFD] text-gray-600" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <header className="bg-white border-b border-gray-200/60 sticky top-0 z-30 h-16 flex items-center shadow-sm">
+        <div className="shrink-0 flex items-center px-6 h-full md:w-64 md:border-r border-gray-200/60">
+          <Logo />
         </div>
+        <div className="flex-1 flex justify-end items-center px-6">
+          <UserMenu />
+        </div>
+      </header>
 
-        <footer className="relative z-10 shrink-0 border-t bg-white py-6 -mx-4 pl-2 pr-4">
-          <div className="flex items-center">
-            <span className="text-sm text-gray-600">© 2026 Rental City. All rights reserved.</span>
-            <div className="mr-4 w-56 shrink-0" aria-hidden />
-            <div className="flex min-w-0 flex-1 justify-end">
-              <nav className="flex items-center gap-6 text-sm text-gray-600">
-                <Link to="/about" className="hover:text-gray-900">
-                  About
+      <div className="flex flex-1 min-h-0">
+        <aside className="w-64 shrink-0 bg-white border-r border-gray-200/60 flex-col hidden md:flex">
+          <nav className="flex-1 px-4 py-6 space-y-1.5">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = item.exact
+                ? location.pathname === item.path
+                : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center gap-3.5 px-4 py-3 rounded-xl transition-all font-semibold text-sm ${
+                    isActive ? 'bg-[#EEF4FE] text-[#3A7AFE]' : 'text-gray-500 hover:bg-gray-50 hover:text-[#0F1E3D]'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
+                  {item.label}
                 </Link>
-                <Link to="/privacy" className="hover:text-gray-900">
-                  Privacy
+              )
+            })}
+          </nav>
+        </aside>
+
+        <main className="flex-1 overflow-auto min-w-0 bg-[#F8FAFD]">
+          <nav className="md:hidden flex items-center gap-1.5 overflow-x-auto bg-white border-b border-gray-200/60 px-4 py-2">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = item.exact
+                ? location.pathname === item.path
+                : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg whitespace-nowrap text-sm font-semibold ${
+                    isActive ? 'bg-[#EEF4FE] text-[#3A7AFE]' : 'text-gray-500'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {item.label}
                 </Link>
-                <Link to="/terms" className="hover:text-gray-900">
-                  Terms
-                </Link>
-                <Link to="/support" className="hover:text-gray-900">
-                  Support
-                </Link>
-              </nav>
-            </div>
+              )
+            })}
+          </nav>
+
+          <div className="px-4 sm:px-6 lg:px-8 pt-6 pb-10">
+            <Outlet />
           </div>
-        </footer>
+        </main>
       </div>
+
+      <footer className="bg-white border-t border-gray-200/60 py-6 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-6 lg:px-8">
+          <span className="text-sm text-gray-500">© 2026 Rental City. All rights reserved.</span>
+          <nav className="flex items-center gap-6 text-sm font-medium text-gray-500">
+            <Link to="/about" className="hover:text-[#0F1E3D] transition-colors">About</Link>
+            <Link to="/privacy" className="hover:text-[#0F1E3D] transition-colors">Privacy</Link>
+            <Link to="/terms" className="hover:text-[#0F1E3D] transition-colors">Terms</Link>
+            <Link to="/support" className="hover:text-[#0F1E3D] transition-colors">Support</Link>
+          </nav>
+        </div>
+      </footer>
     </div>
   )
 }
