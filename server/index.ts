@@ -8,6 +8,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import ws from 'ws'
 import {
   landlordAnswersToPrefs,
   tenantAnswersToHistory,
@@ -114,6 +115,7 @@ function getSupabaseAdmin() {
   if (!supabaseUrl || !supabaseServiceKey) return null
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    realtime: { transport: ws as unknown as typeof WebSocket },
   })
 }
 
