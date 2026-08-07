@@ -249,3 +249,73 @@ automation environment) and committed this time since a dependency genuinely cha
 
 ### Database
 No schema changes — `profiles.phone` already existed live; no migration needed.
+
+## 2026-08-07 — Pulse automation run #2
+
+See `USER_STORIES/TASK_c543e7ee.md` for full ACs and PM sign-off. One `code_task` open
+this run (task `c543e7ee`), all others in the backlog are `future_feature`/`human_task`/
+`incomplete` and out of scope for the strict `task_type=code_task` filter.
+
+### Changes
+1. **Redesign Admin Landlord Detail Page — Rich Profile View** (task `c543e7ee`) —
+   `client/src/pages/admin/AdminUserDetailPage.tsx` rewritten from a plain text field list
+   into a hero header (avatar with initial-letter fallback, display name, role badge,
+   status badge) + Contact & Account Info panel (email/phone/member-since/last-seen) +
+   a landlord-only Listed Properties grid (bespoke card — thumbnail, title/address,
+   city/state, beds · rent, status badge — deliberately not the shared `PropertyCard`
+   component, since that component requires baths/sqft props this page doesn't fetch)
+   linking to the existing `AdminPropertyDetailPage`, plus a "X rented out" stat.
+   `server/index.ts`'s `/api/admin/directory` route and `AdminDirectoryUser` type extended
+   with `avatar_url` (from `profiles`) and `last_sign_in_at` (from `auth.users` via the
+   existing `admin.auth.admin.listUsers()` call — not a public-table fabrication).
+   `AdminPropertiesPage.tsx`'s shared `StatusBadge` gained a `leased` → blue variant (the
+   real schema enum is `draft/active/leased/inactive`; there is no literal `'rented'`
+   value) and now exports `PLACEHOLDER_IMAGES` for reuse on the new page's cards.
+
+### QA — two-instance adversarial loop (reconciled)
+Instance A (happy path): all 10 ACs traced to real code/schema, no FAILs. Flagged the
+display-name fallback showing the user's email instead of the ticket's literal "—" when
+`display_name` is null — fixed (`displayName`/`avatarName` now split so the header text
+falls back to "—" while the avatar initial still uses the email for a sensible letter).
+Instance B (adversarial) raised three items, each investigated directly rather than
+picked-a-side:
+- Reused `PLACEHOLDER_IMAGES` stock-photo fallback flagged as a possible mock-data
+  violation — verified via `git log -p` it's a pre-existing, already-shipped, already
+  ACC-passed convention from the prior run (`48d7be3`), not new. Not a HARD FAIL.
+- Stale-`row`-during-fast-navigation race (switching between two landlord detail pages
+  without unmount) — verified the original pre-redesign file had the identical
+  no-reset-on-id-change characteristic; not a regression introduced by this diff. Documented
+  as a known latent limitation, not fixed (admin-only tool, self-heals within one fetch).
+- `StatusBadge`'s new `leased` bucket sharing amber styling with `inactive` undermined the
+  task's own "rented out" stat — real issue, fixed by adding a distinct blue variant.
+
+### PM Visual Verification — two-instance loop (reconciled)
+Instance A and B disagreed on whether `bg-[#EEF4FE] text-[#3A7AFE]` (the landlord
+role-badge color) was a typo of the `blue-50` token (`#EEF4FF`) or an established
+convention — investigated directly via grep: confirmed it's a real, 5-times-repeated
+sitewide convention (`AdminLayout.tsx:73,96`, `TenantLayout.tsx:146`,
+`PropertiesPage.tsx:27`), so reverted an incorrect interim fix back to the exact
+established hex. Both instances independently caught a real bug Instance A traced to
+`tailwind.config.js`: the new `leased` badge's `text-blue-800` doesn't resolve to the
+brand-remapped blue scale (only `blue.50`–`blue.700` are overridden; `800` silently falls
+through to stock Tailwind navy) — fixed to `text-blue-700`. Also aligned on request:
+hero avatar `h-20/w-20` → `h-16/w-16` (matches `UserMenu.tsx` and every other avatar
+sitewide), property-card thumbnail `aspect-[16/9]` → `aspect-[4/3]` (matches the sibling
+`AdminPropertiesPage` grid card this new card is functionally equivalent to), contact-info
+grid `gap-4` → `gap-3` (matches `AdminIssuesPage`/`AdminNotificationsPage` detail-field
+grids). The new bordered/colored role+status pill treatment on this page (vs.
+`AdminUsersPage`'s flat gray/bare-text table styling for the same fields) was confirmed
+intentional, not a regression — the ticket's entire premise is elevating this page beyond
+that plain-list treatment. **VERIFIED** after fixes.
+
+### Build gate
+`npx tsc --noEmit` (root) and `cd client && npx tsc --noEmit`: zero errors, both before and
+after the QA/Visual-Verification fix round. `npm run build`: clean production build.
+
+### Dependencies
+No new dependency. `package-lock.json` regenerated via the standard workaround to run the
+build gate, then reverted (`git checkout -- package-lock.json`) since nothing changed.
+
+### Database
+No schema changes — all referenced columns (`profiles.avatar_url`, `properties.*`) already
+existed live. `last_sign_in_at` is intentionally never queried from a public table.

@@ -8,6 +8,8 @@ export type AdminDirectoryUser = {
   is_suspended: boolean
   phone: string | null
   created_at: string
+  avatar_url: string | null
+  last_sign_in_at: string | null
 }
 
 export async function fetchAdminDirectory(): Promise<AdminDirectoryUser[]> {

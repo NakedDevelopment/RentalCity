@@ -2455,7 +2455,7 @@ app.get('/api/admin/directory', async (req, res) => {
 
   const { data: profiles, error: pErr } = await admin
     .from('profiles')
-    .select('id, role, display_name, is_suspended, created_at, phone')
+    .select('id, role, display_name, is_suspended, created_at, phone, avatar_url')
     .in('id', ids)
 
   if (pErr) {
@@ -2473,6 +2473,8 @@ app.get('/api/admin/directory', async (req, res) => {
       is_suspended: Boolean(p?.is_suspended),
       phone: (p?.phone as string | null | undefined) ?? null,
       created_at: (p?.created_at as string | undefined) ?? u.created_at,
+      avatar_url: (p?.avatar_url as string | null | undefined) ?? null,
+      last_sign_in_at: u.last_sign_in_at ?? null,
     }
   })
 

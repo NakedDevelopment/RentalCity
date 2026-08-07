@@ -6,7 +6,7 @@ import { fetchAdminDirectory, type AdminDirectoryUser } from '../../lib/adminApi
 import { PropertyCard } from '../../components/PropertyCard'
 import { AdminPageHeader, AdminSearchInput, AdminLoadingBlock, AdminErrorBlock, admin } from './adminUi'
 
-const PLACEHOLDER_IMAGES = [
+export const PLACEHOLDER_IMAGES = [
   'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=400&h=300&fit=crop',
   'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=400&h=300&fit=crop',
   'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=300&fit=crop',
@@ -216,9 +216,11 @@ export function StatusBadge({ status }: { status: string }) {
   const style =
     status === 'active'
       ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-      : status === 'draft'
-        ? 'bg-gray-100 text-gray-700 border-gray-200'
-        : 'bg-amber-50 text-amber-900 border-amber-200'
+      : status === 'leased'
+        ? 'bg-blue-50 text-blue-700 border-blue-200'
+        : status === 'draft'
+          ? 'bg-gray-100 text-gray-700 border-gray-200'
+          : 'bg-amber-50 text-amber-900 border-amber-200'
   return (
     <span className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${style}`}>{status}</span>
   )
