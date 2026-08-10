@@ -1215,12 +1215,11 @@ async function loadLandlordApplication(
 /**
  * Create a Stripe Checkout Session for a landlord to unlock (view) a tenant's
  * full profile — background check, credit, contact, etc. One-time $200.
+ * Fee is waived when the tenant originally redeemed this landlord's invite link.
  */
 app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
-  const stripe = getStripe()
-  if (!stripe) return res.status(500).json({ error: 'Payments are not configured' })
 
   const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
   const user = await authUser(token)
@@ -1236,6 +1235,23 @@ app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
     return res.status(409).json({ error: 'This application is no longer pending.' })
   }
 
+  // Fee waiver: if the tenant redeemed this landlord's invite link (at any point —
+  // not bounded by the 10-day restriction window), unlock for free immediately.
+  const { data: inviteRecord } = await admin
+    .from('tenant_invite_restrictions')
+    .select('tenant_id')
+    .eq('tenant_id', application.tenant_id)
+    .eq('landlord_id', user.id)
+    .maybeSingle()
+  if (inviteRecord) {
+    await admin
+      .from('applications')
+      .update({ unlocked_at: new Date().toISOString() })
+      .eq('id', applicationId)
+      .is('unlocked_at', null)
+    return res.json({ waived: true })
+  }
+
   if (demoBypassEnabled()) {
     try {
       const result = await activateLandlordProfileUnlockPaid(admin, {
@@ -1249,6 +1265,9 @@ app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
       return res.status(500).json({ error: err instanceof Error ? err.message : 'Unlock failed' })
     }
   }
+
+  const stripe = getStripe()
+  if (!stripe) return res.status(500).json({ error: 'Payments are not configured' })
 
   const origin =
     req.headers.origin ||

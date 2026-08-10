@@ -71,8 +71,12 @@ export function LandlordInviteTenantsCard() {
     <section className="rounded-xl border border-gray-200 bg-white p-5">
       <h2 className="text-sm font-medium text-gray-900">Invite prospective tenants</h2>
       <p className="mt-2 text-sm leading-6 text-gray-600">
-        Share a private link. For 10 days after they accept, they only see your active listings and can only apply to
-        your properties—then they get full access to Rental City.
+        Already have a tenant in mind? Share a private link and skip the $200 placement fee — if they sign up through
+        your link, their profile unlocks for free.
+      </p>
+      <p className="mt-1 text-sm leading-6 text-gray-500">
+        For the first 10 days after they accept, they&apos;ll only see your active listings. Then they get full access
+        to Rental City.
       </p>
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}

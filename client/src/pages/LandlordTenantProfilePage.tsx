@@ -708,7 +708,16 @@ export function LandlordTenantProfilePage() {
         const err = await res.json().catch(() => ({}))
         throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
       }
-      const json = (await res.json()) as { clientSecret?: string; demo?: boolean }
+      const json = (await res.json()) as { clientSecret?: string; demo?: boolean; waived?: boolean }
+
+      // Invite-waived: landlord brought this tenant via invite link — no payment needed.
+      if (json.waived) {
+        setPendingUnlockedAt(new Date().toISOString())
+        setUnlockPayModalOpen(false)
+        const qs = pendingApplicationId ? `?application=${encodeURIComponent(pendingApplicationId)}` : ''
+        navigate(`/matches/tenant/${id}${qs}`, { replace: true, state: location.state })
+        return
+      }
 
       // Demo bypass (dev only): profile unlocked server-side, no payment.
       if (json.demo) {
