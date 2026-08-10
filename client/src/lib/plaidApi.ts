@@ -79,6 +79,16 @@ export async function refreshPlaidVerification(accessToken: string): Promise<Pla
   return (await res.json()) as PlaidVerification
 }
 
+export async function createPlaidIdvLinkToken(accessToken: string): Promise<string> {
+  const res = await fetch('/api/plaid/idv-link-token/create', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) await parseError(res, 'Could not start identity verification')
+  const data = (await res.json()) as { linkToken: string }
+  return data.linkToken
+}
+
 export async function createPlaidIdentityVerification(
   accessToken: string,
 ): Promise<PlaidIdentityVerificationResult> {

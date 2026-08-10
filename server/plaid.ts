@@ -50,6 +50,31 @@ export async function createLinkToken(client: PlaidApi, userId: string): Promise
   return resp.data.link_token
 }
 
+/**
+ * Creates a Plaid Link token scoped to the Identity Verification product so the
+ * IDV flow can be rendered as an in-app modal (via react-plaid-link) rather than
+ * opening a separate browser window. Plaid picks up any existing pending session
+ * for this user+template automatically.
+ */
+export async function createIdvLinkToken(client: PlaidApi, userId: string): Promise<string> {
+  const templateId = process.env.PLAID_IDENTITY_TEMPLATE_ID
+  if (!templateId) {
+    throw new Error('Identity Verification is not configured. Set PLAID_IDENTITY_TEMPLATE_ID.')
+  }
+  const resp = await client.linkTokenCreate({
+    user: { client_user_id: userId },
+    client_name: 'Rental City',
+    products: [Products.IdentityVerification],
+    identity_verification: {
+      template_id: templateId,
+      gave_consent: true,
+    },
+    country_codes: [CountryCode.Us],
+    language: 'en',
+  })
+  return resp.data.link_token
+}
+
 export type IdentityVerificationResult = {
   sessionId: string
   status: string

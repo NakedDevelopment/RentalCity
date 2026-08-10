@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { usePlaidLink } from 'react-plaid-link'
 import { useAuth } from '../lib/useAuth'
 import {
   createPlaidIdentityVerification,
+  createPlaidIdvLinkToken,
   getPlaidIdentityStatus,
   type PlaidIdentityVerificationStatus,
 } from '../lib/plaidApi'
@@ -51,7 +53,7 @@ export function IdentityVerificationPage() {
   const navigate = useNavigate()
 
   const [status, setStatus] = useState<PlaidIdentityVerificationStatus | null>(null)
-  const [shareableUrl, setShareableUrl] = useState<string | null>(null)
+  const [linkToken, setLinkToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
   const [checking, setChecking] = useState(false)
@@ -67,10 +69,7 @@ export function IdentityVerificationPage() {
       if (!token || cancelled) return
       try {
         const result = await getPlaidIdentityStatus(token)
-        if (!cancelled) {
-          setStatus(result.status)
-          setShareableUrl(result.shareableUrl)
-        }
+        if (!cancelled) setStatus(result.status)
       } catch {
         // No session yet — that's fine
       } finally {
@@ -83,26 +82,6 @@ export function IdentityVerificationPage() {
     }
   }, [user])
 
-  const handleStart = useCallback(async () => {
-    setError(null)
-    setStarting(true)
-    try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('Please sign in again.')
-      const result = await createPlaidIdentityVerification(token)
-      setStatus(result.status)
-      setShareableUrl(result.shareableUrl)
-      // Open in a new window so the user can complete it and come back
-      if (result.shareableUrl) {
-        window.open(result.shareableUrl, '_blank', 'noopener,noreferrer')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start identity verification')
-    } finally {
-      setStarting(false)
-    }
-  }, [])
-
   const handleCheckStatus = useCallback(async () => {
     setError(null)
     setChecking(true)
@@ -111,9 +90,7 @@ export function IdentityVerificationPage() {
       if (!token) throw new Error('Please sign in again.')
       const result = await getPlaidIdentityStatus(token)
       setStatus(result.status)
-      setShareableUrl(result.shareableUrl)
       if (result.status === 'success') {
-        // Small delay so the user sees the success state before redirect
         await new Promise((r) => setTimeout(r, 1200))
         navigate('/matches')
       }
@@ -123,6 +100,51 @@ export function IdentityVerificationPage() {
       setChecking(false)
     }
   }, [navigate])
+
+  // Plaid Link — opens the IDV flow as an in-app modal overlay
+  const { open, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess: () => {
+      setLinkToken(null)
+      void handleCheckStatus()
+    },
+    onExit: () => {
+      setLinkToken(null)
+      // Sync status in case the user completed steps before closing
+      void handleCheckStatus()
+    },
+  })
+
+  // Auto-open Link as soon as the token is ready
+  useEffect(() => {
+    if (linkToken && ready) open()
+  }, [linkToken, ready, open])
+
+  /**
+   * Start or resume identity verification inside the app.
+   * - createNew=true  → create a fresh IDV session (first time or retry after failure)
+   * - createNew=false → reuse the existing session (resuming an active/pending one)
+   */
+  const handleStart = useCallback(async (createNew: boolean) => {
+    setError(null)
+    setStarting(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Please sign in again.')
+
+      if (createNew) {
+        const result = await createPlaidIdentityVerification(token)
+        setStatus(result.status)
+      }
+
+      const lt = await createPlaidIdvLinkToken(token)
+      setLinkToken(lt)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start identity verification')
+    } finally {
+      setStarting(false)
+    }
+  }, [])
 
   if (!user) {
     return (
@@ -184,24 +206,23 @@ export function IdentityVerificationPage() {
           <div className="mt-7 space-y-4">
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
               <p className="text-sm text-blue-800">
-                Your verification is in progress. Complete the steps in the Plaid window, then
-                tap&nbsp;<strong>Check status</strong> to continue.
+                Your verification is in progress. Click <strong>Continue verification</strong> to
+                pick up where you left off, or <strong>Check status</strong> if you&apos;ve already
+                finished the steps.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              {shareableUrl && (
-                <a
-                  href={shareableUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-lg btn-primary px-5 py-2.5 text-sm font-medium text-white"
-                >
-                  Open verification
-                </a>
-              )}
               <button
                 type="button"
-                onClick={handleCheckStatus}
+                onClick={() => void handleStart(false)}
+                disabled={starting}
+                className="rounded-lg btn-primary px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {starting ? 'Opening…' : 'Continue verification'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCheckStatus()}
                 disabled={checking}
                 className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
@@ -220,7 +241,7 @@ export function IdentityVerificationPage() {
             </div>
             <button
               type="button"
-              onClick={handleStart}
+              onClick={() => void handleStart(true)}
               disabled={starting}
               className="rounded-lg btn-primary px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
             >
@@ -235,7 +256,7 @@ export function IdentityVerificationPage() {
               <ul className="mt-3 space-y-2 text-sm text-gray-600">
                 {[
                   'Takes about 2–3 minutes',
-                  'A government-issued ID (passport or driver\'s license)',
+                  "A government-issued ID (passport or driver's license)",
                   'A short selfie or photo match step',
                   'Your information stays with Plaid — never stored on our servers',
                 ].map((item) => (
@@ -261,7 +282,7 @@ export function IdentityVerificationPage() {
 
             <button
               type="button"
-              onClick={handleStart}
+              onClick={() => void handleStart(true)}
               disabled={starting}
               className="w-full rounded-lg btn-primary px-5 py-3 text-sm font-medium text-white disabled:opacity-50"
             >

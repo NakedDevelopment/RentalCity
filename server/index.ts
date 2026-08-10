@@ -20,6 +20,7 @@ import {
   getPlaidClient,
   getPlaidEnv,
   createLinkToken,
+  createIdvLinkToken,
   exchangePublicToken,
   fetchFinancialSummary,
   createIdentityVerificationSession,
@@ -2680,6 +2681,21 @@ app.post('/api/plaid/identity-verification/create', async (req, res) => {
   } catch (err) {
     const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
     console.error('Plaid IDV create error:', msg || (err as Error)?.message)
+    return res.status(502).json({ error: msg || 'Could not start identity verification' })
+  }
+})
+
+app.post('/api/plaid/idv-link-token/create', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const client = getPlaidClient()
+  if (!client) return plaidUnavailable(res)
+  try {
+    const lt = await createIdvLinkToken(client, user.id)
+    return res.json({ linkToken: lt })
+  } catch (err) {
+    const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
+    console.error('Plaid IDV link-token error:', msg || (err as Error)?.message)
     return res.status(502).json({ error: msg || 'Could not start identity verification' })
   }
 })
