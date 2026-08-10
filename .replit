@@ -51,6 +51,6 @@ build = ["npm", "run", "build"]
 [userenv]
 
 [userenv.shared]
-PLAID_ENV = "sandbox"
+PLAID_ENV = "production"
 
 [userenv.development]
