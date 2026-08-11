@@ -1,0 +1,166 @@
+{
+  "info": {
+    "name": "Oneview Report Sandbox",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "BasicCreditRequest",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "https://api.sandbox.equifax.com/business/oneview/consumer-credit/v1/reports/credit-report",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"consumers\": {\n    \"name\": [\n      {\n        \"identifier\": \"current\",\n        \"firstName\": \"LJBKFJ\",\n        \"lastName\": \"KHJGUFJM\"\n      }\n    ],\n    \"socialNum\": [\n      {\n        \"identifier\": \"current\",\n        \"number\": \"666123456\"\n      }\n    ],\n    \"addresses\": [\n      {\n        \"identifier\": \"current\",\n        \"houseNumber\": \"123\",\n        \"streetName\": \"POIBHHFJD\",\n        \"streetType\": \"ST\",\n        \"city\": \"ATLANTA\",\n        \"state\": \"GA\",\n        \"zip\": \"30374\"\n      }\n    ]\n  },\n  \"customerReferenceIdentifier\": \"BasicCreditRequest\",\n  \"customerConfiguration\": {\n    \"equifaxUSConsumerCreditReport\": {\n      \"pdfComboIndicator\": \"Y\",\n      \"memberNumber\": \"999XX12345\",\n      \"securityCode\": \"@U2\",\n      \"customerCode\": \"IAPI\",\n      \"multipleReportIndicator\": \"1\",\n      \"models\": [\n        {\n          \"identifier\": \"02799\",\n          \"modelField\": [\n            \"3\",\n            \"GA\"\n          ]\n        },\n        {\n          \"identifier\": \"05143\"\n        },\n        {\n          \"identifier\": \"02801\"\n        }\n      ],\n      \"ECOAInquiryType\": \"Individual\"\n    }\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "CreditRequestWithPrismModels",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "https://api.sandbox.equifax.com/business/oneview/consumer-credit/v1/reports/credit-report",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"consumers\": {\n    \"name\": [\n      {\n        \"identifier\": \"current\",\n        \"firstName\": \"LJBKFJ\",\n        \"lastName\": \"KHJGUFJM\"\n      }\n    ],\n    \"socialNum\": [\n      {\n        \"identifier\": \"current\",\n        \"number\": \"666123456\"\n      }\n    ],\n    \"addresses\": [\n      {\n        \"identifier\": \"current\",\n        \"houseNumber\": \"123\",\n        \"streetName\": \"POIBHHFJD\",\n        \"streetType\": \"ST\",\n        \"city\": \"ATLANTA\",\n        \"state\": \"GA\",\n        \"zip\": \"30374\"\n      }\n    ],\n    \"prism_data\": {\n      \"applicants\": [\n        {\n          \"identifier\": \"current\",\n          \"cashflow_data\": {\n            \"accounts\": [\n              {\n                \"account_id\": \"4DAFB3CD-6C35-4139-898D-FDBE2E787BA9\",\n                \"account_type\": \"CHECKING\",\n                \"current_balance\": 1570.96,\n                \"institution_id\": \"PNC BANK\",\n                \"balance_date\": \"2024-01-26\"\n              }\n            ],\n            \"transactions\": [\n              {\n                \"amount\": \"44.98,\",\n                \"transaction_id\": \"15941210830,\",\n                \"account_id\": \"4DAFB3CD-6C35-4139-898D-FDBE2E787BA9,\",\n                \"memo\": \"ACH DEBIT xxxxxxxx6133 FIRSTENERGY OPCO FE ECHECK,\",\n                \"credit_or_debit\": \"DEBIT,\",\n                \"iso_currency_code\": \"USD,\",\n                \"posted_date\": \"2024-01-23\"\n              },\n              {\n                \"amount\": \"0.02,\",\n                \"transaction_id\": \"15941210831,\",\n                \"account_id\": \"4DAFB3CD-6C35-4139-898D-FDBE2E787BA9,\",\n                \"memo\": \"INTEREST PAYMENT,\",\n                \"credit_or_debit\": \"CREDIT,\",\n                \"iso_currency_code\": \"USD,\",\n                \"posted_date\": \"2024-01-20\"\n              }\n            ]\n          }\n        }\n      ]\n    }\n  },\n  \"customerReferenceIdentifier\": \"CreditRequestWithPrismModels\",\n  \"customerConfiguration\": {\n    \"equifaxUSConsumerCreditReport\": {\n      \"pdfComboIndicator\": \"N\",\n      \"memberNumber\": \"999XX12345\",\n      \"securityCode\": \"@U2\",\n      \"customerCode\": \"IAPI\",\n      \"multipleReportIndicator\": \"1\",\n      \"models\": [\n        {\n          \"identifier\": \"10012\"\n        }\n      ],\n      \"ECOAInquiryType\": \"Individual\"\n    }\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "CreditRequestWithTWNandDataX",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "https://api.sandbox.equifax.com/business/oneview/consumer-credit/v1/reports/credit-report",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"consumers\": {\n    \"name\": [\n      {\n        \"identifier\": \"current\",\n        \"firstName\": \"LJBKFJ\",\n        \"lastName\": \"KHJGUFJM\"\n      }\n    ],\n    \"socialNum\": [\n      {\n        \"identifier\": \"current\",\n        \"number\": \"666123456\"\n      }\n    ],\n    \"addresses\": [\n      {\n        \"identifier\": \"current\",\n        \"houseNumber\": \"123\",\n        \"streetName\": \"POIBHHFJD\",\n        \"streetType\": \"ST\",\n        \"city\": \"ATLANTA\",\n        \"state\": \"GA\",\n        \"zip\": \"30374\"\n      }\n    ]\n  },\n  \"customerReferenceIdentifier\": \"CreditRequestWithTWNandDataX\",\n  \"customerConfiguration\": {\n    \"equifaxUSConsumerCreditReport\": {\n      \"pdfComboIndicator\": \"N\",\n      \"memberNumber\": \"999XX12345\",\n      \"securityCode\": \"@U2\",\n      \"customerCode\": \"IAPI\",\n      \"multipleReportIndicator\": \"1\",\n      \"models\": [\n        {\n          \"identifier\": \"02799\",\n          \"modelField\": [\n            \"3\",\n            \"GA\"\n          ]\n        },\n        {\n          \"identifier\": \"05143\"\n        },\n        {\n          \"identifier\": \"02801\"\n        }\n      ],\n      \"ECOAInquiryType\": \"Individual\"\n    },\n    \"equifaxUSConsumerTwnRequest\": {\n      \"userId\": \"twnUser@1234\",\n      \"userPassword\": \"pass123\",\n      \"permissiblePurposeCode\": \"PPASSESS\",\n      \"templateName\": \"Full VOI\"\n    },\n    \"equifaxUSConsumerDataxInquiryRequest\": {\n      \"authentication\": {\n        \"licensekey\": \"licenseKey123\",\n        \"password\": \"passwd123\"\n      }\n    }\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Oauth v2 Token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// "
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded",
+            "disabled": false,
+            "type": "default"
+          }
+        ],
+        "url": "https://api.sandbox.equifax.com/v2/oauth/token",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "grant_type",
+              "value": "client_credentials",
+              "disabled": false,
+              "type": "default"
+            },
+            {
+              "key": "scope",
+              "value": "https://api.equifax.com/business/oneview/consumer-credit/v1",
+              "disabled": false,
+              "type": "default"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "PDF",
+      "event": [],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "disabled": false,
+            "type": "default"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access token}}",
+            "disabled": true,
+            "type": "default"
+          }
+        ],
+        "url": "https://api.sandbox.equifax.com/business/oneview/consumer-credit/v1/reports/credit-report/0a341dc4-bf90-4a7b-8e29-ebc4787a7f0a"
+      }
+    },
+    {
+      "name": "CreditRequestWithSyntheticIDAlerts",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "https://api.sandbox.equifax.com/business/oneview/consumer-credit/v1/reports/credit-report",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"consumers\": {\n    \"name\": [\n      {\n        \"identifier\": \"current\",\n        \"firstName\": \"LJBKFJ\",\n        \"lastName\": \"KHJGUFJM\"\n      }\n    ],\n    \"socialNum\": [\n      {\n        \"identifier\": \"current\",\n        \"number\": \"666123456\"\n      }\n    ],\n    \"addresses\": [\n      {\n        \"identifier\": \"current\",\n        \"houseNumber\": \"123\",\n        \"streetName\": \"POIBHHFJD\",\n        \"streetType\": \"ST\",\n        \"city\": \"ATLANTA\",\n        \"state\": \"GA\",\n        \"zip\": \"30374\"\n      }\n    ]\n  },\n  \"customerReferenceIdentifier\": \"CreditRequestWithSyntheticIDAlerts\",\n  \"customerConfiguration\": {\n    \"equifaxUSConsumerCreditReport\": {\n      \"pdfComboIndicator\": \"Y\",\n      \"memberNumber\": \"999XX12345\",\n      \"securityCode\": \"@U2\",\n      \"customerCode\": \"IAPI\",\n      \"multipleReportIndicator\": \"1\",\n      \"models\": [\n        {\n          \"identifier\": \"02799\",\n          \"modelField\": [\n            \"3\",\n            \"GA\"\n          ]\n        },\n        {\n          \"identifier\": \"05143\"\n        },\n        {\n          \"identifier\": \"02801\"\n        }\n      ],\n      \"ECOAInquiryType\": \"Individual\"\n    },\n    \"syntheticIDAlertsRequest\": {\n      \"memberNumber\": \"999XX12345\",\n      \"securityCode\": \"@U2\",\n      \"ECOAInquiryType\": \"Individual\"\n    }\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "client_id",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "client_secret",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "access token",
+      "value": "",
+      "type": "default"
+    }
+  ]
+}
