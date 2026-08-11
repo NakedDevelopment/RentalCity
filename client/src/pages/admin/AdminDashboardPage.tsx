@@ -1,251 +1,364 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Zap, Home, Users, DollarSign, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { AdminPageHeader, admin } from './adminUi'
+import { admin } from './adminUi'
 
-const DAY_MS = 24 * 60 * 60 * 1000
-const TREND_DAYS = 30
+type Metric = { current: number; prior: number; series: number[] }
+type ActivityItem = { kind: string; label: string; sub: string | null; at: string; href: string | null }
 
-type SignupDay = { date: string; landlord: number; tenant: number }
-
-type DashboardState = {
-  loading: boolean
-  error: string | null
-  activeListings: number
-  activeListingsNew: number
-  totalLandlords: number
-  newLandlords: number
-  openSupport: number
-  newSignups: number
-  signupTrend: SignupDay[]
-  propertiesByStatus: { status: string; count: number }[]
+type Stats = {
+  period: string
+  generatedAt: string
+  rentalReports: Metric
+  newListings: Metric
+  newRenters: Metric
+  revenue: { currentCents: number; priorCents: number; billingEnabled: boolean }
+  dau: { tracked: boolean }
+  marketing: { tracked: boolean }
+  activity: ActivityItem[]
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  active: '#3A7AFE',
-  inactive: '#F59E0B',
-  draft: '#9CA3AF',
+const PERIODS = ['24h', '7d', '30d', '90d', 'all'] as const
+type Period = (typeof PERIODS)[number]
+
+const PERIOD_LABELS: Record<Period, string> = { '24h': '24h', '7d': '7d', '30d': '30d', '90d': '90d', all: 'All' }
+const PERIOD_DESC: Record<Period, string> = {
+  '24h': 'the previous 24 hours',
+  '7d': 'the previous 7 days',
+  '30d': 'the previous 30 days',
+  '90d': 'the previous 90 days',
+  all: 'all time',
 }
 
-function dayKey(iso: string) {
-  return iso.slice(0, 10)
+function pctChange(current: number, prior: number): number | null {
+  if (prior === 0) return current > 0 ? null : 0
+  return ((current - prior) / prior) * 100
 }
 
 export function AdminDashboardPage() {
-  const [state, setState] = useState<DashboardState>({
-    loading: true,
-    error: null,
-    activeListings: 0,
-    activeListingsNew: 0,
-    totalLandlords: 0,
-    newLandlords: 0,
-    openSupport: 0,
-    newSignups: 0,
-    signupTrend: [],
-    propertiesByStatus: [],
-  })
+  const [period, setPeriod] = useState<Period>('30d')
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const cutoff = new Date(Date.now() - TREND_DAYS * DAY_MS).toISOString()
-
+      setLoading(true)
+      setError(null)
       try {
-        const [
-          activeRes,
-          activeNewRes,
-          landlordsRes,
-          newLandlordsRes,
-          supportOpenRes,
-          recentProfilesRes,
-          allPropertiesRes,
-        ] = await Promise.all([
-          supabase.from('properties').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-          supabase.from('properties').select('*', { count: 'exact', head: true }).eq('status', 'active').gte('created_at', cutoff),
-          supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'landlord'),
-          supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'landlord').gte('created_at', cutoff),
-          supabase.from('support_requests').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_progress']),
-          supabase.from('profiles').select('role, created_at').gte('created_at', cutoff),
-          supabase.from('properties').select('status'),
-        ])
-        if (cancelled) return
-
-        const err =
-          activeRes.error?.message ||
-          activeNewRes.error?.message ||
-          landlordsRes.error?.message ||
-          newLandlordsRes.error?.message ||
-          supportOpenRes.error?.message ||
-          recentProfilesRes.error?.message ||
-          allPropertiesRes.error?.message
-        if (err) {
-          setState((s) => ({ ...s, loading: false, error: err }))
-          return
-        }
-
-        const byDay = new Map<string, { landlord: number; tenant: number }>()
-        for (let i = TREND_DAYS - 1; i >= 0; i -= 1) {
-          const key = dayKey(new Date(Date.now() - i * DAY_MS).toISOString())
-          byDay.set(key, { landlord: 0, tenant: 0 })
-        }
-        for (const row of recentProfilesRes.data ?? []) {
-          const key = dayKey(row.created_at as string)
-          const bucket = byDay.get(key)
-          if (!bucket) continue
-          if (row.role === 'landlord') bucket.landlord += 1
-          else if (row.role === 'tenant') bucket.tenant += 1
-        }
-        const signupTrend: SignupDay[] = Array.from(byDay.entries()).map(([date, v]) => ({ date, ...v }))
-        const newSignups = signupTrend.reduce((sum, d) => sum + d.landlord + d.tenant, 0)
-
-        const statusCounts = new Map<string, number>()
-        for (const row of allPropertiesRes.data ?? []) {
-          const status = (row.status as string) ?? 'unknown'
-          statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1)
-        }
-        const propertiesByStatus = Array.from(statusCounts.entries()).map(([status, count]) => ({ status, count }))
-
-        setState({
-          loading: false,
-          error: null,
-          activeListings: activeRes.count ?? 0,
-          activeListingsNew: activeNewRes.count ?? 0,
-          totalLandlords: landlordsRes.count ?? 0,
-          newLandlords: newLandlordsRes.count ?? 0,
-          openSupport: supportOpenRes.count ?? 0,
-          newSignups,
-          signupTrend,
-          propertiesByStatus,
+        const { data: sess } = await supabase.auth.getSession()
+        const token = sess.session?.access_token
+        if (!token) throw new Error('Not signed in')
+        const res = await fetch(`/api/admin/dashboard-stats?period=${period}`, {
+          headers: { Authorization: `Bearer ${token}` },
         })
-      } catch (e) {
-        if (!cancelled) {
-          setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : 'Failed to load dashboard' }))
+        if (!res.ok) {
+          const j = (await res.json().catch(() => ({}))) as { error?: string }
+          throw new Error(j.error || 'Failed to load dashboard')
         }
+        const data = (await res.json()) as Stats
+        if (!cancelled) setStats(data)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load dashboard')
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [period])
+
+  const liveAt = useMemo(() => {
+    if (!stats) return ''
+    return new Date(stats.generatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  }, [stats])
 
   return (
     <div>
-      <AdminPageHeader title="Dashboard" description="Business health at a glance." />
+      {/* Header row: title + period selector + live indicator */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className={admin.pageTitle}>Overview</h1>
+        <div className="flex items-center gap-4">
+          <div className="flex rounded-full border border-gray-200 bg-white p-1 shadow-sm">
+            {PERIODS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPeriod(p)}
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                  period === p ? 'bg-[#3A7AFE] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {PERIOD_LABELS[p]}
+              </button>
+            ))}
+          </div>
+          {stats && (
+            <span className="hidden items-center gap-1.5 text-xs text-gray-500 sm:inline-flex">
+              <span className="h-2 w-2 rounded-full bg-green-500" />
+              Live as of {liveAt}
+            </span>
+          )}
+        </div>
+      </div>
 
-      {state.loading ? (
+      {loading && !stats ? (
         <p className={`${admin.contentTop} ${admin.loading}`}>Loading metrics…</p>
-      ) : state.error ? (
-        <p className={`${admin.contentTop} ${admin.error}`}>{state.error}</p>
+      ) : error ? (
+        <p className={`${admin.contentTop} ${admin.error}`}>{error}</p>
+      ) : stats ? (
+        <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+          {/* KPI cards */}
+          <div className={`${admin.contentTop} grid gap-4 sm:grid-cols-2 xl:grid-cols-4`}>
+            <KpiCard
+              icon={<Zap className="h-4 w-4" />}
+              title="Rental Value Reports"
+              metric={stats.rentalReports}
+              period={period}
+              caption="Free Rental Value Reports completed (lead magnet)."
+            />
+            <KpiCard
+              icon={<Home className="h-4 w-4" />}
+              title="New Listings"
+              metric={stats.newListings}
+              period={period}
+              caption={`New properties listed by landlords, vs. ${PERIOD_DESC[period]}.`}
+              to="/admin/properties"
+            />
+            <KpiCard
+              icon={<Users className="h-4 w-4" />}
+              title="New Renters"
+              metric={stats.newRenters}
+              period={period}
+              caption="New renter accounts created — people actively searching for a property."
+              to="/admin/users?role=tenant"
+            />
+            <RevenueCard revenue={stats.revenue} />
+          </div>
+
+          {/* DAU strip */}
+          <div className={`${admin.contentTop} ${admin.panel} flex flex-wrap items-center gap-x-10 gap-y-4 px-6 py-5`}>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Daily active users</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-300">—</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">7-day average</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-300">—</p>
+            </div>
+            <div className="min-w-[220px] flex-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Not tracked yet</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Daily active user tracking isn't enabled. It requires session analytics instrumentation.
+              </p>
+            </div>
+          </div>
+
+          {/* Marketing strip */}
+          <div className={`${admin.contentTop} ${admin.panel} flex flex-wrap items-center gap-x-10 gap-y-4 px-6 py-5`}>
+            {['Ad spend', 'Impressions', 'ROAS'].map((label) => (
+              <div key={label}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-300">—</p>
+              </div>
+            ))}
+            <div className="min-w-[220px] flex-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Not tracked yet</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Marketing metrics activate once an ad platform (Google/Meta) is connected.
+              </p>
+            </div>
+          </div>
+
+          {/* Recent activity */}
+          <div className={`${admin.contentTop} ${admin.panel}`}>
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h2 className="text-base font-semibold text-gray-900">Recent activity</h2>
+              <Link to="/admin/users" className="text-sm font-medium text-[#3A7AFE] hover:underline">
+                View all
+              </Link>
+            </div>
+            {stats.activity.length === 0 ? (
+              <p className="px-6 py-8 text-center text-sm text-gray-500">No activity yet.</p>
+            ) : (
+              <ul className="divide-y divide-gray-50">
+                {stats.activity.map((a, i) => (
+                  <li key={`${a.kind}-${a.at}-${i}`}>
+                    <ActivityRow item={a} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function Sparkline({ series, positive }: { series: number[]; positive: boolean }) {
+  const w = 260
+  const h = 44
+  const max = Math.max(...series, 1)
+  const step = w / Math.max(series.length - 1, 1)
+  const points = series.map((v, i) => `${(i * step).toFixed(1)},${(h - 4 - (v / max) * (h - 8)).toFixed(1)}`).join(' ')
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="h-11 w-full" preserveAspectRatio="none" aria-hidden>
+      <polyline
+        points={points}
+        fill="none"
+        stroke={positive ? '#3A7AFE' : '#9CA3AF'}
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function TrendBadge({ current, prior }: { current: number; prior: number }) {
+  const pct = pctChange(current, prior)
+  if (pct === null) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700">
+        <ArrowUpRight className="h-3 w-3" />
+        New
+      </span>
+    )
+  }
+  const up = pct >= 0
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+        up ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
+      }`}
+    >
+      {up ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+      {up ? '+' : ''}
+      {pct.toFixed(1)}% vs prior period
+    </span>
+  )
+}
+
+function KpiCard({
+  icon,
+  title,
+  metric,
+  period,
+  caption,
+  to,
+}: {
+  icon: React.ReactNode
+  title: string
+  metric: Metric
+  period: Period
+  caption: string
+  to?: string
+}) {
+  const body = (
+    <>
+      <div className="flex items-center gap-2 text-gray-500">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#EEF4FE] text-[#3A7AFE]">{icon}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide">{title}</span>
+      </div>
+      <p className="mt-3 text-4xl font-semibold tabular-nums tracking-tight text-gray-900">
+        {metric.current.toLocaleString()}
+      </p>
+      <div className="mt-2">
+        {period === 'all' ? (
+          <span className="text-xs text-gray-400">All time</span>
+        ) : (
+          <TrendBadge current={metric.current} prior={metric.prior} />
+        )}
+      </div>
+      <div className="mt-3 border-b border-gray-100 pb-3">
+        <Sparkline series={metric.series} positive={metric.current >= metric.prior} />
+      </div>
+      <p className="mt-3 text-xs leading-5 text-gray-500">{caption}</p>
+    </>
+  )
+  const cls = `${admin.panel} p-5 ${to ? 'transition hover:shadow-md' : ''}`
+  return to ? (
+    <Link to={to} className={cls}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
+  )
+}
+
+function RevenueCard({ revenue }: { revenue: Stats['revenue'] }) {
+  return (
+    <div className={`${admin.panel} p-5`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-gray-500">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#EEF4FE] text-[#3A7AFE]">
+            <DollarSign className="h-4 w-4" />
+          </span>
+          <span className="text-xs font-semibold uppercase tracking-wide">Revenue / MRR</span>
+        </div>
+      </div>
+      {revenue.billingEnabled ? (
+        <>
+          <p className="mt-3 text-4xl font-semibold tabular-nums tracking-tight text-gray-900">
+            ${(revenue.currentCents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </p>
+          <div className="mt-2">
+            <TrendBadge current={revenue.currentCents} prior={revenue.priorCents} />
+          </div>
+          <p className="mt-3 text-xs leading-5 text-gray-500">Succeeded Stripe payments in the selected period.</p>
+        </>
       ) : (
         <>
-          <div className={`${admin.contentTop} grid gap-4 sm:grid-cols-2 lg:grid-cols-4`}>
-            <KpiCard
-              title="Active Listings"
-              value={state.activeListings}
-              trend={`+${state.activeListingsNew} in last 30 days`}
-              to="/admin/properties?status=active"
-            />
-            <KpiCard
-              title="Total Landlords"
-              value={state.totalLandlords}
-              trend={`+${state.newLandlords} new in last 30 days`}
-              to="/admin/users?role=landlord"
-            />
-            <KpiCard
-              title="Open Support Requests"
-              value={state.openSupport}
-              trend="Needs attention"
-              to="/admin/issues"
-              highlight={state.openSupport > 0}
-            />
-            <KpiCard
-              title="New Sign-ups (30d)"
-              value={state.newSignups}
-              trend="Landlords + tenants"
-              to="/admin/users"
-            />
-          </div>
-
-          <div className={`${admin.contentTop} grid gap-4 lg:grid-cols-2`}>
-            <div className={admin.panelPaddedLg}>
-              <h2 className={admin.detailTitle}>Sign-up trend (30 days)</h2>
-              <div className="mt-4 h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={state.signupTrend}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                    <XAxis
-                      dataKey="date"
-                      tickFormatter={(d: string) => d.slice(5)}
-                      tick={{ fontSize: 11, fill: '#6B7280' }}
-                      interval={4}
-                    />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6B7280' }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="landlord" name="Landlords" stackId="signups" fill="#3A7AFE" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="tenant" name="Tenants" stackId="signups" fill="#00BBFF" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className={admin.panelPaddedLg}>
-              <h2 className={admin.detailTitle}>Properties by status</h2>
-              <div className="mt-4 h-64">
-                {state.propertiesByStatus.length === 0 ? (
-                  <p className={admin.emptyState}>No properties yet.</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={state.propertiesByStatus}
-                        dataKey="count"
-                        nameKey="status"
-                        innerRadius={55}
-                        outerRadius={85}
-                        paddingAngle={2}
-                      >
-                        {state.propertiesByStatus.map((entry) => (
-                          <Cell key={entry.status} fill={STATUS_COLORS[entry.status] ?? '#9CA3AF'} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </div>
-          </div>
+          <p className="mt-3 text-2xl font-semibold text-gray-400">Pre-revenue</p>
+          <p className="mt-1 inline-block rounded-md bg-gray-50 px-2 py-1 text-xs text-gray-500">No payments yet</p>
+          <div className="mt-4 h-1.5 rounded-full bg-gray-100" />
+          <p className="mt-3 text-xs leading-5 text-gray-500">
+            Revenue reporting activates automatically once the first payment succeeds. No figures are estimated.
+          </p>
         </>
       )}
     </div>
   )
 }
 
-function KpiCard({
-  title,
-  value,
-  trend,
-  to,
-  highlight,
-}: {
-  title: string
-  value: number
-  trend: string
-  to: string
-  highlight?: boolean
-}) {
-  return (
-    <Link
-      to={to}
-      className={`${admin.panel} p-5 transition hover:shadow-md ${highlight ? admin.metricHighlight : admin.metricDefault}`}
-    >
-      <p className={admin.metricTitle}>{title}</p>
-      <p className={admin.metricValue}>{value}</p>
-      <p className="mt-1 text-xs text-gray-500">{trend}</p>
-      <span className="mt-2 inline-block text-xs font-medium text-[#3A7AFE]">View all →</span>
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'now'
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d}d`
+  return new Date(iso).toLocaleDateString()
+}
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+  const icon =
+    item.kind === 'listing' ? (
+      <Home className="h-4 w-4 text-[#3A7AFE]" />
+    ) : (
+      <Users className="h-4 w-4 text-[#3A7AFE]" />
+    )
+  const inner = (
+    <div className="flex items-center gap-3 px-6 py-3.5">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF4FE]">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm text-gray-800">{item.label}</p>
+        {item.sub ? <p className="truncate text-xs text-gray-400">{item.sub}</p> : null}
+      </div>
+      <span className="shrink-0 text-xs text-gray-400">{relTime(item.at)}</span>
+    </div>
+  )
+  return item.href ? (
+    <Link to={item.href} className="block transition hover:bg-gray-50">
+      {inner}
     </Link>
+  ) : (
+    inner
   )
 }

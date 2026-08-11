@@ -3158,6 +3158,173 @@ app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
   }
 })
 
+// ---------------------------------------------------------------------------
+// Admin dashboard stats (service role — covers tables with no client RLS,
+// e.g. rental_reports and payments)
+// ---------------------------------------------------------------------------
+app.get('/api/admin/dashboard-stats', async (req, res) => {
+  const ok = await requireAdmin(req, res)
+  if (ok === null) return
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const PERIODS = new Map<string, number | null>([
+    ['24h', 24 * 60 * 60 * 1000],
+    ['7d', 7 * 24 * 60 * 60 * 1000],
+    ['30d', 30 * 24 * 60 * 60 * 1000],
+    ['90d', 90 * 24 * 60 * 60 * 1000],
+    ['all', null],
+  ])
+  const period = typeof req.query.period === 'string' && PERIODS.has(req.query.period) ? req.query.period : '30d'
+  const span = PERIODS.get(period) ?? null
+  const now = Date.now()
+  const start = span === null ? null : new Date(now - span).toISOString()
+  const priorStart = span === null ? null : new Date(now - 2 * span).toISOString()
+
+  // Bucket timestamps into a fixed number of slots for sparklines.
+  const BUCKETS = period === '24h' ? 24 : period === '7d' ? 7 : period === '90d' ? 12 : 30
+  function bucketize(dates: string[]): number[] {
+    const out = new Array<number>(BUCKETS).fill(0)
+    if (span === null) {
+      // "all" — bucket across the full range found
+      if (dates.length === 0) return out
+      const times = dates.map((d) => new Date(d).getTime())
+      const min = Math.min(...times)
+      const range = Math.max(now - min, 1)
+      for (const t of times) out[Math.min(BUCKETS - 1, Math.floor(((t - min) / range) * BUCKETS))] += 1
+      return out
+    }
+    const startMs = now - span
+    for (const d of dates) {
+      const t = new Date(d).getTime()
+      if (t < startMs) continue
+      out[Math.min(BUCKETS - 1, Math.floor(((t - startMs) / span) * BUCKETS))] += 1
+    }
+    return out
+  }
+
+  // Exact count in a window via head query — never capped by row limits.
+  // Any query error aborts the request: silent zeros are worse than a 500.
+  async function countBetween(
+    table: string,
+    gte: string | null,
+    lt: string | null,
+    filter?: { col: string; val: string },
+  ): Promise<number> {
+    let q = admin!.from(table).select('*', { count: 'exact', head: true })
+    if (gte) q = q.gte('created_at', gte)
+    if (lt) q = q.lt('created_at', lt)
+    if (filter) q = q.eq(filter.col, filter.val)
+    const { count, error } = await q
+    if (error) throw new Error(`${table}: ${error.message}`)
+    return count ?? 0
+  }
+
+  // Sparkline shape only — recent rows within the current window (capped, ordered).
+  async function pullSeriesDates(table: string, filter?: { col: string; val: string }): Promise<string[]> {
+    let q = admin!.from(table).select('created_at').order('created_at', { ascending: false }).limit(10000)
+    if (start) q = q.gte('created_at', start)
+    if (filter) q = q.eq(filter.col, filter.val)
+    const { data, error } = await q
+    if (error) throw new Error(`${table}: ${error.message}`)
+    return (data ?? []).map((r) => (r as { created_at: string }).created_at)
+  }
+
+  async function metricFor(table: string, filter?: { col: string; val: string }) {
+    const [current, prior, dates] = await Promise.all([
+      countBetween(table, start, null, filter),
+      start && priorStart ? countBetween(table, priorStart, start, filter) : Promise.resolve(0),
+      pullSeriesDates(table, filter),
+    ])
+    return { current, prior, series: bucketize(dates) }
+  }
+
+  async function sumPayments(gte: string | null, lt: string | null): Promise<number> {
+    let q = admin!
+      .from('payments')
+      .select('amount_cents')
+      .eq('status', 'succeeded')
+      .order('created_at', { ascending: false })
+      .limit(10000)
+    if (gte) q = q.gte('created_at', gte)
+    if (lt) q = q.lt('created_at', lt)
+    const { data, error } = await q
+    if (error) throw new Error(`payments: ${error.message}`)
+    return (data ?? []).reduce((s, p) => s + ((p as { amount_cents: number }).amount_cents ?? 0), 0)
+  }
+
+  let rentalReports, newListings, newRenters, revCurrent: number, revPrior: number, anyPaymentEver: number
+  let recentProfiles, recentProps
+  try {
+    ;[rentalReports, newListings, newRenters, revCurrent, revPrior, anyPaymentEver, recentProfiles, recentProps] =
+      await Promise.all([
+        metricFor('rental_reports'),
+        metricFor('properties'),
+        metricFor('profiles', { col: 'role', val: 'tenant' }),
+        sumPayments(start, null),
+        start && priorStart ? sumPayments(priorStart, start) : Promise.resolve(0),
+        // All-history existence check so a quiet period never shows "pre-revenue"
+        countBetween('payments', null, null, { col: 'status', val: 'succeeded' }),
+        admin
+          .from('profiles')
+          .select('id, role, display_name, created_at')
+          .order('created_at', { ascending: false })
+          .limit(10)
+          .then((r) => {
+            if (r.error) throw new Error(`profiles activity: ${r.error.message}`)
+            return r
+          }),
+        admin
+          .from('properties')
+          .select('id, title, address_line1, city, created_at, landlord_id')
+          .order('created_at', { ascending: false })
+          .limit(10)
+          .then((r) => {
+            if (r.error) throw new Error(`properties activity: ${r.error.message}`)
+            return r
+          }),
+      ])
+  } catch (err) {
+    console.error('dashboard-stats failed:', (err as Error).message)
+    return res.status(500).json({ error: 'Failed to load dashboard metrics' })
+  }
+
+  // Merge recent activity (profiles + properties), newest first.
+  type Activity = { kind: string; label: string; sub: string | null; at: string; href: string | null }
+  const activity: Activity[] = []
+  for (const p of (recentProfiles.data ?? []) as { id: string; role: string; display_name: string | null; created_at: string }[]) {
+    activity.push({
+      kind: 'signup',
+      label: `${p.display_name || 'New user'} signed up as a ${p.role}`,
+      sub: null,
+      at: p.created_at,
+      href: `/admin/users/${p.id}`,
+    })
+  }
+  for (const p of (recentProps.data ?? []) as { id: string; title: string | null; address_line1: string | null; city: string | null; created_at: string; landlord_id: string }[]) {
+    activity.push({
+      kind: 'listing',
+      label: `New listing: ${p.title || p.address_line1 || 'Untitled property'}`,
+      sub: p.city,
+      at: p.created_at,
+      href: `/admin/properties/${p.id}`,
+    })
+  }
+  activity.sort((a, b) => (a.at < b.at ? 1 : -1))
+
+  return res.json({
+    period,
+    generatedAt: new Date(now).toISOString(),
+    rentalReports,
+    newListings,
+    newRenters,
+    revenue: { currentCents: revCurrent, priorCents: revPrior, billingEnabled: anyPaymentEver > 0 },
+    dau: { tracked: false },
+    marketing: { tracked: false },
+    activity: activity.slice(0, 12),
+  })
+})
+
 // Admin: approve or revoke a landlord's Equifax access
 app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
   const ok = await requireAdmin(req, res)
