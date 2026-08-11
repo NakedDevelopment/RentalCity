@@ -26,6 +26,14 @@ import {
   createIdentityVerificationSession,
   getIdentityVerificationSession,
 } from './plaid'
+import {
+  encryptSSN,
+  decryptSSN,
+  requestCreditReport,
+  equifaxPdfEndpoint,
+  getEquifaxToken,
+  getEquifaxBase,
+} from './equifax'
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
 import {
@@ -2475,7 +2483,7 @@ app.get('/api/admin/directory', async (req, res) => {
 
   const { data: profiles, error: pErr } = await admin
     .from('profiles')
-    .select('id, role, display_name, is_suspended, created_at, phone, avatar_url')
+    .select('id, role, display_name, is_suspended, created_at, phone, avatar_url, equifax_approved_at, equifax_pending_since')
     .in('id', ids)
 
   if (pErr) {
@@ -2495,6 +2503,8 @@ app.get('/api/admin/directory', async (req, res) => {
       created_at: (p?.created_at as string | undefined) ?? u.created_at,
       avatar_url: (p?.avatar_url as string | null | undefined) ?? null,
       last_sign_in_at: u.last_sign_in_at ?? null,
+      equifax_approved_at: (p?.equifax_approved_at as string | null | undefined) ?? null,
+      equifax_pending_since: (p?.equifax_pending_since as string | null | undefined) ?? null,
     }
   })
 
@@ -2878,6 +2888,294 @@ if (process.env.NODE_ENV === 'production') {
     console.warn('No client/dist directory found; static assets not served')
   }
 }
+
+// ---------------------------------------------------------------------------
+// Equifax OneView credit checks
+// ---------------------------------------------------------------------------
+
+// Tenant: save credit consent (SSN encrypted + address fields for Equifax)
+app.post('/api/equifax/consent', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { firstName, lastName, ssn, houseNumber, streetName, streetType, city, state, zip } =
+    (req.body ?? {}) as Record<string, string | undefined>
+  if (!firstName || !lastName || !ssn || !houseNumber || !streetName || !city || !state || !zip) {
+    return res.status(400).json({ error: 'All fields are required' })
+  }
+  const ssnClean = String(ssn).replace(/\D/g, '')
+  if (ssnClean.length !== 9) return res.status(400).json({ error: 'SSN must be 9 digits' })
+
+  let ssnEncrypted: string
+  try {
+    ssnEncrypted = encryptSSN(ssnClean)
+  } catch {
+    return res.status(500).json({ error: 'Encryption configuration error' })
+  }
+
+  const { error: upsertErr } = await admin.from('tenant_credit_consent').upsert(
+    {
+      tenant_id: user.id,
+      ssn_encrypted: ssnEncrypted,
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      house_number: String(houseNumber).trim(),
+      street_name: streetName.trim(),
+      street_type: (streetType || 'ST').trim().toUpperCase(),
+      city: city.trim(),
+      state: String(state).trim().toUpperCase().slice(0, 2),
+      zip: String(zip).trim(),
+      consent_given_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'tenant_id' },
+  )
+  if (upsertErr) return res.status(500).json({ error: 'Could not save consent data' })
+  return res.json({ ok: true })
+})
+
+// Tenant: check own consent status (returns hasConsent only — no PII)
+app.get('/api/equifax/consent', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data } = await admin
+    .from('tenant_credit_consent')
+    .select('tenant_id')
+    .eq('tenant_id', user.id)
+    .maybeSingle()
+  return res.json({ hasConsent: !!data })
+})
+
+// Landlord: get own Equifax approval status
+app.get('/api/equifax/landlord/status', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data } = await admin
+    .from('profiles')
+    .select('equifax_approved_at, equifax_pending_since')
+    .eq('id', user.id)
+    .maybeSingle()
+  const p = data as { equifax_approved_at?: string | null; equifax_pending_since?: string | null } | null
+  return res.json({
+    approved: !!p?.equifax_approved_at,
+    pending: !p?.equifax_approved_at && !!p?.equifax_pending_since,
+  })
+})
+
+// Landlord: submit an Equifax access request (marks pending + notifies admin)
+app.post('/api/equifax/landlord/request-approval', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('equifax_approved_at, display_name')
+    .eq('id', user.id)
+    .maybeSingle()
+  const p = profile as { equifax_approved_at?: string | null; display_name?: string | null } | null
+  if (p?.equifax_approved_at) return res.json({ ok: true, alreadyApproved: true })
+
+  await admin
+    .from('profiles')
+    .update({ equifax_pending_since: new Date().toISOString() })
+    .eq('id', user.id)
+
+  const supportInbox = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || ''
+  const fromEmail = process.env.FROM_EMAIL || ''
+  if (supportInbox && fromEmail) {
+    const landlordName = p?.display_name || 'A landlord'
+    const { data: authUser } = await admin.auth.admin.getUserById(user.id)
+    const landlordEmail = authUser?.user?.email || ''
+    await sendReportEmail({
+      to: supportInbox,
+      subject: `Equifax Access Request — ${landlordName}`,
+      html: `<p><strong>${landlordName}</strong> (${landlordEmail}) has requested Equifax credit-check access on Rental City.</p>
+             <p><a href="${lifecycleAppUrl()}/admin/users/${user.id}">View landlord profile in admin →</a></p>`,
+    })
+  }
+  return res.json({ ok: true })
+})
+
+// Landlord: get credit check info for a specific tenant
+app.get('/api/equifax/credit-check/:tenantId', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const { tenantId } = req.params
+
+  const [{ data: consent }, { data: report }] = await Promise.all([
+    admin.from('tenant_credit_consent').select('tenant_id').eq('tenant_id', tenantId).maybeSingle(),
+    admin
+      .from('equifax_credit_reports')
+      .select('id, status, equifax_report_id, requested_at')
+      .eq('landlord_id', user.id)
+      .eq('tenant_id', tenantId)
+      .order('requested_at', { ascending: false })
+      .maybeSingle(),
+  ])
+
+  const r = report as {
+    id?: string; status?: string; equifax_report_id?: string | null; requested_at?: string
+  } | null
+  return res.json({
+    id: r?.id ?? null,
+    status: r?.status ?? 'none',
+    equifax_report_id: r?.equifax_report_id ?? null,
+    requested_at: r?.requested_at ?? null,
+    tenantHasConsent: !!consent,
+  })
+})
+
+// Landlord: run a credit check on a tenant (requires approval + tenant consent)
+app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const { tenantId } = req.params
+
+  // Landlord must be Equifax-approved
+  const { data: lProfile } = await admin
+    .from('profiles')
+    .select('equifax_approved_at')
+    .eq('id', user.id)
+    .maybeSingle()
+  if (!(lProfile as { equifax_approved_at?: string | null } | null)?.equifax_approved_at) {
+    return res.status(403).json({ error: 'You must be approved for Equifax access before running credit checks.' })
+  }
+
+  // Tenant must have given consent (contains encrypted SSN + address)
+  const { data: consent } = await admin
+    .from('tenant_credit_consent')
+    .select('ssn_encrypted, first_name, last_name, house_number, street_name, street_type, city, state, zip')
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (!consent) {
+    return res.status(400).json({ error: 'Tenant has not authorized a credit check.' })
+  }
+
+  // Return existing complete/pending report if one exists
+  const { data: existing } = await admin
+    .from('equifax_credit_reports')
+    .select('id, status, equifax_report_id, requested_at')
+    .eq('landlord_id', user.id)
+    .eq('tenant_id', tenantId)
+    .in('status', ['pending', 'complete'])
+    .maybeSingle()
+  if (existing) {
+    const e = existing as { id: string; status: string; equifax_report_id: string | null; requested_at: string }
+    return res.json({ id: e.id, status: e.status, equifax_report_id: e.equifax_report_id, requested_at: e.requested_at, tenantHasConsent: true })
+  }
+
+  // Insert pending record so the landlord sees progress even if Equifax is slow
+  const { data: newRecord, error: insertErr } = await admin
+    .from('equifax_credit_reports')
+    .insert({ landlord_id: user.id, tenant_id: tenantId, status: 'pending' })
+    .select('id')
+    .single()
+  if (insertErr || !newRecord) return res.status(500).json({ error: 'Could not create credit check record' })
+  const recordId = (newRecord as { id: string }).id
+
+  // Decrypt SSN → call Equifax → SSN gone from memory when this scope exits
+  let reportId: string
+  try {
+    const c = consent as {
+      ssn_encrypted: string; first_name: string; last_name: string
+      house_number: string; street_name: string; street_type: string
+      city: string; state: string; zip: string
+    }
+    const ssn = decryptSSN(c.ssn_encrypted)
+    const result = await requestCreditReport({
+      firstName: c.first_name, lastName: c.last_name, ssn,
+      houseNumber: c.house_number, streetName: c.street_name, streetType: c.street_type,
+      city: c.city, state: c.state, zip: c.zip,
+    })
+    reportId = result.reportId
+  } catch (err) {
+    await admin.from('equifax_credit_reports').update({ status: 'failed' }).eq('id', recordId)
+    console.error('Equifax credit report error:', (err as Error).message)
+    return res.status(502).json({ error: 'Could not retrieve credit report from Equifax. Please try again.' })
+  }
+
+  await admin.from('equifax_credit_reports').update({
+    status: 'complete',
+    equifax_report_id: reportId,
+    completed_at: new Date().toISOString(),
+  }).eq('id', recordId)
+
+  return res.json({
+    id: recordId,
+    status: 'complete',
+    equifax_report_id: reportId,
+    requested_at: new Date().toISOString(),
+    tenantHasConsent: true,
+  })
+})
+
+// Landlord: proxy the credit-report PDF from Equifax (authenticated pass-through)
+app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const { tenantId } = req.params
+
+  const { data: report } = await admin
+    .from('equifax_credit_reports')
+    .select('equifax_report_id')
+    .eq('landlord_id', user.id)
+    .eq('tenant_id', tenantId)
+    .eq('status', 'complete')
+    .maybeSingle()
+  const r = report as { equifax_report_id?: string | null } | null
+  if (!r?.equifax_report_id) return res.status(404).json({ error: 'No completed credit report found' })
+
+  try {
+    const token = await getEquifaxToken()
+    const pdfUrl = equifaxPdfEndpoint(r.equifax_report_id)
+    const pdfRes = await fetch(pdfUrl, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' },
+    })
+    if (!pdfRes.ok) return res.status(502).json({ error: 'Could not retrieve report from Equifax' })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'inline; filename="credit-report.pdf"')
+    const buf = await pdfRes.arrayBuffer()
+    return res.end(Buffer.from(buf))
+  } catch (err) {
+    console.error('Equifax PDF proxy error:', (err as Error).message)
+    return res.status(502).json({ error: 'Could not retrieve report' })
+  }
+})
+
+// Admin: approve or revoke a landlord's Equifax access
+app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
+  const ok = await requireAdmin(req, res)
+  if (ok === null) return
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const { userId } = req.params
+  const approve = (req.body as { approve?: boolean } | null)?.approve !== false
+
+  const update: Record<string, string | null> = {
+    equifax_approved_at: approve ? new Date().toISOString() : null,
+  }
+  if (approve) update.equifax_pending_since = null
+
+  const { error: upErr } = await admin.from('profiles').update(update).eq('id', userId)
+  if (upErr) return res.status(500).json({ error: upErr.message })
+  return res.json({ ok: true })
+})
 
 app.listen(PORT, () => {
   console.log(`Rental City API running on http://localhost:${PORT}`)

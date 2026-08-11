@@ -12,6 +12,12 @@ import { TenantRentScoreBreakdownDialog } from '../components/TenantRentScoreBre
 import { UniversalApplicationStatusFields } from '../components/UniversalApplicationStatusFields'
 import { TenantReviewEditDialog } from '../components/TenantReviewEditDialog'
 import { BankVerificationCard, type PlaidVerificationRow } from '../components/BankVerificationCard'
+import {
+  getCreditCheckInfo,
+  requestCreditCheck as apiRequestCreditCheck,
+  requestEquifaxApproval,
+  type CreditCheckInfo,
+} from '../lib/equifaxApi'
 import { useAuth } from '../lib/useAuth'
 import { safeInternalPath } from '../lib/safeInternalPath'
 import { supabase } from '../lib/supabase'
@@ -135,6 +141,12 @@ export function LandlordTenantProfilePage() {
     created_at: string
   } | null>(null)
   const [tenantBankVerification, setTenantBankVerification] = useState<PlaidVerificationRow | null>(null)
+  const [landlordEquifaxApproved, setLandlordEquifaxApproved] = useState(false)
+  const [landlordEquifaxPending, setLandlordEquifaxPending] = useState(false)
+  const [creditCheck, setCreditCheck] = useState<CreditCheckInfo | null>(null)
+  const [creditCheckLoading, setCreditCheckLoading] = useState(false)
+  const [requestingCredit, setRequestingCredit] = useState(false)
+  const [creditError, setCreditError] = useState<string | null>(null)
   type LandlordTenantApplicationRow = {
     id: string
     status: string
@@ -549,6 +561,72 @@ export function LandlordTenantProfilePage() {
 
     loadTenantContext()
   }, [id, user?.id, propertyParam, applicationParam])
+
+  // Load landlord's own Equifax approval status
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('profiles')
+      .select('equifax_approved_at, equifax_pending_since')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        const p = data as { equifax_approved_at?: string | null; equifax_pending_since?: string | null }
+        setLandlordEquifaxApproved(!!p.equifax_approved_at)
+        setLandlordEquifaxPending(!p.equifax_approved_at && !!p.equifax_pending_since)
+      })
+  }, [user])
+
+  // Load credit check info for this tenant once profile is unlocked
+  useEffect(() => {
+    if (!user || !id || !hasUnlockedProfileAccess) return
+    let cancelled = false
+    ;(async () => {
+      setCreditCheckLoading(true)
+      try {
+        const { data: sess } = await supabase.auth.getSession()
+        const token = sess.session?.access_token
+        if (!token || cancelled) return
+        const info = await getCreditCheckInfo(token, id)
+        if (!cancelled) setCreditCheck(info)
+      } catch {
+        // non-blocking
+      } finally {
+        if (!cancelled) setCreditCheckLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user, id, hasUnlockedProfileAccess])
+
+  async function handleRequestApproval() {
+    setCreditError(null)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      if (!token) return
+      await requestEquifaxApproval(token)
+      setLandlordEquifaxPending(true)
+    } catch (err) {
+      setCreditError(err instanceof Error ? err.message : 'Could not submit request')
+    }
+  }
+
+  async function handleRequestCredit() {
+    setCreditError(null)
+    setRequestingCredit(true)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      if (!token) throw new Error('Please sign in again.')
+      const info = await apiRequestCreditCheck(token, id)
+      setCreditCheck(info)
+    } catch (err) {
+      setCreditError(err instanceof Error ? err.message : 'Could not request credit check')
+    } finally {
+      setRequestingCredit(false)
+    }
+  }
 
   async function handleAccept() {
     if (!pendingApplicationId || !applicationPropertyId || !user) return
@@ -1003,6 +1081,90 @@ export function LandlordTenantProfilePage() {
                 </ProfileContentCard>
 
                 <BankVerificationCard verification={tenantBankVerification} unlocked={hasUnlockedProfileAccess} />
+
+                {/* Equifax credit check — visible only after profile is unlocked */}
+                {hasUnlockedProfileAccess && (
+                  <ProfileContentCard title="Credit Check">
+                    {creditCheckLoading ? (
+                      <p className="text-sm text-gray-500">Loading…</p>
+                    ) : !landlordEquifaxApproved ? (
+                      landlordEquifaxPending ? (
+                        <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+                          <p className="text-sm text-amber-800">
+                            Your Equifax access request is pending approval. We'll notify you when you're approved to run credit checks.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600">
+                            Get approved to run Equifax credit checks on tenants you're considering.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void handleRequestApproval()}
+                            className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white"
+                          >
+                            Get approved
+                          </button>
+                        </div>
+                      )
+                    ) : !creditCheck?.tenantHasConsent ? (
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <p className="text-sm text-gray-600">
+                          This tenant hasn't authorized a credit check yet.
+                        </p>
+                      </div>
+                    ) : creditCheck.status === 'none' || creditCheck.status === 'failed' ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-gray-600">
+                          {creditCheck.status === 'failed'
+                            ? 'The previous credit check failed. You can try again.'
+                            : 'This tenant has authorized a credit check.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void handleRequestCredit()}
+                          disabled={requestingCredit}
+                          className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                        >
+                          {requestingCredit ? 'Requesting…' : 'Run credit check'}
+                        </button>
+                      </div>
+                    ) : creditCheck.status === 'pending' ? (
+                      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                        <p className="text-sm text-blue-800">Credit check is being processed…</p>
+                      </div>
+                    ) : creditCheck.status === 'complete' ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Complete
+                          </span>
+                          {creditCheck.requested_at && (
+                            <span className="text-xs text-gray-400">
+                              {new Date(creditCheck.requested_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        <a
+                          href={`/api/equifax/credit-check/${id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          View Equifax credit report
+                        </a>
+                      </div>
+                    ) : null}
+                    {creditError && <p className="mt-2 text-sm text-red-600">{creditError}</p>}
+                  </ProfileContentCard>
+                )}
 
                 <div className="space-y-2">
                   {hasUnlockedProfileAccess ? (

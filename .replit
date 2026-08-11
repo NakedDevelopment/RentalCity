@@ -52,5 +52,12 @@ build = ["npm", "run", "build"]
 
 [userenv.shared]
 PLAID_ENV = "production"
+EQUIFAX_CLIENT_ID = "WQbi8FAXjUK4XpqFRleXaYRV4wXPaicy"
+EQUIFAX_CLIENT_SECRET = "lyGNANiifbpfiTQx"
+EQUIFAX_CUSTOMER_CODE = "IAPI"
+EQUIFAX_ENV = "sandbox"
+EQUIFAX_MEMBER_NUMBER = "999ZB22150"
+EQUIFAX_SECURITY_CODE = "@U2"
+SSN_ENCRYPTION_KEY = "2e257e7fc19295b6069cc98c569720627bc94d9205d941096cfacc5ab1e24e1c"
 
 [userenv.development]

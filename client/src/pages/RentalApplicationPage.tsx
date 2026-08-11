@@ -4,6 +4,7 @@ import { refreshBackgroundCheckReport, startUniversalBackgroundCheck } from '../
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
+import { CreditConsentCard } from '../components/CreditConsentCard'
 
 type ProfileRecord = {
   display_name: string | null
@@ -456,6 +457,8 @@ export function RentalApplicationPage() {
               </div>
             )}
           </SectionCard>
+
+          <CreditConsentCard />
 
           <SectionCard title="Expiration Information">
           <div className="space-y-4 text-sm">

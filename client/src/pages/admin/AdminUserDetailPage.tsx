@@ -148,6 +148,34 @@ export function AdminUserDetailPage() {
     setRow({ ...row, is_suspended: next })
   }
 
+  async function setEquifaxApproved(approve: boolean) {
+    if (!id || !row || busy) return
+    setBusy(true)
+    const { data: sess } = await supabase.auth.getSession()
+    const token = sess.session?.access_token
+    if (!token) { setBusy(false); return }
+    try {
+      const res = await fetch(`/api/admin/equifax/approve/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ approve }),
+      })
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(j.error ?? 'Failed to update Equifax access')
+        return
+      }
+      const now = new Date().toISOString()
+      setRow({
+        ...row,
+        equifax_approved_at: approve ? now : null,
+        equifax_pending_since: approve ? null : row.equifax_pending_since,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) {
     return <p className="text-gray-500">Loading…</p>
   }
@@ -277,6 +305,50 @@ export function AdminUserDetailPage() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        ) : null}
+
+        {row.role === 'landlord' ? (
+          <div className={admin.panelPaddedLg}>
+            <h2 className={admin.detailTitle}>Equifax Credit Access</h2>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                {row.equifax_approved_at ? (
+                  <>
+                    <p className="text-sm font-medium text-green-700">Approved</p>
+                    <p className="text-xs text-gray-500">Since {formatDate(row.equifax_approved_at)}</p>
+                  </>
+                ) : row.equifax_pending_since ? (
+                  <>
+                    <p className="text-sm font-medium text-amber-700">Pending approval</p>
+                    <p className="text-xs text-gray-500">Requested {formatDate(row.equifax_pending_since)}</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500">Not requested</p>
+                )}
+              </div>
+              {!isSelf && !isAdminRole ? (
+                row.equifax_approved_at ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void setEquifaxApproved(false)}
+                    className={admin.btnWarning}
+                  >
+                    Revoke access
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void setEquifaxApproved(true)}
+                    className={admin.btnSuccess}
+                  >
+                    Approve access
+                  </button>
+                )
+              ) : null}
             </div>
           </div>
         ) : null}

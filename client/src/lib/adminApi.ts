@@ -10,6 +10,8 @@ export type AdminDirectoryUser = {
   created_at: string
   avatar_url: string | null
   last_sign_in_at: string | null
+  equifax_approved_at: string | null
+  equifax_pending_since: string | null
 }
 
 export async function fetchAdminDirectory(): Promise<AdminDirectoryUser[]> {
