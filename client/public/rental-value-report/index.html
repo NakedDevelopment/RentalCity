@@ -501,12 +501,12 @@ src="https://www.facebook.com/tr?id=1644132773295647&ev=PageView&noscript=1"
           <!-- POST-RESULT CTA -->
           <div class="result-cta">
             <span class="cta-eyebrow">Your next step</span>
-            <h3>Now find a renter who fits. <em>In days, not weeks.</em></h3>
-            <p>You know what it's worth — now fill it. List your property free on Rental City and get matched with pre-screened, qualified renters. No agents. No wasted showings.</p>
-            <a class="btn-cta" id="ctaLink" href="https://www.gorentalcity.com/" target="_blank" rel="noopener">
-              List your property on Rental City
+            <h3>Find your perfect tenant. <em>In days, not weeks.</em></h3>
+            <p>You know what it's worth — now fill it. One click to list your property on Rental City and get matched with pre-screened, qualified tenants. No agents. No wasted showings.</p>
+            <button type="button" class="btn-cta" id="ctaLink">
+              List this property on Rental City
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-            </a>
+            </button>
           </div>
 
           <button type="button" class="result-reset" id="resetBtn">
@@ -877,10 +877,32 @@ function renderResult(r, beds, baths, sqft, email) {
       email: email
     };
 
+    /* Write report data to sessionStorage so the "List this property" CTA can
+       pre-fill the landlord listing form in the React app. */
+    function storePrefill(rentData, rentBeds, rentBaths, rentSqft) {
+      try {
+        sessionStorage.setItem('rc-report-prefill', JSON.stringify({
+          streetAddress: street,
+          city: city,
+          state: stateVal,
+          zipCode: selectedZip || '',
+          bedrooms: String(Math.max(0, Math.round(rentBeds || 0))),
+          bathrooms: String(rentBaths || 0),
+          squareFootage: rentSqft ? String(Math.round(rentSqft)) : '',
+          propertyType: ptypeEl.value,
+          estimatedRentCents: Math.round((rentData.rent || 0) * 100),
+          estimatedRentLow: Math.round((rentData.rentRangeLow || 0) * 100),
+          estimatedRentHigh: Math.round((rentData.rentRangeHigh || 0) * 100),
+        }));
+      } catch (e) { /* sessionStorage may be unavailable (private browsing etc.) */ }
+    }
+
     function fallback() {
       setLoading(false);
       trackLeadOnce();
-      renderResult(demoEstimate(address + ptypeEl.value, beds, baths, sqft), beds, baths, sqft, email);
+      var est = demoEstimate(address + ptypeEl.value, beds, baths, sqft);
+      storePrefill(est, beds, baths, sqft);
+      renderResult(est, beds, baths, sqft, email);
     }
 
     var xhr = new XMLHttpRequest();
@@ -894,6 +916,7 @@ function renderResult(r, beds, baths, sqft, email) {
       if (xhr.status >= 200 && xhr.status < 300 && data && data.rent != null) {
         setLoading(false);
         trackLeadOnce();
+        storePrefill(data, beds, baths, sqft);
         renderResult(data, beds, baths, sqft, email);
       } else {
         fallback();
@@ -903,6 +926,15 @@ function renderResult(r, beds, baths, sqft, email) {
     xhr.onerror = fallback;
     try { xhr.send(JSON.stringify(payload)); }
     catch (err) { fallback(); }
+  });
+})();
+
+/* ---------- list-this-property CTA ---------- */
+(function () {
+  var cta = document.getElementById('ctaLink');
+  if (!cta) return;
+  cta.addEventListener('click', function () {
+    window.location.href = '/list-from-report';
   });
 })();
 

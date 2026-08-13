@@ -76,6 +76,7 @@ import { AdminIssuesPage } from './pages/admin/AdminIssuesPage'
 import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage'
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage'
 import { AdminProfilePage } from './pages/admin/AdminProfilePage'
+import { ListFromReportPage } from './pages/ListFromReportPage'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -110,6 +111,7 @@ export default function App() {
           path="applications/apply"
           element={TENANT_SIDE_ENABLED ? <UniversalApplicationPage /> : <Navigate to="/" replace />}
         />
+        <Route path="list-from-report" element={<ListFromReportPage />} />
         <Route path="property/:id" element={user ? <PropertyDetailsPage /> : <Navigate to="/login" replace />} />
         <Route path="properties" element={user ? <PropertiesPage /> : <Navigate to="/login" replace />} />
         <Route path="properties/:id" element={user ? <LandlordPropertyDetailsPage /> : <Navigate to="/login" replace />} />
