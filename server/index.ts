@@ -832,28 +832,41 @@ app.get('/api/address-suggest', async (req, res) => {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 6000)
   try {
-    const gRes = await fetch(url, { signal: controller.signal })
+    // Places API (New) — POST-based, uses X-Goog-Api-Key header
+    const gRes = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+      },
+      body: JSON.stringify({
+        input: q,
+        includedRegionCodes: ['us'],
+      }),
+      signal: controller.signal,
+    })
     if (!gRes.ok) return res.json({ suggestions: [] })
     const data = await gRes.json().catch(() => null)
-    const predictions: any[] = (data && Array.isArray(data.predictions)) ? data.predictions : []
+    const raw: any[] = (data && Array.isArray(data.suggestions)) ? data.suggestions : []
 
-    const suggestions = predictions.slice(0, 5).map((p: any) => {
-      const main: string = p.structured_formatting?.main_text ?? p.description ?? ''
-      const secondary: string = p.structured_formatting?.secondary_text ?? ''
-      // secondary looks like "Austin, TX, USA" or "Austin, TX 78701, USA"
-      const parts = secondary.split(',').map((s: string) => s.trim())
+    const suggestions = raw.slice(0, 5).map((s: any) => {
+      const pred = s.placePrediction ?? {}
+      const main: string = pred.structuredFormat?.mainText?.text ?? pred.text?.text ?? ''
+      const secondary: string = pred.structuredFormat?.secondaryText?.text ?? ''
+      // secondary: "City, ST, USA" or "City, ST 12345, USA"
+      const parts = secondary.split(',').map((p: string) => p.trim())
       const city = parts[0] ?? ''
       const stateZip = parts[1] ?? ''
       const stateMatch = stateZip.match(/^([A-Z]{2})(?:\s+(\d{5}))?/)
       const state = stateMatch ? stateMatch[1] : ''
       const zipCode = stateMatch?.[2] ?? ''
       return {
-        address: p.description ?? main,
+        address: pred.text?.text ?? main,
         streetLine: main,
         city,
         state,
         zipCode,
-        placeId: p.place_id ?? '',
+        placeId: pred.placeId ?? '',
       }
     })
 
