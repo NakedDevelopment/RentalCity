@@ -909,10 +909,13 @@ function renderResult(r, beds, baths, sqft, email) {
           bedrooms: String(Math.max(0, Math.round(rentBeds || 0))),
           bathrooms: String(rentBaths || 0),
           squareFootage: rentSqft ? String(Math.round(rentSqft)) : '',
-          propertyType: ptypeEl.value,
+          /* Prefer RentCast-confirmed propertyType over the form-selected value */
+          propertyType: rentData.propertyType || ptypeEl.value || '',
           estimatedRentCents: Math.round((rentData.rent || 0) * 100),
           estimatedRentLow: Math.round((rentData.rentRangeLow || 0) * 100),
           estimatedRentHigh: Math.round((rentData.rentRangeHigh || 0) * 100),
+          yearBuilt: rentData.yearBuilt || null,
+          lotSize: rentData.lotSize || null,
         }));
       } catch (e) { /* sessionStorage may be unavailable (private browsing etc.) */ }
     }

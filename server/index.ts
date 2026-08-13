@@ -798,6 +798,11 @@ app.post('/api/estimate', async (req, res) => {
         comparables,
         summary: { ...summary, reportUrl: stored ? reportUrl : null },
         reportUrl: stored ? reportUrl : null,
+        // Enriched property details from the RentCast property record
+        squareFootage: usedSqft,
+        yearBuilt: property?.yearBuilt ?? null,
+        lotSize: property?.lotSize ?? null,
+        propertyType: property?.propertyType ?? propertyType ?? null,
       })
     } catch (buildErr) {
       console.error('Report build failed:', buildErr instanceof Error ? buildErr.message : String(buildErr))
@@ -917,6 +922,8 @@ app.get('/api/address-search', async (req, res) => {
         bedrooms: p.bedrooms ?? null,
         bathrooms: p.bathrooms ?? null,
         squareFootage: p.squareFootage ?? null,
+        yearBuilt: p.yearBuilt ?? null,
+        lotSize: p.lotSize ?? null,
       }))
 
     return res.json({ suggestions })

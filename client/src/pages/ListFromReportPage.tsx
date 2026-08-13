@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import { deriveLandlordPreferences } from '../lib/landlordPreferences'
@@ -22,11 +22,14 @@ export interface ReportPrefill {
   estimatedRentCents: number
   estimatedRentLow: number
   estimatedRentHigh: number
+  /** From RentCast property record — null if unknown */
+  yearBuilt: number | null
+  lotSize: number | null
 }
 
 export const REPORT_PREFILL_KEY = 'rc-report-prefill'
 
-function readPrefill(): ReportPrefill | null {
+function readPrefillFromSession(): ReportPrefill | null {
   try {
     const raw = sessionStorage.getItem(REPORT_PREFILL_KEY)
     if (!raw) return null
@@ -34,6 +37,70 @@ function readPrefill(): ReportPrefill | null {
   } catch {
     return null
   }
+}
+
+/** Fallback for users arriving from the emailed report link.
+ *  The report template encodes property data as URL search params. */
+function readPrefillFromParams(search: string): ReportPrefill | null {
+  const params = new URLSearchParams(search)
+  const addr = params.get('addr') || ''
+  if (!addr) return null
+
+  // Parse "123 Main St, Austin, TX 78701" → components
+  const parts = addr.split(',').map((s) => s.trim()).filter((s) => s && s !== 'USA')
+  const street = parts[0] || addr
+  const city = parts[1] || ''
+  const stateZip = parts[2] || ''
+  const stateMatch = stateZip.match(/^([A-Z]{2})(?:\s+(\d{5}))?/)
+  const state = stateMatch?.[1] || ''
+  const zip = stateMatch?.[2] || ''
+
+  const rentDollars = parseFloat(params.get('rent') || '0')
+  const lowDollars = parseFloat(params.get('low') || '0')
+  const highDollars = parseFloat(params.get('high') || '0')
+
+  const yearRaw = parseInt(params.get('year') || '0', 10)
+  const lotRaw = parseFloat(params.get('lot') || '0')
+
+  return {
+    streetAddress: street,
+    city,
+    state,
+    zipCode: zip,
+    bedrooms: params.get('beds') || '',
+    bathrooms: params.get('baths') || '',
+    squareFootage: params.get('sqft') || '',
+    propertyType: params.get('type') || '',
+    estimatedRentCents: Math.round(rentDollars * 100),
+    estimatedRentLow: Math.round(lowDollars * 100),
+    estimatedRentHigh: Math.round(highDollars * 100),
+    yearBuilt: yearRaw > 0 ? yearRaw : null,
+    lotSize: lotRaw > 0 ? lotRaw : null,
+  }
+}
+
+/** Auto-generates a listing description from prefill data.
+ *  Only used as a default — the landlord can edit it freely. */
+function generateDescription(p: ReportPrefill): string {
+  const beds = parseInt(p.bedrooms || '0', 10)
+  const baths = parseFloat(p.bathrooms || '0')
+  const sqftNum = parseInt(p.squareFootage || '0', 10)
+  const type = p.propertyType || 'property'
+
+  const bedsStr = beds === 0 ? 'Studio' : `${beds}-bedroom`
+  const bathsStr = baths > 0 ? `, ${baths}-bathroom` : ''
+  const sqftStr = sqftNum > 0 ? ` with ${sqftNum.toLocaleString()} sq ft of living space` : ''
+  const yearStr = p.yearBuilt ? `, built in ${p.yearBuilt}` : ''
+
+  const lines: string[] = []
+  lines.push(`${bedsStr}${bathsStr} ${type}${sqftStr}${yearStr}.`)
+  if (p.lotSize && p.lotSize > 0) {
+    lines.push(`Sits on a ${Math.round(p.lotSize).toLocaleString()} sq ft lot.`)
+  }
+  if (p.city && p.state) {
+    lines.push(`Conveniently located in ${p.city}, ${p.state}.`)
+  }
+  return lines.join(' ')
 }
 
 // ─── Inline signup modal ──────────────────────────────────────────────────────
@@ -570,6 +637,7 @@ const US_STATES = [
 export function ListFromReportPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   // Report prefill data
   const [prefill, setPrefill] = useState<ReportPrefill | null>(null)
@@ -598,9 +666,10 @@ export function ListFromReportPage() {
   // Ref guard — prevents double-save if the button is clicked twice quickly
   const savingRef = useRef(false)
 
-  // Load prefill from sessionStorage on mount
+  // Load prefill: sessionStorage first (user came from report tool on same tab),
+  // then URL params (user clicked a link in the emailed report).
   useEffect(() => {
-    const data = readPrefill()
+    const data = readPrefillFromSession() ?? readPrefillFromParams(searchParams.toString())
     if (!data) {
       setPrefillMissing(true)
       return
@@ -614,7 +683,10 @@ export function ListFromReportPage() {
     setBaths(data.bathrooms)
     setSqft(data.squareFootage)
     setMonthlyRent(centsToMoneyInput(data.estimatedRentCents))
-  }, [])
+    // Auto-generate a description from available property data (editable by landlord)
+    const autoDesc = generateDescription(data)
+    if (autoDesc) setDescription(autoDesc)
+  }, [searchParams])
 
   // If already logged in, set activeUserId
   useEffect(() => {
@@ -644,7 +716,13 @@ export function ListFromReportPage() {
       .from('properties')
       .insert({
         landlord_id: userId,
-        title: null,
+        title: (() => {
+          const b = parseInt(beds || '0', 10)
+          const bStr = b === 0 ? 'Studio' : `${b}BR`
+          const ba = parseFloat(baths || '0')
+          const baStr = ba > 0 ? `/${ba}BA` : ''
+          return city ? `${bStr}${baStr} in ${city}${state ? ', ' + state : ''}` : null
+        })(),
         address_line1: streetAddress,
         city,
         state,

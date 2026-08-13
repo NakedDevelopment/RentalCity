@@ -253,7 +253,7 @@ function buildEmail(
         <p style="font-size:15px;color:#404040;margin:0 0 16px;">Your full report breaks down every comparable, your local market trend, and three specific ways to push your rent higher.</p>
         <div style="text-align:center;padding:6px 0 4px;">
           <a href="${buttonHref}" style="display:block;background:${GRADIENT};color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:16px;border-radius:11px;">View your full rental report →</a>
-          <p style="font-size:13px;color:#737373;margin:12px 0 0;">Ready to fill it? <a href="https://www.gorentalcity.com/" style="color:#3A7AFE;font-weight:700;text-decoration:none;">List your property free on Rental City →</a></p>
+          <p style="font-size:13px;color:#737373;margin:12px 0 0;">Ready to fill it? <a href="${buildListUrl(input, d)}" style="color:#3A7AFE;font-weight:700;text-decoration:none;">List your property free on Rental City →</a></p>
         </div>
       </td></tr>
       <tr><td style="padding:24px 32px 30px;border-top:1px solid #E5E5E5;margin-top:22px;font-size:12px;color:#737373;line-height:1.6;">
@@ -426,6 +426,29 @@ const REPORT_CSS = `
     .rec .gain { grid-column: 2; }
   }
 `
+
+/** Builds the /list-from-report URL with property data encoded as query params.
+ *  Used in both the standalone report page and the email so users arriving from
+ *  either surface get the pre-filled listing form without needing sessionStorage. */
+function buildListUrl(input: ReportInput, d: Derived): string {
+  const base = 'https://www.gorentalcity.com/list-from-report'
+  const params = new URLSearchParams()
+  params.set('addr', input.address)
+  const beds = d.property?.bedrooms ?? input.bedrooms
+  const baths = d.property?.bathrooms ?? input.bathrooms
+  const sqft = d.property?.squareFootage ?? input.squareFootage
+  if (beds != null) params.set('beds', String(beds))
+  if (baths != null) params.set('baths', String(baths))
+  if (sqft != null) params.set('sqft', String(sqft))
+  if (d.rent) params.set('rent', String(d.rent))
+  if (d.rentRangeLow) params.set('low', String(d.rentRangeLow))
+  if (d.rentRangeHigh) params.set('high', String(d.rentRangeHigh))
+  const ptype = d.property?.propertyType ?? input.propertyType
+  if (ptype) params.set('type', ptype)
+  if (d.property?.yearBuilt) params.set('year', String(d.property.yearBuilt))
+  if (d.property?.lotSize) params.set('lot', String(d.property.lotSize))
+  return base + '?' + params.toString()
+}
 
 function buildReportPage(
   input: ReportInput,
@@ -667,7 +690,7 @@ function buildReportPage(
     <div class="k">Your next step</div>
     <h3>You know what it's worth. <em>Now fill it.</em></h3>
     <p>List your property on Rental City and get matched with pre-screened, qualified renters. No agents. No wasted showings.</p>
-    <a href="https://www.gorentalcity.com/" onclick="if(window.fbq){fbq('trackCustom','ListPropertyClick',{placement:'report_cta'})}">List your property on Rental City
+    <a href="${buildListUrl(input, d)}" onclick="if(window.fbq){fbq('trackCustom','ListPropertyClick',{placement:'report_cta'})}">List your property on Rental City
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
     </a>
     <p class="reassure">First 6 months free, then $350/year membership</p>
@@ -748,7 +771,7 @@ src="https://www.facebook.com/tr?id=1644132773295647&ev=PageView&noscript=1"
         <b>Know what it's worth? Now fill it.</b>
         <span>List and match with pre-screened renters — first 6 months free, then $350/year membership.</span>
       </div>
-      <a href="https://www.gorentalcity.com/" onclick="if(window.fbq){fbq('trackCustom','ListPropertyClick',{placement:'report_header'})}">List your property
+      <a href="${buildListUrl(input, d)}" onclick="if(window.fbq){fbq('trackCustom','ListPropertyClick',{placement:'report_header'})}">List your property
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
       </a>
     </div>
