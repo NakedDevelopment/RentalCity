@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import { deriveLandlordPreferences } from '../lib/landlordPreferences'
@@ -43,24 +43,52 @@ interface SignupModalProps {
   onWantsLogin: () => void
 }
 
+const meetsPasswordRequirements = (v: string) =>
+  v.length >= 6 &&
+  /[A-Z]/.test(v) &&
+  /\d/.test(v) &&
+  /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(v)
+
 function SignupModal({ onSignedIn, onWantsLogin }: SignupModalProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [agreeTerms, setAgreeTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [emailError, setEmailError] = useState<string | null>(null)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null)
+  const [termsError, setTermsError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [needsConfirmation, setNeedsConfirmation] = useState(false)
+
+  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!email || !password) {
-      setError('Email and password are required.')
+    setEmailError(null)
+    setPasswordError(null)
+    setConfirmPasswordError(null)
+    setTermsError(null)
+
+    if (!isValidEmail(email)) {
+      setEmailError('Please enter a valid email.')
       return
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.')
+    if (!meetsPasswordRequirements(password)) {
+      setPasswordError('Password needs uppercase, a number, and a symbol.')
       return
     }
+    if (password !== confirmPassword) {
+      setConfirmPasswordError("Passwords don't match yet.")
+      return
+    }
+    if (!agreeTerms) {
+      setTermsError('Please accept the terms to continue.')
+      return
+    }
+
     setLoading(true)
 
     // Try sign-in first (returning user who forgot they have an account).
@@ -78,7 +106,12 @@ function SignupModal({ onSignedIn, onWantsLogin }: SignupModalProps) {
       options: { data: { role: 'landlord' } },
     })
     if (signUpError) {
-      setError(signUpError.message)
+      const msg = signUpError.message?.toLowerCase() ?? ''
+      if (msg.includes('already registered') || msg.includes('already in use')) {
+        setEmailError('Email already in use — try signing in instead.')
+      } else {
+        setError(signUpError.message)
+      }
       setLoading(false)
       return
     }
@@ -142,30 +175,73 @@ function SignupModal({ onSignedIn, onWantsLogin }: SignupModalProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Email */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">Email</label>
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setEmailError(null) }}
               placeholder="you@example.com"
               autoFocus
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
+              className={`w-full rounded-lg border px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none ${emailError ? 'border-red-400 focus:border-red-400' : 'border-gray-200 focus:border-gray-400'}`}
               required
             />
+            {emailError && <p className="mt-1 text-xs text-red-600">{emailError}</p>}
           </div>
+
+          {/* Password */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700">Password</label>
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
-              className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
+              onChange={(e) => { setPassword(e.target.value); setPasswordError(null) }}
+              placeholder="Uppercase, number, and symbol"
+              className={`w-full rounded-lg border px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none ${passwordError ? 'border-red-400 focus:border-red-400' : 'border-gray-200 focus:border-gray-400'}`}
               required
             />
+            {passwordError && <p className="mt-1 text-xs text-red-600">{passwordError}</p>}
           </div>
+
+          {/* Confirm password */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Confirm password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); setConfirmPasswordError(null) }}
+              placeholder="Confirm your password"
+              className={`w-full rounded-lg border px-4 py-3 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none ${confirmPasswordError ? 'border-red-400 focus:border-red-400' : 'border-gray-200 focus:border-gray-400'}`}
+              required
+            />
+            {confirmPasswordError && <p className="mt-1 text-xs text-red-600">{confirmPasswordError}</p>}
+          </div>
+
+          {/* Terms + privacy */}
+          <div className="flex items-start gap-3">
+            <input
+              id="modal-terms"
+              type="checkbox"
+              checked={agreeTerms}
+              onChange={(e) => { setAgreeTerms(e.target.checked); setTermsError(null) }}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-300"
+            />
+            <label htmlFor="modal-terms" className="text-sm leading-6 text-gray-600">
+              I agree to the{' '}
+              <Link to="/terms" target="_blank" className="text-gray-500 underline hover:text-gray-700">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link to="/privacy" target="_blank" className="text-gray-500 underline hover:text-gray-700">
+                Privacy Policy
+              </Link>
+            </label>
+          </div>
+          {termsError && <p className="pl-7 text-xs text-red-500">{termsError}</p>}
+
           {error && <p className="text-sm text-red-600">{error}</p>}
+
           <button
             type="submit"
             disabled={loading}
@@ -517,8 +593,10 @@ export function ListFromReportPage() {
   const [showSurveyPopover, setShowSurveyPopover] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [savedPropertyId, setSavedPropertyId] = useState<string | null>(null)
+  const [, setSavedPropertyId] = useState<string | null>(null)
   const [activeUserId, setActiveUserId] = useState<string | null>(null)
+  // Ref guard — prevents double-save if the button is clicked twice quickly
+  const savingRef = useRef(false)
 
   // Load prefill from sessionStorage on mount
   useEffect(() => {
@@ -544,6 +622,9 @@ export function ListFromReportPage() {
   }, [user])
 
   async function persistProperty(userId: string): Promise<string | null> {
+    // Guard against double-submit (e.g. rapid double-click or React StrictMode double-effect)
+    if (savingRef.current) return null
+    savingRef.current = true
     setSaving(true)
     setSaveError(null)
 
@@ -555,6 +636,7 @@ export function ListFromReportPage() {
     if (!streetAddress || !city || !state || !monthlyRent) {
       setSaveError('Please fill in the address and monthly rent before saving.')
       setSaving(false)
+      savingRef.current = false
       return null
     }
 
@@ -583,6 +665,7 @@ export function ListFromReportPage() {
       .single()
 
     setSaving(false)
+    savingRef.current = false
 
     if (error) {
       if (error.code === '42501' || /row-level security/i.test(error.message)) {

@@ -916,7 +916,7 @@ function renderResult(r, beds, baths, sqft, email) {
       if (xhr.status >= 200 && xhr.status < 300 && data && data.rent != null) {
         setLoading(false);
         trackLeadOnce();
-        storePrefill(data, beds, baths, sqft);
+        storePrefill(data, beds, baths, data.squareFootage || sqft);
         renderResult(data, beds, baths, sqft, email);
       } else {
         fallback();
