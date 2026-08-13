@@ -28,6 +28,8 @@ export interface ReportPrefill {
 }
 
 export const REPORT_PREFILL_KEY = 'rc-report-prefill'
+/** Written after a successful property save so that back-navigation can't trigger a second save. */
+export const REPORT_SAVED_KEY = 'rc-report-saved'
 
 function readPrefillFromSession(): ReportPrefill | null {
   try {
@@ -232,11 +234,11 @@ function SignupModal({ onSignedIn, onWantsLogin }: SignupModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gray-900">
-            <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-          </div>
+          <img
+            src="/brand/rental-city-wordmark-gradient.svg"
+            alt="Rental City"
+            className="mx-auto mb-3 h-8 w-auto"
+          />
           <h2 className="text-xl font-semibold text-gray-900">Save your listing</h2>
           <p className="mt-1 text-sm text-gray-500">Create a free account to continue</p>
         </div>
@@ -674,6 +676,9 @@ export function ListFromReportPage() {
   const [showSignupModal, setShowSignupModal] = useState(false)
   const [showSurveyPopover, setShowSurveyPopover] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Latched true after a successful save — keeps the button permanently disabled
+  // so navigating back to this page (or accidentally clicking twice) never creates a second draft.
+  const [propertySaved, setPropertySaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [, setSavedPropertyId] = useState<string | null>(null)
   const [activeUserId, setActiveUserId] = useState<string | null>(null)
@@ -687,6 +692,15 @@ export function ListFromReportPage() {
   // Load prefill: sessionStorage first (user came from report tool on same tab),
   // then URL params (user clicked a link in the emailed report).
   useEffect(() => {
+    // If this property was already saved in this session, skip straight to the
+    // listings page — prevents the browser Back button from exposing a live form.
+    try {
+      if (sessionStorage.getItem(REPORT_SAVED_KEY)) {
+        navigate('/properties', { replace: true })
+        return
+      }
+    } catch { /* sessionStorage unavailable */ }
+
     const data = readPrefillFromSession() ?? readPrefillFromParams(searchParams.toString())
     if (!data) {
       setPrefillMissing(true)
@@ -812,12 +826,23 @@ export function ListFromReportPage() {
     return (data as { id: string }).id
   }
 
+  function lockAfterSave(id: string) {
+    setSavedPropertyId(id)
+    setPropertySaved(true)
+    try {
+      // Latch the saved ID so any remount (e.g. browser Back) immediately
+      // redirects to /properties instead of re-showing a submittable form.
+      sessionStorage.setItem(REPORT_SAVED_KEY, id)
+      sessionStorage.removeItem(REPORT_PREFILL_KEY)
+    } catch { /* ignore */ }
+  }
+
   async function handleSaveClick() {
     if (activeUserId || user) {
       const uid = activeUserId ?? user!.id
       const id = await persistProperty(uid)
       if (id) {
-        setSavedPropertyId(id)
+        lockAfterSave(id)
         setShowSurveyPopover(true)
       }
     } else {
@@ -830,7 +855,7 @@ export function ListFromReportPage() {
     setShowSignupModal(false)
     const id = await persistProperty(userId)
     if (id) {
-      setSavedPropertyId(id)
+      lockAfterSave(id)
       setShowSurveyPopover(true)
     }
   }
@@ -1119,21 +1144,32 @@ export function ListFromReportPage() {
               {/* Save button */}
               <div>
                 {saveError && <p className="mb-3 text-sm text-red-600">{saveError}</p>}
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={handleSaveClick}
-                  className="w-full rounded-xl btn-primary py-4 text-base font-semibold text-white disabled:opacity-60"
-                >
-                  {saving
-                    ? 'Saving…'
-                    : user || activeUserId
-                    ? 'Save property'
-                    : 'Save property — create free account'}
-                </button>
-                <p className="mt-2 text-center text-xs text-gray-400">
-                  Saved as a draft. You'll add photos and publish after signing up.
-                </p>
+                {propertySaved ? (
+                  <div className="flex items-center justify-center gap-2 rounded-xl bg-green-50 border border-green-200 py-4 text-sm font-medium text-green-700">
+                    <svg className="h-4 w-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Property saved — check your listings
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleSaveClick}
+                    className="w-full rounded-xl btn-primary py-4 text-base font-semibold text-white disabled:opacity-60"
+                  >
+                    {saving
+                      ? 'Saving…'
+                      : user || activeUserId
+                      ? 'Save property'
+                      : 'Save property — create free account'}
+                  </button>
+                )}
+                {!propertySaved && (
+                  <p className="mt-2 text-center text-xs text-gray-400">
+                    Saved as a draft. You'll add photos and publish after signing up.
+                  </p>
+                )}
               </div>
             </div>
 
