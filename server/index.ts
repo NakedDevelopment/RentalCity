@@ -818,6 +818,51 @@ app.post('/api/estimate', async (req, res) => {
 })
 
 /**
+ * Check whether Google Street View has outdoor imagery for a given address.
+ * Returns { available: boolean } — keeps the API key server-side.
+ */
+app.get('/api/street-view-check', async (req, res) => {
+  const addr = String(req.query.addr || '').trim()
+  if (!addr || !GOOGLE_MAPS_API_KEY) return res.json({ available: false })
+  try {
+    const metaUrl =
+      'https://maps.googleapis.com/maps/api/streetview/metadata?size=800x500&source=outdoor&location=' +
+      encodeURIComponent(addr) +
+      '&key=' +
+      GOOGLE_MAPS_API_KEY
+    const r = await fetch(metaUrl, { signal: AbortSignal.timeout(6000) })
+    const d = await r.json().catch(() => null)
+    return res.json({ available: d?.status === 'OK' })
+  } catch {
+    return res.json({ available: false })
+  }
+})
+
+/**
+ * Proxy a Street View Static image for a given address.
+ * Keeps the API key server-side; response is cached for 24 h.
+ */
+app.get('/api/street-view-image', async (req, res) => {
+  const addr = String(req.query.addr || '').trim()
+  if (!addr || !GOOGLE_MAPS_API_KEY) return res.status(400).json({ error: 'missing_params' })
+  try {
+    const imgUrl =
+      'https://maps.googleapis.com/maps/api/streetview?size=800x500&source=outdoor&return_error_code=true&location=' +
+      encodeURIComponent(addr) +
+      '&key=' +
+      GOOGLE_MAPS_API_KEY
+    const r = await fetch(imgUrl, { signal: AbortSignal.timeout(10000) })
+    if (!r.ok) return res.status(404).json({ error: 'not_available' })
+    const buf = await r.arrayBuffer()
+    res.setHeader('Content-Type', 'image/jpeg')
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    return res.send(Buffer.from(buf))
+  } catch {
+    return res.status(502).json({ error: 'fetch_failed' })
+  }
+})
+
+/**
  * Address typeahead backed by Google Places Autocomplete.
  * Keeps the API key server-side. Returns up to 5 US address suggestions.
  */

@@ -522,6 +522,8 @@ function SurveyPopover({ userId, onComplete, onSkip }: SurveyPopoverProps) {
 
 // ─── Property preview card (live, driven by form state) ──────────────────────
 
+const PROPERTY_IMAGES_BUCKET = 'property-images'
+
 interface PreviewCardProps {
   streetAddress: string
   city: string
@@ -534,6 +536,8 @@ interface PreviewCardProps {
   estimatedRentCents: number
   estimatedRentLow: number
   estimatedRentHigh: number
+  /** Street View image src to show instead of the placeholder, if available */
+  streetViewSrc?: string
 }
 
 function fmt$(cents: number) {
@@ -556,6 +560,7 @@ function PreviewCard({
   estimatedRentCents,
   estimatedRentLow,
   estimatedRentHigh,
+  streetViewSrc,
 }: PreviewCardProps) {
   const rentCents = moneyInputToCents(monthlyRent)
   const formattedRent = rentCents > 0 ? fmt$(rentCents) : '—'
@@ -567,12 +572,21 @@ function PreviewCard({
 
   return (
     <div className="sticky top-6 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-      {/* Photo placeholder */}
-      <div className="relative h-44 bg-gradient-to-br from-slate-100 to-slate-200 flex flex-col items-center justify-center gap-1">
-        <svg className="h-7 w-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <p className="text-xs text-slate-400">Photos can be added after signup</p>
+      {/* Photo / Street View */}
+      <div className="relative h-44 overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 flex flex-col items-center justify-center gap-1">
+        {streetViewSrc ? (
+          <>
+            <img src={streetViewSrc} alt="Street view" className="absolute inset-0 h-full w-full object-cover" />
+            <span className="absolute bottom-2 left-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">Street View</span>
+          </>
+        ) : (
+          <>
+            <svg className="h-7 w-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p className="text-xs text-slate-400">Photos can be added after signup</p>
+          </>
+        )}
         <span className="absolute right-3 top-3 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">Draft</span>
       </div>
 
@@ -666,6 +680,10 @@ export function ListFromReportPage() {
   // Ref guard — prevents double-save if the button is clicked twice quickly
   const savingRef = useRef(false)
 
+  // Street View state
+  const [streetViewAvailable, setStreetViewAvailable] = useState(false)
+  const [useStreetView, setUseStreetView] = useState(true)
+
   // Load prefill: sessionStorage first (user came from report tool on same tab),
   // then URL params (user clicked a link in the emailed report).
   useEffect(() => {
@@ -686,6 +704,17 @@ export function ListFromReportPage() {
     // Auto-generate a description from available property data (editable by landlord)
     const autoDesc = generateDescription(data)
     if (autoDesc) setDescription(autoDesc)
+
+    // Check Street View availability (non-blocking — failure is silent)
+    if (data.streetAddress && data.city && data.state) {
+      const fullAddr = [data.streetAddress, data.city, data.state, data.zipCode]
+        .filter(Boolean)
+        .join(', ')
+      fetch('/api/street-view-check?addr=' + encodeURIComponent(fullAddr))
+        .then((r) => r.json())
+        .then((d: { available?: boolean }) => { if (d.available) setStreetViewAvailable(true) })
+        .catch(() => {})
+    }
   }, [searchParams])
 
   // If already logged in, set activeUserId
@@ -712,6 +741,32 @@ export function ListFromReportPage() {
       return null
     }
 
+    // Upload Street View photo to Supabase Storage before inserting the property
+    let photoUrls: string[] = []
+    let photoLabels: string[] = []
+    if (streetViewAvailable && useStreetView) {
+      try {
+        const addr = [streetAddress, city, state, zipCode].filter(Boolean).join(', ')
+        const imgResp = await fetch('/api/street-view-image?addr=' + encodeURIComponent(addr))
+        if (imgResp.ok) {
+          const blob = await imgResp.blob()
+          const path = `${userId}/street-view-${Date.now()}.jpg`
+          const { error: uploadErr } = await supabase.storage
+            .from(PROPERTY_IMAGES_BUCKET)
+            .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+          if (!uploadErr) {
+            const { data: urlData } = supabase.storage
+              .from(PROPERTY_IMAGES_BUCKET)
+              .getPublicUrl(path)
+            photoUrls = [urlData.publicUrl]
+            photoLabels = ['Street view']
+          }
+        }
+      } catch {
+        // Non-fatal — listing saves without a photo if this fails
+      }
+    }
+
     const { data, error } = await supabase
       .from('properties')
       .insert({
@@ -735,8 +790,8 @@ export function ListFromReportPage() {
         description: description || null,
         lease_term: leaseTerm ? `${leaseTerm} months` : null,
         amenities: [],
-        photo_labels: [],
-        photo_urls: [],
+        photo_labels: photoLabels,
+        photo_urls: photoUrls,
         status: 'draft',
       })
       .select('id')
@@ -1097,7 +1152,26 @@ export function ListFromReportPage() {
                 estimatedRentCents={prefill.estimatedRentCents}
                 estimatedRentLow={prefill.estimatedRentLow}
                 estimatedRentHigh={prefill.estimatedRentHigh}
+                streetViewSrc={
+                  streetViewAvailable && useStreetView
+                    ? '/api/street-view-image?addr=' +
+                      encodeURIComponent(
+                        [streetAddress, city, state, zipCode].filter(Boolean).join(', ')
+                      )
+                    : undefined
+                }
               />
+              {streetViewAvailable && (
+                <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={useStreetView}
+                    onChange={(e) => setUseStreetView(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>Use street view photo for this listing</span>
+                </label>
+              )}
             </div>
           </div>
         </div>
