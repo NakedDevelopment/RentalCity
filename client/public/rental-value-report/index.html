@@ -901,6 +901,9 @@ function renderResult(r, beds, baths, sqft, email) {
        pre-fill the landlord listing form in the React app. */
     function storePrefill(rentData, rentBeds, rentBaths, rentSqft) {
       try {
+        // Clear any previous save-latch so a new report for a different property
+        // doesn't redirect the landlord back to /properties instead of letting them list.
+        sessionStorage.removeItem('rc-report-saved');
         sessionStorage.setItem('rc-report-prefill', JSON.stringify({
           streetAddress: street,
           city: city,
@@ -957,7 +960,9 @@ function renderResult(r, beds, baths, sqft, email) {
   var cta = document.getElementById('ctaLink');
   if (!cta) return;
   cta.addEventListener('click', function () {
-    window.location.href = '/list-from-report';
+    // Use window.top so the navigation breaks out of any iframe context
+    // (e.g. canvas embed, widget). Falls back to window.location for same-origin restrictions.
+    try { window.top.location.href = '/list-from-report'; } catch(e) { window.location.href = '/list-from-report'; }
   });
 })();
 
