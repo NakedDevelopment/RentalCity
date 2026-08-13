@@ -421,6 +421,7 @@ app.get('/api/__hostcheck', (req, res) => {
 // RentCast rental value estimate, used by the standalone "Rental Value Report"
 // lead-magnet page served at /rental-value-report/. The API key stays server-side.
 const RENTCAST_API_KEY = process.env.RENTCAST_API_KEY
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY
 const LEAD_WEBHOOK_URL = process.env.LEAD_WEBHOOK_URL
 const LEADS_FILE = path.resolve(process.cwd(), 'leads.ndjson')
 // HubSpot mirror of each lead (marketing CRM). These are public, embeddable IDs
@@ -806,6 +807,59 @@ app.post('/api/estimate', async (req, res) => {
     const message = err instanceof Error ? err.message : String(err)
     console.error('RentCast request failed:', message)
     return res.status(502).json({ error: 'rentcast_request_failed', detail: message })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
+/**
+ * Address typeahead backed by Google Places Autocomplete.
+ * Keeps the API key server-side. Returns up to 5 US address suggestions.
+ */
+app.get('/api/address-suggest', async (req, res) => {
+  const q = String(req.query.q || '').trim()
+  if (!GOOGLE_MAPS_API_KEY) return res.json({ suggestions: [] })
+  if (q.length < 3) return res.json({ suggestions: [] })
+
+  const url =
+    'https://maps.googleapis.com/maps/api/place/autocomplete/json' +
+    '?input=' + encodeURIComponent(q) +
+    '&key=' + encodeURIComponent(GOOGLE_MAPS_API_KEY) +
+    '&components=country:us' +
+    '&types=address' +
+    '&language=en'
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 6000)
+  try {
+    const gRes = await fetch(url, { signal: controller.signal })
+    if (!gRes.ok) return res.json({ suggestions: [] })
+    const data = await gRes.json().catch(() => null)
+    const predictions: any[] = (data && Array.isArray(data.predictions)) ? data.predictions : []
+
+    const suggestions = predictions.slice(0, 5).map((p: any) => {
+      const main: string = p.structured_formatting?.main_text ?? p.description ?? ''
+      const secondary: string = p.structured_formatting?.secondary_text ?? ''
+      // secondary looks like "Austin, TX, USA" or "Austin, TX 78701, USA"
+      const parts = secondary.split(',').map((s: string) => s.trim())
+      const city = parts[0] ?? ''
+      const stateZip = parts[1] ?? ''
+      const stateMatch = stateZip.match(/^([A-Z]{2})(?:\s+(\d{5}))?/)
+      const state = stateMatch ? stateMatch[1] : ''
+      const zipCode = stateMatch?.[2] ?? ''
+      return {
+        address: p.description ?? main,
+        streetLine: main,
+        city,
+        state,
+        zipCode,
+        placeId: p.place_id ?? '',
+      }
+    })
+
+    return res.json({ suggestions })
+  } catch {
+    return res.json({ suggestions: [] })
   } finally {
     clearTimeout(timeout)
   }

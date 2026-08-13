@@ -747,15 +747,35 @@ function renderResult(r, beds, baths, sqft, email) {
   function choose(idx) {
     var item = currentItems[idx];
     if (!item) return;
-    /* Only the street line goes in the address box; city & state get their own fields. */
-    var street = String(item.address || '').split(',')[0].trim();
-    addressEl.value = street || item.address;
+    /* streetLine is just the street portion; fall back to splitting full address */
+    addressEl.value = item.streetLine || String(item.address || '').split(',')[0].trim();
     if (item.city) cityEl.value = item.city;
     if (item.state) setSelectIfOption(stateEl, item.state);
     selectedZip = item.zipCode ? String(item.zipCode) : '';
-    applyDetails(item);
     clearInvalid();
     hideSuggest();
+    /* Ask RentCast for the property record to fill beds/baths/sqft/type */
+    fetchDetails(item.address);
+  }
+
+  function fetchDetails(fullAddress) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/address-search?q=' + encodeURIComponent(fullAddress), true);
+    xhr.timeout = 8000;
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) return;
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      var items = (data && data.suggestions) ? data.suggestions : [];
+      if (items.length > 0) {
+        applyDetails(items[0]);
+        /* Also capture zip from RentCast record if we didn't get one from Google */
+        if (!selectedZip && items[0].zipCode) selectedZip = String(items[0].zipCode);
+      }
+    };
+    xhr.onerror = function () {};
+    xhr.ontimeout = function () {};
+    try { xhr.send(); } catch (e) {}
   }
 
   function setActive(lis) {
@@ -787,7 +807,7 @@ function renderResult(r, beds, baths, sqft, email) {
   function fetchSuggest(q) {
     var seq = ++addrSeq;
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/api/address-search?q=' + encodeURIComponent(q), true);
+    xhr.open('GET', '/api/address-suggest?q=' + encodeURIComponent(q), true);
     xhr.timeout = 8000;
     xhr.onreadystatechange = function () {
       if (xhr.readyState !== 4 || seq !== addrSeq) return;
