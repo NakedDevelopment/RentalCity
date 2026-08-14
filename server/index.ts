@@ -2962,8 +2962,9 @@ async function storeVerification(
   return verificationRow(data)
 }
 
-// In production, serve the built client static assets and SPA fallback
-if (process.env.NODE_ENV === 'production') {
+// Serve the built client static assets and SPA fallback when dist exists
+// (works in both explicit production mode and when NODE_ENV is unset)
+if (process.env.NODE_ENV !== 'development') {
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
   const candidates = [
