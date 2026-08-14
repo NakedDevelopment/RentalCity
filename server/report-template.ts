@@ -431,7 +431,7 @@ const REPORT_CSS = `
  *  Used in both the standalone report page and the email so users arriving from
  *  either surface get the pre-filled listing form without needing sessionStorage. */
 function buildListUrl(input: ReportInput, d: Derived): string {
-  const base = 'https://www.gorentalcity.com/list-from-report'
+  const base = 'https://app.gorentalcity.com/list-from-report'
   const params = new URLSearchParams()
   params.set('addr', input.address)
   const beds = d.property?.bedrooms ?? input.bedrooms

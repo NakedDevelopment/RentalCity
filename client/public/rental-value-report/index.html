@@ -960,9 +960,31 @@ function renderResult(r, beds, baths, sqft, email) {
   var cta = document.getElementById('ctaLink');
   if (!cta) return;
   cta.addEventListener('click', function () {
-    // Use window.top so the navigation breaks out of any iframe context
-    // (e.g. canvas embed, widget). Falls back to window.location for same-origin restrictions.
-    try { window.top.location.href = '/list-from-report'; } catch(e) { window.location.href = '/list-from-report'; }
+    // Build an absolute URL with URL params so prefill works even across
+    // cross-origin hops (value. → app.) where sessionStorage isn't shared.
+    var dest = 'https://app.gorentalcity.com/list-from-report';
+    try {
+      var raw = sessionStorage.getItem('rc-report-prefill');
+      if (raw) {
+        var p = JSON.parse(raw);
+        var q = new URLSearchParams();
+        var addr = [p.streetAddress, p.city, p.state, p.zipCode].filter(Boolean).join(', ');
+        if (addr) q.set('addr', addr);
+        if (p.bedrooms) q.set('beds', String(p.bedrooms));
+        if (p.bathrooms) q.set('baths', String(p.bathrooms));
+        if (p.squareFootage) q.set('sqft', String(p.squareFootage));
+        if (p.estimatedRentCents) q.set('rent', String(p.estimatedRentCents / 100));
+        if (p.estimatedRentLow) q.set('low', String(p.estimatedRentLow / 100));
+        if (p.estimatedRentHigh) q.set('high', String(p.estimatedRentHigh / 100));
+        if (p.propertyType) q.set('type', p.propertyType);
+        if (p.yearBuilt) q.set('year', String(p.yearBuilt));
+        if (p.lotSize) q.set('lot', String(p.lotSize));
+        var qs = q.toString();
+        if (qs) dest = dest + '?' + qs;
+      }
+    } catch(e) {}
+    // Use window.top so the navigation breaks out of any iframe context.
+    try { window.top.location.href = dest; } catch(e) { window.location.href = dest; }
   });
 })();
 

@@ -1,4 +1,5 @@
 - [Equifax credit check integration](equifax-integration.md) — OneView credit API, SSN encrypted at rest (AES-256-GCM), landlord gated by equifax_approved_at; DocuSign pending.
+- [Production deployment config](deployment-config.md) — build=npm run build / run=npm run start; www.gorentalcity.com is NOT a configured domain, use app.gorentalcity.com; static serving gated on NODE_ENV !== 'development'.
 - [Stripe fee model & membership gating](stripe-fees.md) — tenant $50 / landlord $200 profile-unlock / $350-yr membership (6-mo free trial at launch); enforced in UI (intro page) AND via RLS on properties.
 - [Landlord lifecycle emails](landlord-lifecycle-emails.md) — 3 one-time onboarding emails; claim-then-send dedupe pattern; publish-triggered + 6h sweep.
 - [MailerSend delivery pitfalls](email-delivery.md) — silent email failures were config (FROM_EMAIL held a token; trial daily quota 429); support notifications dedupe via notified_at + hourly retry sweep.
