@@ -29,3 +29,26 @@ export async function fetchAdminDirectory(): Promise<AdminDirectoryUser[]> {
   const j = (await res.json()) as { users: AdminDirectoryUser[] }
   return j.users ?? []
 }
+
+export type PropertyStatus = 'draft' | 'active' | 'inactive' | 'leased'
+
+export async function updatePropertyStatus(propertyId: string, status: PropertyStatus): Promise<PropertyStatus> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.access_token) throw new Error('Not signed in')
+  const res = await fetch(`/api/admin/properties/${propertyId}/status`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status }),
+  })
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(j.error ?? res.statusText)
+  }
+  const j = (await res.json()) as { status: PropertyStatus }
+  return j.status
+}

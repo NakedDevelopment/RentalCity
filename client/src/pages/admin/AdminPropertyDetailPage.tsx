@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { formatBedrooms, formatBathrooms, formatCurrency } from '../../lib/propertyDraft'
-import { fetchAdminDirectory, type AdminDirectoryUser } from '../../lib/adminApi'
+import { fetchAdminDirectory, updatePropertyStatus, type AdminDirectoryUser, type PropertyStatus } from '../../lib/adminApi'
 import { AdminLoadingBlock, AdminErrorBlock, admin } from './adminUi'
 import { StatusBadge } from './AdminPropertiesPage'
 
@@ -30,6 +30,28 @@ export function AdminPropertyDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activePhotoIdx, setActivePhotoIdx] = useState(0)
+  const [savingStatus, setSavingStatus] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+
+  async function handleStatusChange(next: PropertyStatus) {
+    if (!property || next === property.status) return
+    if (next === 'leased') {
+      const confirmed = window.confirm(
+        'Marking this property as Leased will automatically reject all pending applications for it. Continue?',
+      )
+      if (!confirmed) return
+    }
+    setSavingStatus(true)
+    setStatusError(null)
+    try {
+      const saved = await updatePropertyStatus(property.id, next)
+      setProperty({ ...property, status: saved })
+    } catch (e) {
+      setStatusError(e instanceof Error ? e.message : 'Failed to update status')
+    } finally {
+      setSavingStatus(false)
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -142,8 +164,25 @@ export function AdminPropertyDetailPage() {
             )}
           </span>
         </div>
-        <span className={admin.muted}>Created {new Date(property.created_at).toLocaleDateString()}</span>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            Status
+            <select
+              value={property.status}
+              disabled={savingStatus}
+              onChange={(e) => void handleStatusChange(e.target.value as PropertyStatus)}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none disabled:opacity-60"
+            >
+              <option value="draft">Draft</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="leased">Leased</option>
+            </select>
+          </label>
+          <span className={admin.muted}>Created {new Date(property.created_at).toLocaleDateString()}</span>
+        </div>
       </div>
+      {statusError ? <AdminErrorBlock message={statusError} /> : null}
 
       <div className="overflow-hidden rounded-xl bg-gray-100 aspect-[16/8]">
         {property.photoUrls.length > 0 ? (

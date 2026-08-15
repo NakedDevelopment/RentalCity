@@ -27,7 +27,7 @@ type PropertyRow = {
   photo_urls: string[] | null
 }
 
-type StatusFilter = 'all' | 'active' | 'inactive' | 'draft'
+type StatusFilter = 'all' | 'active' | 'inactive' | 'draft' | 'leased'
 type BedroomFilter = 'any' | '1' | '2' | '3' | '4+'
 type SortOption = 'newest' | 'oldest' | 'rent_asc' | 'rent_desc'
 
@@ -35,7 +35,9 @@ export function AdminPropertiesPage() {
   const [searchParams] = useSearchParams()
   const statusParam = searchParams.get('status')
   const initialStatus: StatusFilter =
-    statusParam === 'active' || statusParam === 'inactive' || statusParam === 'draft' ? statusParam : 'all'
+    statusParam === 'active' || statusParam === 'inactive' || statusParam === 'draft' || statusParam === 'leased'
+      ? statusParam
+      : 'all'
 
   const [rows, setRows] = useState<PropertyRow[]>([])
   const [landlords, setLandlords] = useState<Map<string, AdminDirectoryUser>>(new Map())
@@ -138,6 +140,7 @@ export function AdminPropertiesPage() {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="draft">Draft</option>
+          <option value="leased">Leased</option>
         </select>
         <select
           value={bedrooms}

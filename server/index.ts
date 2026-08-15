@@ -3464,6 +3464,32 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
   return res.json({ ok: true })
 })
 
+app.patch('/api/admin/properties/:id/status', async (req, res) => {
+  const ok = await requireAdmin(req, res)
+  if (ok === null) return
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const { id } = req.params
+  if (!id || !UUID_PARAM_RE.test(id)) {
+    return res.status(400).json({ error: 'Invalid property id' })
+  }
+  const status = (req.body as { status?: string } | null)?.status
+  const ALLOWED_STATUSES = ['draft', 'active', 'inactive', 'leased'] as const
+  if (!status || !ALLOWED_STATUSES.includes(status as (typeof ALLOWED_STATUSES)[number])) {
+    return res.status(400).json({ error: 'Invalid status. Must be one of: draft, active, inactive, leased' })
+  }
+
+  const { data: row, error: upErr } = await admin
+    .from('properties')
+    .update({ status })
+    .eq('id', id)
+    .select('id, status')
+    .maybeSingle()
+  if (upErr) return res.status(500).json({ error: upErr.message })
+  if (!row) return res.status(404).json({ error: 'Property not found' })
+  return res.json({ ok: true, status: row.status })
+})
+
 app.listen(PORT, () => {
   console.log(`Rental City API running on http://localhost:${PORT}`)
 })
