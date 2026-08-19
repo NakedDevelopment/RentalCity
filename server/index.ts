@@ -34,6 +34,14 @@ import {
   getEquifaxToken,
   getEquifaxBase,
 } from './equifax'
+import {
+  createEmbeddedEnvelope,
+  createEmbeddedSigningUrl,
+  getEnvelopeStatus,
+  downloadCompletedDocument,
+  type AnchorTab,
+} from './docusign'
+import { loadEquifaxAgreementDocument, loadPlaidConsentDocument } from './documents'
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
 import {
@@ -3013,7 +3021,58 @@ if (process.env.NODE_ENV !== 'development') {
 // Equifax OneView credit checks
 // ---------------------------------------------------------------------------
 
-// Tenant: save credit consent (SSN encrypted + address fields for Equifax)
+/**
+ * Resolves a tenant's current active universal application id (the 6-month
+ * window created by the $50 application fee), or null if they have none.
+ * Credit consent and credit-report requests are always scoped to this id so
+ * a renewed (new-window) tenant never reuses a prior window's SSN or report.
+ */
+async function resolveActiveUniversalApplicationId(
+  admin: SupabaseClient,
+  tenantId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from('universal_applications')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'active')
+    .gt('valid_until', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return (data as { id?: string } | null)?.id ?? null
+}
+
+/**
+ * Whether this landlord has paid-unlock (or decision-stage) access to this
+ * tenant's profile — mirrors LandlordTenantProfilePage.tsx's client-side
+ * `hasUnlockedProfileAccess` exactly. Credit checks are gated by this on the
+ * server too: global Equifax approval alone must never be enough to pull an
+ * arbitrary tenant's credit report — there must be a real application
+ * relationship and either a paid unlock or a completed decision.
+ */
+async function landlordHasUnlockedTenant(
+  admin: SupabaseClient,
+  landlordId: string,
+  tenantId: string,
+): Promise<boolean> {
+  const { data } = await admin
+    .from('applications')
+    .select('status, unlocked_at, property:property_id(landlord_id)')
+    .eq('tenant_id', tenantId)
+  const rows = (data ?? []) as Array<{
+    status: string
+    unlocked_at: string | null
+    property: { landlord_id?: string } | { landlord_id?: string }[] | null
+  }>
+  return rows
+    .map((r) => ({ ...r, property: Array.isArray(r.property) ? r.property[0] : r.property }))
+    .filter((r) => r.property?.landlord_id === landlordId)
+    .some((r) => r.status === 'approved' || r.status === 'rejected' || (r.status === 'pending' && r.unlocked_at != null))
+}
+
+// Tenant: save credit consent (SSN encrypted + address fields for Equifax),
+// scoped to their current active universal application window.
 app.post('/api/equifax/consent', async (req, res) => {
   const user = await bearerUser(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
@@ -3025,8 +3084,19 @@ app.post('/api/equifax/consent', async (req, res) => {
   if (!firstName || !lastName || !ssn || !houseNumber || !streetName || !city || !state || !zip) {
     return res.status(400).json({ error: 'All fields are required' })
   }
+  // Equifax's real field limits (.agents/20260811-OneView-1.0.2607-swagger.yaml) —
+  // enforced here too so an over-length value fails fast for the tenant instead of
+  // surfacing as a confusing landlord-facing error much later at credit-check time.
+  if (firstName.trim().length > 15) return res.status(400).json({ error: 'First name must be 15 characters or fewer' })
+  if (lastName.trim().length > 25) return res.status(400).json({ error: 'Last name must be 25 characters or fewer' })
+  if (city.trim().length > 20) return res.status(400).json({ error: 'City must be 20 characters or fewer' })
   const ssnClean = String(ssn).replace(/\D/g, '')
   if (ssnClean.length !== 9) return res.status(400).json({ error: 'SSN must be 9 digits' })
+
+  const universalApplicationId = await resolveActiveUniversalApplicationId(admin, user.id)
+  if (!universalApplicationId) {
+    return res.status(400).json({ error: 'You need an active application before authorizing a credit check.' })
+  }
 
   let ssnEncrypted: string
   try {
@@ -3038,6 +3108,7 @@ app.post('/api/equifax/consent', async (req, res) => {
   const { error: upsertErr } = await admin.from('tenant_credit_consent').upsert(
     {
       tenant_id: user.id,
+      universal_application_id: universalApplicationId,
       ssn_encrypted: ssnEncrypted,
       first_name: firstName.trim(),
       last_name: lastName.trim(),
@@ -3050,23 +3121,27 @@ app.post('/api/equifax/consent', async (req, res) => {
       consent_given_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'tenant_id' },
+    { onConflict: 'tenant_id,universal_application_id' },
   )
   if (upsertErr) return res.status(500).json({ error: 'Could not save consent data' })
   return res.json({ ok: true })
 })
 
-// Tenant: check own consent status (returns hasConsent only — no PII)
+// Tenant: check own consent status for their current application window (returns hasConsent only — no PII)
 app.get('/api/equifax/consent', async (req, res) => {
   const user = await bearerUser(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
 
+  const universalApplicationId = await resolveActiveUniversalApplicationId(admin, user.id)
+  if (!universalApplicationId) return res.json({ hasConsent: false })
+
   const { data } = await admin
     .from('tenant_credit_consent')
     .select('tenant_id')
     .eq('tenant_id', user.id)
+    .eq('universal_application_id', universalApplicationId)
     .maybeSingle()
   return res.json({ hasConsent: !!data })
 })
@@ -3126,7 +3201,8 @@ app.post('/api/equifax/landlord/request-approval', async (req, res) => {
   return res.json({ ok: true })
 })
 
-// Landlord: get credit check info for a specific tenant
+// Landlord: get credit check info for a specific tenant, scoped to the
+// tenant's current active application window.
 app.get('/api/equifax/credit-check/:tenantId', async (req, res) => {
   const user = await bearerUser(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
@@ -3134,13 +3210,28 @@ app.get('/api/equifax/credit-check/:tenantId', async (req, res) => {
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { tenantId } = req.params
 
+  if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
+    return res.status(403).json({ error: 'You must unlock this tenant’s profile before viewing credit check status.' })
+  }
+
+  const universalApplicationId = await resolveActiveUniversalApplicationId(admin, tenantId)
+  if (!universalApplicationId) {
+    return res.json({ id: null, status: 'none', equifax_report_id: null, requested_at: null, tenantHasConsent: false })
+  }
+
   const [{ data: consent }, { data: report }] = await Promise.all([
-    admin.from('tenant_credit_consent').select('tenant_id').eq('tenant_id', tenantId).maybeSingle(),
+    admin
+      .from('tenant_credit_consent')
+      .select('tenant_id')
+      .eq('tenant_id', tenantId)
+      .eq('universal_application_id', universalApplicationId)
+      .maybeSingle(),
     admin
       .from('equifax_credit_reports')
       .select('id, status, equifax_report_id, requested_at')
       .eq('landlord_id', user.id)
       .eq('tenant_id', tenantId)
+      .eq('universal_application_id', universalApplicationId)
       .order('requested_at', { ascending: false })
       .maybeSingle(),
   ])
@@ -3157,7 +3248,8 @@ app.get('/api/equifax/credit-check/:tenantId', async (req, res) => {
   })
 })
 
-// Landlord: run a credit check on a tenant (requires approval + tenant consent)
+// Landlord: run a credit check on a tenant (requires approval + tenant consent
+// for their current active application window).
 app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
   const user = await bearerUser(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
@@ -3175,22 +3267,33 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
     return res.status(403).json({ error: 'You must be approved for Equifax access before running credit checks.' })
   }
 
-  // Tenant must have given consent (contains encrypted SSN + address)
+  if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
+    return res.status(403).json({ error: 'You must unlock this tenant’s profile before running a credit check.' })
+  }
+
+  const universalApplicationId = await resolveActiveUniversalApplicationId(admin, tenantId)
+  if (!universalApplicationId) {
+    return res.status(400).json({ error: 'Tenant does not have an active application.' })
+  }
+
+  // Tenant must have given consent (contains encrypted SSN + address) for this window
   const { data: consent } = await admin
     .from('tenant_credit_consent')
     .select('ssn_encrypted, first_name, last_name, house_number, street_name, street_type, city, state, zip')
     .eq('tenant_id', tenantId)
+    .eq('universal_application_id', universalApplicationId)
     .maybeSingle()
   if (!consent) {
     return res.status(400).json({ error: 'Tenant has not authorized a credit check.' })
   }
 
-  // Return existing complete/pending report if one exists
+  // Return existing complete/pending report for this window if one exists
   const { data: existing } = await admin
     .from('equifax_credit_reports')
     .select('id, status, equifax_report_id, requested_at')
     .eq('landlord_id', user.id)
     .eq('tenant_id', tenantId)
+    .eq('universal_application_id', universalApplicationId)
     .in('status', ['pending', 'complete'])
     .maybeSingle()
   if (existing) {
@@ -3198,14 +3301,35 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
     return res.json({ id: e.id, status: e.status, equifax_report_id: e.equifax_report_id, requested_at: e.requested_at, tenantHasConsent: true })
   }
 
-  // Insert pending record so the landlord sees progress even if Equifax is slow
+  // Insert pending record so the landlord sees progress even if Equifax is slow.
+  // A unique constraint on (landlord_id, tenant_id, universal_application_id)
+  // makes a double-click/double-tab race land here as a conflict rather than
+  // creating two rows (and two billable Equifax pulls) — fall back to the
+  // row the other request created.
   const { data: newRecord, error: insertErr } = await admin
     .from('equifax_credit_reports')
-    .insert({ landlord_id: user.id, tenant_id: tenantId, status: 'pending' })
+    .insert({ landlord_id: user.id, tenant_id: tenantId, universal_application_id: universalApplicationId, status: 'pending' })
     .select('id')
     .single()
-  if (insertErr || !newRecord) return res.status(500).json({ error: 'Could not create credit check record' })
-  const recordId = (newRecord as { id: string }).id
+  let recordId: string
+  if (insertErr) {
+    if ((insertErr as { code?: string }).code === '23505') {
+      const { data: raced } = await admin
+        .from('equifax_credit_reports')
+        .select('id, status, equifax_report_id, requested_at')
+        .eq('landlord_id', user.id)
+        .eq('tenant_id', tenantId)
+        .eq('universal_application_id', universalApplicationId)
+        .maybeSingle()
+      const e = raced as { id: string; status: string; equifax_report_id: string | null; requested_at: string } | null
+      if (e) {
+        return res.json({ id: e.id, status: e.status, equifax_report_id: e.equifax_report_id, requested_at: e.requested_at, tenantHasConsent: true })
+      }
+    }
+    return res.status(500).json({ error: 'Could not create credit check record' })
+  }
+  if (!newRecord) return res.status(500).json({ error: 'Could not create credit check record' })
+  recordId = (newRecord as { id: string }).id
 
   // Decrypt SSN → call Equifax → SSN gone from memory when this scope exits
   let reportId: string
@@ -3243,7 +3367,8 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
   })
 })
 
-// Landlord: proxy the credit-report PDF from Equifax (authenticated pass-through)
+// Landlord: proxy the credit-report PDF from Equifax (authenticated pass-through).
+// Never cached/stored on our end — streamed straight from Equifax on every request.
 app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
   const user = await bearerUser(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
@@ -3251,11 +3376,19 @@ app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { tenantId } = req.params
 
+  if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
+    return res.status(403).json({ error: 'You must unlock this tenant’s profile before viewing a credit report.' })
+  }
+
+  const universalApplicationId = await resolveActiveUniversalApplicationId(admin, tenantId)
+  if (!universalApplicationId) return res.status(404).json({ error: 'No completed credit report found' })
+
   const { data: report } = await admin
     .from('equifax_credit_reports')
     .select('equifax_report_id')
     .eq('landlord_id', user.id)
     .eq('tenant_id', tenantId)
+    .eq('universal_application_id', universalApplicationId)
     .eq('status', 'complete')
     .maybeSingle()
   const r = report as { equifax_report_id?: string | null } | null
@@ -3264,9 +3397,19 @@ app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
   try {
     const token = await getEquifaxToken()
     const pdfUrl = equifaxPdfEndpoint(r.equifax_report_id)
-    const pdfRes = await fetch(pdfUrl, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' },
-    })
+
+    // Equifax generates the PDF asynchronously (up to ~10s after the initial
+    // request) and returns 409 while it's not yet ready — retry briefly
+    // instead of surfacing a hard error for what is just a timing race.
+    let pdfRes: globalThis.Response | null = null
+    for (let attempt = 0; attempt < 4; attempt++) {
+      pdfRes = await fetch(pdfUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' } })
+      if (pdfRes.status !== 409) break
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+    if (!pdfRes || pdfRes.status === 409) {
+      return res.status(503).json({ error: 'The report is still being generated. Please try again in a few seconds.' })
+    }
     if (!pdfRes.ok) return res.status(502).json({ error: 'Could not retrieve report from Equifax' })
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', 'inline; filename="credit-report.pdf"')
@@ -3275,6 +3418,278 @@ app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
   } catch (err) {
     console.error('Equifax PDF proxy error:', (err as Error).message)
     return res.status(502).json({ error: 'Could not retrieve report' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// DocuSign — landlord agreements gating access to Plaid data / credit checks /
+// background checks: the Equifax Broker Subscriber Agreement (requires
+// Equifax's manual approval after signing) and the Plaid End Client Consent
+// (self-serve — stored on our end only, no external approval).
+// ---------------------------------------------------------------------------
+
+type LandlordProfileRow = {
+  display_name?: string | null
+  business_name?: string | null
+  equifax_approved_at?: string | null
+  docusign_envelope_id?: string | null
+  docusign_envelope_status?: string | null
+  plaid_agreement_envelope_id?: string | null
+  plaid_agreement_signed_at?: string | null
+}
+
+/**
+ * Applies the completion side-effects for a landlord agreement envelope once
+ * DocuSign confirms it as 'completed': stores our copy, and for Equifax,
+ * forwards the executed agreement to their compliance inbox. Idempotent —
+ * safe to call more than once for the same envelope.
+ */
+async function processDocusignCompletion(
+  admin: SupabaseClient,
+  userId: string,
+  userEmail: string | undefined,
+  type: 'equifax' | 'plaid',
+): Promise<void> {
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('docusign_envelope_id, docusign_envelope_status, plaid_agreement_envelope_id')
+    .eq('id', userId)
+    .maybeSingle()
+  const p = profile as LandlordProfileRow | null
+  const envelopeId = type === 'equifax' ? p?.docusign_envelope_id : p?.plaid_agreement_envelope_id
+  if (!envelopeId) return
+
+  if (type === 'plaid') {
+    const pdf = await downloadCompletedDocument(envelopeId)
+    const { error: uploadErr } = await admin.storage
+      .from('landlord-agreements')
+      .upload(`${userId}/plaid-end-client-consent.pdf`, pdf, { contentType: 'application/pdf', upsert: true })
+    if (uploadErr) console.error('Failed to store executed Plaid consent document:', uploadErr.message)
+    await admin.from('profiles').update({ plaid_agreement_signed_at: new Date().toISOString() }).eq('id', userId)
+    return
+  }
+
+  const alreadyProcessed = p?.docusign_envelope_status === 'completed'
+  const pdf = await downloadCompletedDocument(envelopeId)
+  const { error: uploadErr } = await admin.storage
+    .from('landlord-agreements')
+    .upload(`${userId}/equifax-broker-subscriber-agreement.pdf`, pdf, { contentType: 'application/pdf', upsert: true })
+  if (uploadErr) console.error('Failed to store executed Equifax agreement:', uploadErr.message)
+
+  if (!alreadyProcessed) {
+    const equifaxInbox = process.env.EQUIFAX_AGREEMENT_INBOX || ''
+    if (equifaxInbox) {
+      await sendReportEmail({
+        to: equifaxInbox,
+        subject: `Executed Broker Subscriber Agreement — ${userEmail ?? userId}`,
+        html: `<p>Attached is the executed Equifax Broker Subscriber Agreement for a Rental City landlord subscriber.</p>`,
+        attachments: [{ filename: 'equifax-broker-subscriber-agreement.pdf', contentBase64: pdf.toString('base64') }],
+      })
+    } else {
+      console.warn('EQUIFAX_AGREEMENT_INBOX not configured — executed agreement stored but not emailed to Equifax')
+    }
+  }
+
+  await admin.from('profiles').update({
+    docusign_envelope_status: 'completed',
+    equifax_pending_since: new Date().toISOString(),
+  }).eq('id', userId)
+}
+
+app.get('/api/docusign/status', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data } = await admin
+    .from('profiles')
+    .select('equifax_approved_at, docusign_envelope_id, docusign_envelope_status, plaid_agreement_envelope_id, plaid_agreement_signed_at')
+    .eq('id', user.id)
+    .maybeSingle()
+  let p = data as LandlordProfileRow | null
+
+  // Self-heal: if an envelope was sent but never confirmed completed (e.g. the
+  // user closed the tab before the return-page callback fired), reconcile
+  // with DocuSign's live status rather than staying stuck forever.
+  try {
+    if (p?.docusign_envelope_id && p.docusign_envelope_status !== 'completed') {
+      const live = await getEnvelopeStatus(p.docusign_envelope_id)
+      if (live.status === 'completed') await processDocusignCompletion(admin, user.id, user.email, 'equifax')
+    }
+    if (p?.plaid_agreement_envelope_id && !p?.plaid_agreement_signed_at) {
+      const live = await getEnvelopeStatus(p.plaid_agreement_envelope_id)
+      if (live.status === 'completed') await processDocusignCompletion(admin, user.id, user.email, 'plaid')
+    }
+  } catch (err) {
+    console.error('DocuSign status reconciliation error:', (err as Error).message)
+  }
+
+  if (p?.docusign_envelope_id || p?.plaid_agreement_envelope_id) {
+    const { data: refreshed } = await admin
+      .from('profiles')
+      .select('equifax_approved_at, docusign_envelope_id, docusign_envelope_status, plaid_agreement_envelope_id, plaid_agreement_signed_at')
+      .eq('id', user.id)
+      .maybeSingle()
+    p = (refreshed as LandlordProfileRow | null) ?? p
+  }
+
+  const equifaxSigned = p?.docusign_envelope_status === 'completed'
+  const equifaxApproved = !!p?.equifax_approved_at
+  const plaidSigned = !!p?.plaid_agreement_signed_at
+
+  return res.json({
+    equifaxSigned,
+    equifaxApproved,
+    equifaxPendingSince: equifaxSigned && !equifaxApproved,
+    plaidSigned,
+    fullyVerified: equifaxApproved && plaidSigned,
+  })
+})
+
+app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('display_name, business_name, docusign_envelope_id, docusign_envelope_status')
+    .eq('id', user.id)
+    .maybeSingle()
+  const p = profile as LandlordProfileRow | null
+  const landlordName = p?.display_name || 'Landlord'
+  const businessName = p?.business_name || landlordName
+
+  const returnUrl = `${lifecycleAppUrl(req)}/docusign/return?type=equifax`
+
+  try {
+    let envelopeId = p?.docusign_envelope_id || null
+    if (!envelopeId || p?.docusign_envelope_status === 'declined' || p?.docusign_envelope_status === 'voided') {
+      const { base64, fileExtension } = loadEquifaxAgreementDocument()
+      const tabs: AnchorTab[] = [
+        { anchorString: 'SUBSCRIBER:', type: 'text', value: businessName, xOffset: '10' },
+        { anchorString: 'Signed by:', type: 'sign', xOffset: '10' },
+        { anchorString: 'Printed Name', type: 'text', value: landlordName, xOffset: '75' },
+        { anchorString: 'Title:', type: 'text', xOffset: '10' },
+        { anchorString: 'Date:', type: 'text', value: new Date().toISOString().slice(0, 10), xOffset: '10' },
+      ]
+      envelopeId = await createEmbeddedEnvelope({
+        documentBase64: base64,
+        documentName: 'Equifax Broker Subscriber Agreement.docx',
+        fileExtension,
+        emailSubject: 'Rental City — Equifax Broker Subscriber Agreement',
+        signer: { name: landlordName, email: user.email ?? '', clientUserId: user.id },
+        tabs,
+        returnUrl,
+      })
+      await admin.from('profiles').update({
+        docusign_envelope_id: envelopeId,
+        docusign_envelope_status: 'sent',
+      }).eq('id', user.id)
+    }
+
+    const signingUrl = await createEmbeddedSigningUrl(
+      envelopeId,
+      { name: landlordName, email: user.email ?? '', clientUserId: user.id },
+      `${returnUrl}&envelopeId=${envelopeId}`,
+    )
+    return res.json({ envelopeId, signingUrl })
+  } catch (err) {
+    console.error('DocuSign Equifax envelope error:', (err as Error).message)
+    return res.status(502).json({ error: 'Could not start the Equifax agreement signing session.' })
+  }
+})
+
+app.post('/api/docusign/plaid-consent/create', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('display_name, business_name, plaid_agreement_envelope_id, plaid_agreement_signed_at')
+    .eq('id', user.id)
+    .maybeSingle()
+  const p = profile as LandlordProfileRow | null
+  const landlordName = p?.display_name || 'Landlord'
+  const businessName = p?.business_name || landlordName
+
+  const returnUrl = `${lifecycleAppUrl(req)}/docusign/return?type=plaid`
+
+  try {
+    let envelopeId = p?.plaid_agreement_envelope_id || null
+    if (!envelopeId) {
+      const { base64, fileExtension } = loadPlaidConsentDocument({ name: landlordName, businessName })
+      const tabs: AnchorTab[] = [
+        { anchorString: 'Signature:', type: 'sign', xOffset: '10' },
+        { anchorString: 'Date:', type: 'text', value: new Date().toISOString().slice(0, 10), xOffset: '10' },
+      ]
+      envelopeId = await createEmbeddedEnvelope({
+        documentBase64: base64,
+        documentName: 'Plaid End Client Consent Agreement.html',
+        fileExtension,
+        emailSubject: 'Rental City — Plaid End Client Consent Agreement',
+        signer: { name: landlordName, email: user.email ?? '', clientUserId: user.id },
+        tabs,
+        returnUrl,
+      })
+      await admin.from('profiles').update({ plaid_agreement_envelope_id: envelopeId }).eq('id', user.id)
+    }
+
+    const signingUrl = await createEmbeddedSigningUrl(
+      envelopeId,
+      { name: landlordName, email: user.email ?? '', clientUserId: user.id },
+      `${returnUrl}&envelopeId=${envelopeId}`,
+    )
+    return res.json({ envelopeId, signingUrl })
+  } catch (err) {
+    console.error('DocuSign Plaid envelope error:', (err as Error).message)
+    return res.status(502).json({ error: 'Could not start the Plaid consent signing session.' })
+  }
+})
+
+// Called by the client after the embedded signing ceremony redirects back to
+// our returnUrl — we re-verify the real envelope status with DocuSign rather
+// than trusting the redirect event, then apply the corresponding side effect.
+app.post('/api/docusign/complete', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const { envelopeId, type } = req.body as { envelopeId?: string; type?: 'equifax' | 'plaid' }
+  if (!envelopeId || (type !== 'equifax' && type !== 'plaid')) {
+    return res.status(400).json({ error: 'Invalid envelopeId or type' })
+  }
+
+  // Verify this envelope actually belongs to the calling user before trusting
+  // its completion status — otherwise a guessed/observed envelopeId for
+  // someone else's (already-completed) envelope could self-approve this account.
+  const { data: ownerCheck } = await admin
+    .from('profiles')
+    .select('docusign_envelope_id, plaid_agreement_envelope_id')
+    .eq('id', user.id)
+    .maybeSingle()
+  const owned = ownerCheck as { docusign_envelope_id?: string | null; plaid_agreement_envelope_id?: string | null } | null
+  const expectedEnvelopeId = type === 'equifax' ? owned?.docusign_envelope_id : owned?.plaid_agreement_envelope_id
+  if (!expectedEnvelopeId || expectedEnvelopeId !== envelopeId) {
+    return res.status(403).json({ error: 'This envelope does not belong to your account.' })
+  }
+
+  try {
+    const status = await getEnvelopeStatus(envelopeId)
+    if (status.status !== 'completed') {
+      return res.json({ completed: false, status: status.status })
+    }
+
+    await processDocusignCompletion(admin, user.id, user.email, type)
+    return res.json({ completed: true })
+  } catch (err) {
+    console.error('DocuSign completion error:', (err as Error).message)
+    return res.status(502).json({ error: 'Could not verify signing completion.' })
   }
 })
 
@@ -3453,6 +3868,18 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { userId } = req.params
   const approve = (req.body as { approve?: boolean } | null)?.approve !== false
+
+  if (approve) {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('docusign_envelope_status')
+      .eq('id', userId)
+      .maybeSingle()
+    const signed = (profile as { docusign_envelope_status?: string | null } | null)?.docusign_envelope_status === 'completed'
+    if (!signed) {
+      return res.status(400).json({ error: 'This landlord has not completed signing the Equifax Broker Subscriber Agreement yet.' })
+    }
+  }
 
   const update: Record<string, string | null> = {
     equifax_approved_at: approve ? new Date().toISOString() : null,

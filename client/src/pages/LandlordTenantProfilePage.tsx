@@ -40,6 +40,8 @@ import {
   hasTenantLeasePreferencesData,
   TenantLeasePreferencesDisplay,
 } from '../components/TenantLeasePreferencesDisplay'
+import { LandlordAgreementsModal } from '../components/LandlordAgreementsModal'
+import { getDocusignStatus, type DocusignStatus } from '../lib/docusignApi'
 
 const APPLICATION_ID_PARAM_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -143,9 +145,13 @@ export function LandlordTenantProfilePage() {
   const [tenantBankVerification, setTenantBankVerification] = useState<PlaidVerificationRow | null>(null)
   const [landlordEquifaxApproved, setLandlordEquifaxApproved] = useState(false)
   const [landlordEquifaxPending, setLandlordEquifaxPending] = useState(false)
+  const [docusignStatus, setDocusignStatus] = useState<DocusignStatus | null>(null)
+  const [docusignModalOpen, setDocusignModalOpen] = useState(false)
+  const [docusignAccessToken, setDocusignAccessToken] = useState<string | null>(null)
   const [creditCheck, setCreditCheck] = useState<CreditCheckInfo | null>(null)
   const [creditCheckLoading, setCreditCheckLoading] = useState(false)
   const [requestingCredit, setRequestingCredit] = useState(false)
+  const [viewingReport, setViewingReport] = useState(false)
   const [creditError, setCreditError] = useState<string | null>(null)
   type LandlordTenantApplicationRow = {
     id: string
@@ -578,6 +584,47 @@ export function LandlordTenantProfilePage() {
       })
   }, [user])
 
+  // Landlord must sign both required agreements before viewing tenant details
+  // (Plaid data, credit check, background check). Show a skippable pop-up
+  // once per session if they haven't completed both yet.
+  useEffect(() => {
+    if (!user || !hasUnlockedProfileAccess) return
+    let cancelled = false
+    ;(async () => {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      if (!token || cancelled) return
+      setDocusignAccessToken(token)
+      try {
+        const result = await getDocusignStatus(token)
+        if (cancelled) return
+        setDocusignStatus(result)
+        const skippedKey = `docusign-agreements-skipped-${user.id}`
+        if (!result.fullyVerified && sessionStorage.getItem(skippedKey) !== 'true') {
+          setDocusignModalOpen(true)
+        }
+      } catch {
+        // non-blocking — don't gate the page if the status check itself fails
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user, hasUnlockedProfileAccess])
+
+  function handleSkipDocusignModal() {
+    if (user) sessionStorage.setItem(`docusign-agreements-skipped-${user.id}`, 'true')
+    setDocusignModalOpen(false)
+  }
+
+  function handleDocusignCompleted() {
+    if (!docusignAccessToken) return
+    void getDocusignStatus(docusignAccessToken).then((result) => {
+      setDocusignStatus(result)
+      // Only auto-close once BOTH required agreements are done — one signed
+      // document isn't enough, so keep the modal open to prompt the other.
+      if (result.fullyVerified) setDocusignModalOpen(false)
+    })
+  }
+
   // Load credit check info for this tenant once profile is unlocked
   useEffect(() => {
     if (!user || !id || !hasUnlockedProfileAccess) return
@@ -625,6 +672,40 @@ export function LandlordTenantProfilePage() {
       setCreditError(err instanceof Error ? err.message : 'Could not request credit check')
     } finally {
       setRequestingCredit(false)
+    }
+  }
+
+  // The PDF endpoint requires an Authorization header, which a plain <a href>
+  // navigation can't send — fetch it with auth, then open the resulting blob.
+  async function handleViewCreditReport() {
+    setCreditError(null)
+    setViewingReport(true)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      if (!token) throw new Error('Please sign in again.')
+      const res = await fetch(`/api/equifax/credit-check/${id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error || 'Could not retrieve the credit report')
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      // window.open() after an await loses the user-gesture context and gets
+      // silently popup-blocked in most browsers — a synthesized <a> click,
+      // like the existing CSV-download pattern elsewhere in this app, isn't.
+      const a = document.createElement('a')
+      a.href = url
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      setCreditError(err instanceof Error ? err.message : 'Could not retrieve the credit report')
+    } finally {
+      setViewingReport(false)
     }
   }
 
@@ -1064,28 +1145,61 @@ export function LandlordTenantProfilePage() {
                     showTimeline={false}
                   />
 
-                  <div className="mt-4 grid gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-gray-600">Income</span>
-                      <span className="font-medium text-gray-900">
-                        {tenantScreening?.income_pass == null ? '—' : tenantScreening.income_pass ? 'Pass' : 'Fail'}
-                      </span>
+                  {docusignStatus && !docusignStatus.fullyVerified ? (
+                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                      <p className="text-sm text-gray-600">
+                        Sign the required agreements to view income and background check results.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setDocusignModalOpen(true)}
+                        className="mt-2 text-sm font-medium text-gray-900 underline"
+                      >
+                        Sign agreements
+                      </button>
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-gray-600">Background</span>
-                      <span className="font-medium text-gray-900">
-                        {tenantScreening?.background_pass == null ? '—' : tenantScreening.background_pass ? 'Pass' : 'Fail'}
-                      </span>
+                  ) : (
+                    <div className="mt-4 grid gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-gray-600">Income</span>
+                        <span className="font-medium text-gray-900">
+                          {tenantScreening?.income_pass == null ? '—' : tenantScreening.income_pass ? 'Pass' : 'Fail'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-gray-600">Background</span>
+                        <span className="font-medium text-gray-900">
+                          {tenantScreening?.background_pass == null ? '—' : tenantScreening.background_pass ? 'Pass' : 'Fail'}
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </ProfileContentCard>
 
-                <BankVerificationCard verification={tenantBankVerification} unlocked={hasUnlockedProfileAccess} />
+                <BankVerificationCard
+                  verification={tenantBankVerification}
+                  unlocked={hasUnlockedProfileAccess}
+                  docusignVerified={!docusignStatus || docusignStatus.fullyVerified}
+                  onSignAgreements={() => setDocusignModalOpen(true)}
+                />
 
                 {/* Equifax credit check — visible only after profile is unlocked */}
                 {hasUnlockedProfileAccess && (
                   <ProfileContentCard title="Credit Check">
-                    {creditCheckLoading ? (
+                    {docusignStatus && !docusignStatus.fullyVerified ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-gray-600">
+                          Sign the required agreements before you can run credit checks on tenants.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setDocusignModalOpen(true)}
+                          className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white"
+                        >
+                          Sign agreements
+                        </button>
+                      </div>
+                    ) : creditCheckLoading ? (
                       <p className="text-sm text-gray-500">Loading…</p>
                     ) : !landlordEquifaxApproved ? (
                       landlordEquifaxPending ? (
@@ -1149,17 +1263,17 @@ export function LandlordTenantProfilePage() {
                             </span>
                           )}
                         </div>
-                        <a
-                          href={`/api/equifax/credit-check/${id}/pdf`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        <button
+                          type="button"
+                          onClick={() => void handleViewCreditReport()}
+                          disabled={viewingReport}
+                          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                         >
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
-                          View Equifax credit report
-                        </a>
+                          {viewingReport ? 'Opening…' : 'View Equifax credit report'}
+                        </button>
                       </div>
                     ) : null}
                     {creditError && <p className="mt-2 text-sm text-red-600">{creditError}</p>}
@@ -1475,6 +1589,16 @@ export function LandlordTenantProfilePage() {
           </div>
         </div>
       ) : null}
+
+      {docusignStatus && docusignAccessToken && (
+        <LandlordAgreementsModal
+          open={docusignModalOpen}
+          status={docusignStatus}
+          accessToken={docusignAccessToken}
+          onSkip={handleSkipDocusignModal}
+          onCompleted={handleDocusignCompleted}
+        />
+      )}
 
       <StripeCheckoutModal
         open={unlockCheckoutOpen}

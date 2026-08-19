@@ -19,7 +19,7 @@ async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null
 }
 
-export function CreditConsentCard() {
+export function CreditConsentCard({ isApplicationActive }: { isApplicationActive: boolean }) {
   const [hasConsent, setHasConsent] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -38,6 +38,7 @@ export function CreditConsentCard() {
   const [zip, setZip] = useState('')
 
   useEffect(() => {
+    if (!isApplicationActive) { setLoading(false); return }
     let cancelled = false
     ;(async () => {
       const token = await getAccessToken()
@@ -52,7 +53,7 @@ export function CreditConsentCard() {
       }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [isApplicationActive])
 
   // Format SSN as user types: 123-45-6789
   const handleSsnChange = useCallback((raw: string) => {
@@ -105,7 +106,9 @@ export function CreditConsentCard() {
         )}
       </div>
 
-      {loading ? (
+      {!isApplicationActive ? (
+        <p className="text-sm text-gray-600">Start or renew your application to authorize a credit check.</p>
+      ) : loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : hasConsent ? (
         <div className="space-y-3">
@@ -143,6 +146,7 @@ export function CreditConsentCard() {
               <input
                 type="text"
                 required
+                maxLength={15}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 className={inputCls}
@@ -155,6 +159,7 @@ export function CreditConsentCard() {
               <input
                 type="text"
                 required
+                maxLength={25}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 className={inputCls}
@@ -223,6 +228,7 @@ export function CreditConsentCard() {
               <input
                 type="text"
                 required
+                maxLength={20}
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 className={inputCls}

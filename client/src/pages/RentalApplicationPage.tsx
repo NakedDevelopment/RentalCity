@@ -458,7 +458,7 @@ export function RentalApplicationPage() {
             )}
           </SectionCard>
 
-          <CreditConsentCard />
+          <CreditConsentCard isApplicationActive={isApplicationActive} />
 
           <SectionCard title="Expiration Information">
           <div className="space-y-4 text-sm">

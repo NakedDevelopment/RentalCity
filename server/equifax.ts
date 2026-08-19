@@ -91,11 +91,14 @@ export async function requestCreditReport(
     consumers: {
       name: [{ identifier: 'current', firstName: consumer.firstName, lastName: consumer.lastName }],
       socialNum: [{ identifier: 'current', number: consumer.ssn.replace(/\D/g, '') }],
+      // Equifax caps streetType at 2 chars (only fits abbreviations like "ST"/"DR"/"LN" —
+      // not "BLVD"/"AVE"/"WAY"/"CIR", all of which this app's own street-type options
+      // include). The spec's own documented alternative is to fold houseNumber +
+      // streetName + streetType into the single streetName field (max 26 chars)
+      // instead of submitting streetType separately — avoids truncating/mangling it.
       addresses: [{
         identifier: 'current',
-        houseNumber: consumer.houseNumber,
-        streetName: consumer.streetName,
-        streetType: consumer.streetType || 'ST',
+        streetName: `${consumer.houseNumber} ${consumer.streetName} ${consumer.streetType}`.trim().slice(0, 26),
         city: consumer.city,
         state: consumer.state.toUpperCase().slice(0, 2),
         zip: consumer.zip,
@@ -105,11 +108,18 @@ export async function requestCreditReport(
     customerConfiguration: {
       equifaxUSConsumerCreditReport: {
         pdfComboIndicator: 'Y',
+        // Required for PDFs to render with code/description pairs instead of bare codes.
+        codeDescriptionRequired: true,
         memberNumber,
         securityCode,
         customerCode,
         multipleReportIndicator: '1',
         ECOAInquiryType: 'Individual',
+        // FCRA permissible-purpose declaration for this tenant-screening use case.
+        endUserInformation: {
+          endUsersName: 'Rental City',
+          permissiblePurposeCode: '15',
+        },
       },
     },
   }
@@ -131,9 +141,13 @@ export async function requestCreditReport(
     throw new Error(`Equifax credit report failed (${res.status}): ${text}`)
   }
 
-  const json = (await res.json()) as { reportId?: string; consumers?: { equifaxUSConsumerCreditReport?: { reportDate?: string } } }
-  const reportId = json.reportId ?? ''
-  if (!reportId) throw new Error('Equifax returned no reportId')
+  // Equifax's response has no top-level reportId field — the PDF reference is
+  // the trailing UUID of the first `links[].href`, e.g.:
+  //   /business/oneview/consumer-credit/v1/reports/credit-report/0a341dc4-...
+  const json = (await res.json()) as { links?: Array<{ href?: string }> }
+  const href = json.links?.[0]?.href ?? ''
+  const reportId = href.split('/').filter(Boolean).pop() ?? ''
+  if (!reportId) throw new Error('Equifax returned no report link')
   return { reportId }
 }
 
