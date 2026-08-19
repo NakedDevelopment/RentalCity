@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { startUniversalBackgroundCheck } from '../lib/backgroundChecksApi'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import StripeCheckoutModal from '../components/StripeCheckoutModal'
@@ -83,12 +82,6 @@ export function UniversalApplicationPage() {
           const err = await res.json().catch(() => ({}))
           throw new Error((err as { error?: string }).error || 'We could not confirm your payment.')
         }
-        const json = (await res.json()) as { universalApplicationId?: string | null }
-        const universalApplicationId = json.universalApplicationId ?? null
-        if (universalApplicationId) {
-          // Fire-and-forget: create/reuse screening row for this application window.
-          startUniversalBackgroundCheck(accessToken, universalApplicationId).catch(() => {})
-        }
         if (active) navigate('/account/rental-application', { replace: true })
       } catch (err) {
         if (active) {
@@ -136,9 +129,6 @@ export function UniversalApplicationPage() {
 
       // Demo bypass (dev only): payment was skipped and access granted server-side.
       if (json.demo) {
-        if (json.universalApplicationId) {
-          startUniversalBackgroundCheck(accessToken, json.universalApplicationId).catch(() => {})
-        }
         navigate('/account/rental-application', { replace: true })
         return
       }

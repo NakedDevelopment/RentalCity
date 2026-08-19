@@ -1,4 +1,4 @@
-// Client-side API wrappers for the Equifax credit check flow.
+// Client-side API wrappers for the Equifax credit check and background check flows.
 
 export type CreditCheckInfo = {
   id: string | null
@@ -8,10 +8,19 @@ export type CreditCheckInfo = {
   tenantHasConsent: boolean
 }
 
+export type BackgroundCheckInfo = {
+  status: 'none' | 'pending' | 'complete' | 'failed'
+  criminal_pass: boolean | null
+  eviction_pass: boolean | null
+  checked_at: string | null
+  tenantHasConsent: boolean
+}
+
 export type ConsentFormData = {
   firstName: string
   lastName: string
   ssn: string
+  dateOfBirth: string
   houseNumber: string
   streetName: string
   streetType: string
@@ -90,4 +99,27 @@ export async function requestCreditCheck(
   })
   if (!res.ok) await parseError(res, 'Could not request credit check')
   return (await res.json()) as CreditCheckInfo
+}
+
+export async function getBackgroundCheckInfo(
+  accessToken: string,
+  tenantId: string,
+): Promise<BackgroundCheckInfo> {
+  const res = await fetch(`/api/equifax/background-check/${tenantId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) await parseError(res, 'Could not load background check status')
+  return (await res.json()) as BackgroundCheckInfo
+}
+
+export async function requestBackgroundCheck(
+  accessToken: string,
+  tenantId: string,
+): Promise<BackgroundCheckInfo> {
+  const res = await fetch(`/api/equifax/background-check/${tenantId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) await parseError(res, 'Could not request background check')
+  return (await res.json()) as BackgroundCheckInfo
 }

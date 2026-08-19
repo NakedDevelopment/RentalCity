@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { refreshBackgroundCheckReport, startUniversalBackgroundCheck } from '../lib/backgroundChecksApi'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
@@ -74,15 +73,6 @@ export function RentalApplicationPage() {
     valid_until: string
     created_at: string
   } | null>(null)
-  const [screening, setScreening] = useState<{
-    report_key: string
-    report_status: string | null
-    background_pass: boolean | null
-    income_pass: boolean | null
-    created_at: string
-  } | null>(null)
-  const [startingScreening, setStartingScreening] = useState(false)
-  const [refreshingScreening, setRefreshingScreening] = useState(false)
   const [, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -149,18 +139,6 @@ export function RentalApplicationPage() {
           : null
       setUniversalApplication(latestUniversal)
 
-      if (latestUniversal?.id) {
-        const { data: screeningRow } = await supabase
-          .from('universal_application_screenings')
-          .select('report_key, report_status, background_pass, income_pass, created_at')
-          .eq('tenant_id', user.id)
-          .eq('universal_application_id', latestUniversal.id)
-          .maybeSingle()
-        setScreening((screeningRow as any) ?? null)
-      } else {
-        setScreening(null)
-      }
-
       setLoading(false)
     }
 
@@ -222,14 +200,6 @@ export function RentalApplicationPage() {
     validUntil != null &&
     validUntil.getTime() > now.getTime()
 
-  const screeningSummary = useMemo(() => {
-    if (!isApplicationActive) return null
-    if (!screening) return { label: 'Not started', tone: 'muted' as const }
-    if (screening.report_status === 'A') return { label: 'Awaiting tenant', tone: 'warn' as const }
-    if (screening.report_status === 'P') return { label: 'In progress', tone: 'warn' as const }
-    if (screening.report_status === 'C') return { label: 'Complete', tone: 'ok' as const }
-    return { label: 'Pending', tone: 'warn' as const }
-  }, [isApplicationActive, screening])
 
   return (
     <div className="space-y-6">
@@ -332,132 +302,6 @@ export function RentalApplicationPage() {
         </div>
 
         <div className="space-y-5">
-          <SectionCard title="Screening Status" complete={screening?.report_status === 'C'}>
-            {!isApplicationActive ? (
-              <p className="text-sm text-gray-600">Start or renew your application to run screening checks.</p>
-            ) : (
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-gray-600">Background + income checks</span>
-                  <span
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                      screeningSummary?.tone === 'ok'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                        : screeningSummary?.tone === 'warn'
-                          ? 'border-amber-200 bg-amber-50 text-amber-900'
-                          : 'border-gray-200 bg-gray-50 text-gray-700'
-                    }`}
-                  >
-                    {screeningSummary?.label ?? '—'}
-                  </span>
-                </div>
-
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-gray-600">Income</span>
-                    <span className="font-medium text-gray-900">
-                      {screening?.income_pass == null ? '—' : screening.income_pass ? 'Pass' : 'Fail'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-gray-600">Background</span>
-                    <span className="font-medium text-gray-900">
-                      {screening?.background_pass == null ? '—' : screening.background_pass ? 'Pass' : 'Fail'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!user || !universalApplication?.id) return
-                      const { data } = await supabase.auth.getSession()
-                      const accessToken = data.session?.access_token
-                      if (!accessToken) return
-                      setStartingScreening(true)
-                      try {
-                        const started = await startUniversalBackgroundCheck(accessToken, universalApplication.id)
-                        const { data: screeningRow } = await supabase
-                          .from('universal_application_screenings')
-                          .select('report_key, report_status, background_pass, income_pass, created_at')
-                          .eq('tenant_id', user.id)
-                          .eq('universal_application_id', universalApplication.id)
-                          .maybeSingle()
-                        setScreening((screeningRow as any) ?? null)
-
-                        // Load widget script and open applicant form widget (embedded modal).
-                        const scriptId = 'backgroundchecks-applicant-widget'
-                        if (!document.getElementById(scriptId)) {
-                          const s = document.createElement('script')
-                          s.id = scriptId
-                          s.src =
-                            (import.meta as any)?.env?.VITE_BACKGROUNDCHECKS_ENV === 'production'
-                              ? 'https://app.backgroundchecks.com/js/widgets/applicant-form-widget.js'
-                              : 'https://sandbox.backgroundchecks.com/js/widgets/applicant-form-widget.js'
-                          s.async = true
-                          document.body.appendChild(s)
-                          await new Promise<void>((resolve) => {
-                            s.onload = () => resolve()
-                            s.onerror = () => resolve()
-                          })
-                        }
-                        const w = window as any
-                        const init = w?.ClearChecksApplicantWidget?.init
-                        if (typeof init === 'function') {
-                          init({
-                            reportKey: started.reportKey,
-                            onSuccess: () => {},
-                            onClose: () => {},
-                            onError: () => {},
-                          }).open()
-                        }
-                      } catch (e) {
-                        setError((e as Error).message)
-                      } finally {
-                        setStartingScreening(false)
-                      }
-                    }}
-                    className="inline-flex items-center justify-center rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-                    disabled={startingScreening}
-                  >
-                    {screening ? 'Continue screening' : 'Start screening'}
-                  </button>
-
-                  {screening?.report_key ? (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const { data } = await supabase.auth.getSession()
-                        const accessToken = data.session?.access_token
-                        if (!accessToken) return
-                        setRefreshingScreening(true)
-                        try {
-                          await refreshBackgroundCheckReport(accessToken, screening.report_key)
-                          const { data: screeningRow } = await supabase
-                            .from('universal_application_screenings')
-                            .select('report_key, report_status, background_pass, income_pass, created_at')
-                            .eq('tenant_id', user!.id)
-                            .eq('universal_application_id', universalApplication!.id)
-                            .maybeSingle()
-                          setScreening((screeningRow as any) ?? null)
-                        } catch (e) {
-                          setError((e as Error).message)
-                        } finally {
-                          setRefreshingScreening(false)
-                        }
-                      }}
-                      className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      disabled={refreshingScreening}
-                    >
-                      {refreshingScreening ? 'Refreshing…' : 'Refresh'}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            )}
-          </SectionCard>
-
           <CreditConsentCard isApplicationActive={isApplicationActive} />
 
           <SectionCard title="Expiration Information">

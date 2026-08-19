@@ -109,7 +109,7 @@ export function AccountPage() {
     balances_verified: boolean | null
     identity_verified: boolean | null
   } | null>(null)
-  const [tenantScreening, setTenantScreening] = useState<{ background_pass: boolean | null } | null>(null)
+  const [tenantScreening, setTenantScreening] = useState<{ status: string | null } | null>(null)
 
   useEffect(() => {
     async function loadProfile() {
@@ -154,8 +154,8 @@ export function AccountPage() {
               .eq('user_id', user.id)
               .maybeSingle(),
             supabase
-              .from('universal_application_screenings')
-              .select('background_pass')
+              .from('equifax_background_checks')
+              .select('status')
               .eq('tenant_id', user.id)
               .order('created_at', { ascending: false })
               .limit(1)
@@ -212,7 +212,7 @@ export function AccountPage() {
       { label: 'Identity verified', complete: !!bankVerification?.identity_verified },
       { label: 'Income verified', complete: !!bankVerification?.income_verified },
       { label: 'Funds verified', complete: !!bankVerification?.balances_verified },
-      { label: 'Background check', complete: !!tenantScreening?.background_pass },
+      { label: 'Background check', complete: tenantScreening?.status === 'complete' },
     ],
     [bankVerification, tenantScreening],
   )

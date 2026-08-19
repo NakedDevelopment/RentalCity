@@ -1,7 +1,7 @@
 /**
- * CreditConsentCard — tenant-facing form to authorize credit checks.
- * Collects name, SSN, and current address; encrypts server-side. No
- * raw SSN is ever stored locally or returned from the server.
+ * CreditConsentCard — tenant-facing form to authorize credit and background
+ * checks. Collects name, SSN, date of birth, and current address; encrypts
+ * server-side. No raw SSN/DOB is ever stored locally or returned from the server.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
@@ -30,6 +30,7 @@ export function CreditConsentCard({ isApplicationActive }: { isApplicationActive
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [ssn, setSsn] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
   const [houseNumber, setHouseNumber] = useState('')
   const [streetName, setStreetName] = useState('')
   const [streetType, setStreetType] = useState('ST')
@@ -69,13 +70,14 @@ export function CreditConsentCard({ isApplicationActive }: { isApplicationActive
     setError(null)
     const ssnDigits = ssn.replace(/\D/g, '')
     if (ssnDigits.length !== 9) { setError('Please enter a valid 9-digit SSN.'); return }
+    if (!dateOfBirth) { setError('Please enter your date of birth.'); return }
     if (!state) { setError('Please select a state.'); return }
     setSaving(true)
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Please sign in again.')
       await saveConsentData(token, {
-        firstName, lastName, ssn: ssnDigits,
+        firstName, lastName, ssn: ssnDigits, dateOfBirth,
         houseNumber, streetName, streetType, city, state, zip,
       })
       setHasConsent(true)
@@ -87,7 +89,7 @@ export function CreditConsentCard({ isApplicationActive }: { isApplicationActive
     } finally {
       setSaving(false)
     }
-  }, [firstName, lastName, ssn, houseNumber, streetName, streetType, city, state, zip])
+  }, [firstName, lastName, ssn, dateOfBirth, houseNumber, streetName, streetType, city, state, zip])
 
   const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-gray-500 focus:outline-none'
   const labelCls = 'block text-xs font-medium text-gray-600 mb-1'
@@ -95,7 +97,7 @@ export function CreditConsentCard({ isApplicationActive }: { isApplicationActive
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-4">
-        <h2 className="text-base font-semibold text-gray-900">Credit Check Authorization</h2>
+        <h2 className="text-base font-semibold text-gray-900">Credit & Background Check Authorization</h2>
         {hasConsent && (
           <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
             <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,16 +109,16 @@ export function CreditConsentCard({ isApplicationActive }: { isApplicationActive
       </div>
 
       {!isApplicationActive ? (
-        <p className="text-sm text-gray-600">Start or renew your application to authorize a credit check.</p>
+        <p className="text-sm text-gray-600">Start or renew your application to authorize a credit and background check.</p>
       ) : loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : hasConsent ? (
         <div className="space-y-3">
           <div className="rounded-lg border border-green-100 bg-green-50 p-3">
             <p className="text-sm text-green-800">
-              Your credit check information is on file. Approved landlords can request
-              a credit report — we contact Equifax directly, and no credit data is stored
-              on our servers.
+              Your information is on file. Approved landlords can request a credit report
+              and background check — we contact Equifax directly, and no credit or
+              background check data is stored on our servers.
             </p>
           </div>
           <button
@@ -130,8 +132,9 @@ export function CreditConsentCard({ isApplicationActive }: { isApplicationActive
       ) : (
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <p className="text-sm text-gray-600">
-            Authorize landlords to run a credit check by providing your information once.
-            Your SSN is encrypted and never shown to landlords — only Equifax receives it.
+            Authorize landlords to run a credit and background check by providing your
+            information once. Your SSN and date of birth are encrypted and never shown to
+            landlords — only Equifax receives them.
           </p>
 
           {success && (
@@ -183,6 +186,18 @@ export function CreditConsentCard({ isApplicationActive }: { isApplicationActive
               maxLength={11}
             />
             <p className="mt-1 text-xs text-gray-400">Encrypted immediately — never stored in plain text</p>
+          </div>
+
+          <div>
+            <label className={labelCls}>Date of birth</label>
+            <input
+              type="date"
+              required
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
+              className={inputCls}
+              max={new Date().toISOString().slice(0, 10)}
+            />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
@@ -274,12 +289,12 @@ export function CreditConsentCard({ isApplicationActive }: { isApplicationActive
             disabled={saving}
             className="w-full rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Authorize credit checks'}
+            {saving ? 'Saving…' : 'Authorize credit & background checks'}
           </button>
 
           <p className="text-center text-xs text-gray-400">
-            By submitting you consent to a credit report being pulled by approved landlords
-            through Equifax on behalf of Rental City.
+            By submitting you consent to a credit report and background check being run by
+            approved landlords through Equifax on behalf of Rental City.
           </p>
         </form>
       )}

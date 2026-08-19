@@ -29,11 +29,14 @@ import {
 import {
   encryptSSN,
   decryptSSN,
+  encryptField,
+  decryptField,
   requestCreditReport,
   equifaxPdfEndpoint,
   getEquifaxToken,
   getEquifaxBase,
 } from './equifax'
+import { runNcisAliasCheck, runAssuredTenantCheck, type BackgroundCheckSubject } from './equifaxBackgroundChecks'
 import {
   createEmbeddedEnvelope,
   createEmbeddedSigningUrl,
@@ -58,11 +61,6 @@ const PORT = process.env.PORT || 3001
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-const backgroundChecksEnv = process.env.BACKGROUNDCHECKS_ENV || 'sandbox'
-const backgroundChecksApiToken =
-  backgroundChecksEnv === 'production'
-    ? process.env.BACKGROUNDCHECKS_API_TOKEN_PROD
-    : process.env.BACKGROUNDCHECKS_API_TOKEN_SANDBOX
 
 // Stripe client. Prefer the test key in development, the live key in production,
 // each falling back to the other if only one is configured.
@@ -102,31 +100,6 @@ app.use(cors({ origin: true }))
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
 
 app.use(express.json())
-
-function backgroundChecksBaseUrl() {
-  return backgroundChecksEnv === 'production' ? 'https://app.backgroundchecks.com/api' : 'https://sandbox.backgroundchecks.com/api'
-}
-
-async function backgroundChecksFetch(path: string, init?: RequestInit) {
-  if (!backgroundChecksApiToken) {
-    throw new Error('Missing BackgroundChecks.com api token')
-  }
-  const url = new URL(backgroundChecksBaseUrl() + path)
-  url.searchParams.set('api_token', backgroundChecksApiToken)
-  const res = await fetch(url.toString(), {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`BackgroundChecks.com error (${res.status}): ${text || res.statusText}`)
-  }
-  return res
-}
 
 function getSupabaseAdmin() {
   if (!supabaseUrl || !supabaseServiceKey) return null
@@ -2174,174 +2147,6 @@ async function handleStripeWebhook(req: Request, res: Response) {
   return res.status(200).json({ received: true })
 }
 
-/**
- * Start (or reuse) a BackgroundChecks.com order for the tenant's latest universal application window.
- * Returns the report_key (used by the applicant form widget).
- */
-app.post('/api/background-checks/universal/start', async (req, res) => {
-  const admin = getSupabaseAdmin()
-  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
-  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
-  const user = await authUser(token)
-  if (!user) return res.status(401).json({ error: 'Authentication required' })
-
-  const { universalApplicationId } = req.body as { universalApplicationId?: string }
-  if (!universalApplicationId || !UUID_PARAM_RE.test(universalApplicationId)) {
-    return res.status(400).json({ error: 'Invalid universalApplicationId' })
-  }
-
-  // Confirm this universal application belongs to the tenant.
-  const { data: ua } = await admin
-    .from('universal_applications')
-    .select('id, tenant_id, status, valid_until')
-    .eq('id', universalApplicationId)
-    .maybeSingle()
-  if (!ua || (ua as { tenant_id?: string }).tenant_id !== user.id) {
-    return res.status(403).json({ error: 'Forbidden' })
-  }
-
-  // Reuse existing screening if present.
-  const { data: existing } = await admin
-    .from('universal_application_screenings')
-    .select('id, report_key, applicant_invite_url, report_status, background_pass, income_pass')
-    .eq('tenant_id', user.id)
-    .eq('universal_application_id', universalApplicationId)
-    .maybeSingle()
-  const ex = existing as { report_key?: string; applicant_invite_url?: string } | null
-  if (ex?.report_key) {
-    return res.json({ reportKey: ex.report_key, inviteUrl: ex.applicant_invite_url ?? null })
-  }
-
-  // Place an order for the tenant (one applicant). Use placeholder report_sku until configured.
-  const applicantEmail = user.email ?? ''
-  if (!applicantEmail) return res.status(400).json({ error: 'Missing tenant email' })
-
-  const reportSku = (process.env.BACKGROUNDCHECKS_REPORT_SKU || 'HIRE3') as 'HIRE1' | 'HIRE2' | 'HIRE3'
-  const orderBody = {
-    report_sku: reportSku,
-    order_quantity: 1,
-    applicant_emails: [applicantEmail],
-    employment: 'Y', // used as income/employment verification signal
-    terms_agree: 'Y',
-  }
-
-  try {
-    const bcRes = await backgroundChecksFetch('/orders', { method: 'POST', body: JSON.stringify(orderBody) })
-    const json = (await bcRes.json()) as {
-      applicants?: Array<{ report_key?: string; applicant_invite_url?: string; applicant_email?: string }>
-    }
-    const first = json.applicants?.[0]
-    const reportKey = first?.report_key
-    if (!reportKey) return res.status(500).json({ error: 'BackgroundChecks.com did not return a report_key' })
-
-    await admin.from('universal_application_screenings').insert({
-      tenant_id: user.id,
-      universal_application_id: universalApplicationId,
-      provider: 'backgroundchecks_com',
-      environment: backgroundChecksEnv === 'production' ? 'production' : 'sandbox',
-      report_sku: reportSku,
-      applicant_email: first?.applicant_email ?? applicantEmail,
-      report_key: reportKey,
-      applicant_invite_url: first?.applicant_invite_url ?? null,
-      report_status: 'A',
-      background_status: 'P',
-      employment_status: 'P',
-      background_pass: null,
-      income_pass: null,
-    })
-
-    return res.json({ reportKey, inviteUrl: first?.applicant_invite_url ?? null })
-  } catch (e) {
-    return res.status(502).json({ error: (e as Error).message })
-  }
-})
-
-/**
- * Refresh provider status for a report_key and update our summary fields.
- * Allowed for the tenant who owns it, or a landlord allowed to read that tenant's universal application.
- */
-app.post('/api/background-checks/report/refresh', async (req, res) => {
-  const admin = getSupabaseAdmin()
-  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
-  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
-  const user = await authUser(token)
-  if (!user) return res.status(401).json({ error: 'Authentication required' })
-
-  const { reportKey } = req.body as { reportKey?: string }
-  if (!reportKey || typeof reportKey !== 'string') return res.status(400).json({ error: 'Invalid reportKey' })
-
-  const { data: row } = await admin
-    .from('universal_application_screenings')
-    .select('id, tenant_id, report_key')
-    .eq('report_key', reportKey)
-    .maybeSingle()
-  const screening = row as { id: string; tenant_id: string; report_key: string } | null
-  if (!screening) return res.status(404).json({ error: 'Not found' })
-
-  const isTenant = screening.tenant_id === user.id
-  let allowed = isTenant
-  if (!allowed) {
-    allowed = await landlordMayReadTenantUniversalViaDb(admin, user.id, screening.tenant_id)
-  }
-  if (!allowed) return res.status(403).json({ error: 'Forbidden' })
-
-  try {
-    const statusRes = await backgroundChecksFetch(`/reports/${encodeURIComponent(reportKey)}/status`, { method: 'GET' })
-    const statusJson = (await statusRes.json()) as {
-      report_status?: string
-      background_status?: string
-      employment_status?: string
-      status?: string
-    }
-
-    // When complete, fetch report details and derive very simple pass/fail signals:
-    // - background_pass: true if complete and no criminal record arrays present
-    // - income_pass: true if employment section exists and status is complete
-    let backgroundPass: boolean | null = null
-    let incomePass: boolean | null = null
-    let completedAt: string | null = null
-
-    const reportStatus = statusJson.report_status ?? statusJson.status ?? null
-    const backgroundStatus = statusJson.background_status ?? null
-    const employmentStatus = statusJson.employment_status ?? null
-
-    if (reportStatus === 'C') {
-      const reportRes = await backgroundChecksFetch(`/report/${encodeURIComponent(reportKey)}`, { method: 'GET' })
-      const report = (await reportRes.json()) as any
-      const hasCriminal =
-        (report?.criminal_records?.records?.length ?? 0) > 0 ||
-        (report?.county_criminal?.county_records?.length ?? 0) > 0 ||
-        (report?.federal_criminal?.cases?.length ?? 0) > 0 ||
-        (report?.blj?.cases?.length ?? 0) > 0
-      backgroundPass = !hasCriminal
-      incomePass = report?.employment?.status ? report.employment.status === 'C' : employmentStatus ? employmentStatus === 'C' : null
-      completedAt = new Date().toISOString()
-    }
-
-    await admin
-      .from('universal_application_screenings')
-      .update({
-        report_status: reportStatus,
-        background_status: backgroundStatus,
-        employment_status: employmentStatus,
-        background_pass: backgroundPass,
-        income_pass: incomePass,
-        completed_at: completedAt,
-      })
-      .eq('report_key', reportKey)
-
-    return res.json({
-      ok: true,
-      reportStatus,
-      backgroundStatus,
-      employmentStatus,
-      backgroundPass,
-      incomePass,
-    })
-  } catch (e) {
-    return res.status(502).json({ error: (e as Error).message })
-  }
-})
 
 app.post('/api/account/delete', async (req, res) => {
   if (!supabaseUrl || !supabaseServiceKey) {
@@ -3022,6 +2827,27 @@ if (process.env.NODE_ENV !== 'development') {
 // ---------------------------------------------------------------------------
 
 /**
+ * Validates a YYYY-MM-DD date of birth: real calendar date (JS's Date silently
+ * rolls over invalid days — e.g. "1990-02-30" becomes March 2 — instead of
+ * rejecting them, so this round-trips the parsed components to catch that),
+ * not in the future, and not implying an impossible age.
+ */
+function isValidDateOfBirth(iso: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!match) return false
+  const [, y, m, d] = match
+  const year = Number(y)
+  const date = new Date(Date.UTC(year, Number(m) - 1, Number(d)))
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== Number(m) - 1 || date.getUTCDate() !== Number(d)) {
+    return false
+  }
+  const now = new Date()
+  if (date.getTime() > now.getTime()) return false
+  const age = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24 * 365.25)
+  return age <= 120
+}
+
+/**
  * Resolves a tenant's current active universal application id (the 6-month
  * window created by the $50 application fee), or null if they have none.
  * Credit consent and credit-report requests are always scoped to this id so
@@ -3079,9 +2905,9 @@ app.post('/api/equifax/consent', async (req, res) => {
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
 
-  const { firstName, lastName, ssn, houseNumber, streetName, streetType, city, state, zip } =
+  const { firstName, lastName, ssn, dateOfBirth, houseNumber, streetName, streetType, city, state, zip } =
     (req.body ?? {}) as Record<string, string | undefined>
-  if (!firstName || !lastName || !ssn || !houseNumber || !streetName || !city || !state || !zip) {
+  if (!firstName || !lastName || !ssn || !dateOfBirth || !houseNumber || !streetName || !city || !state || !zip) {
     return res.status(400).json({ error: 'All fields are required' })
   }
   // Equifax's real field limits (.agents/20260811-OneView-1.0.2607-swagger.yaml) —
@@ -3092,6 +2918,12 @@ app.post('/api/equifax/consent', async (req, res) => {
   if (city.trim().length > 20) return res.status(400).json({ error: 'City must be 20 characters or fewer' })
   const ssnClean = String(ssn).replace(/\D/g, '')
   if (ssnClean.length !== 9) return res.status(400).json({ error: 'SSN must be 9 digits' })
+  // NCIS-Alias (background check) requires date of birth alongside SSN — collected
+  // here once, same as SSN, since a landlord's $200 purchase covers credit +
+  // background checks together.
+  if (!isValidDateOfBirth(dateOfBirth)) {
+    return res.status(400).json({ error: 'Please enter a valid date of birth' })
+  }
 
   const universalApplicationId = await resolveActiveUniversalApplicationId(admin, user.id)
   if (!universalApplicationId) {
@@ -3099,8 +2931,10 @@ app.post('/api/equifax/consent', async (req, res) => {
   }
 
   let ssnEncrypted: string
+  let dobEncrypted: string
   try {
-    ssnEncrypted = encryptSSN(ssnClean)
+    ssnEncrypted = encryptField(ssnClean)
+    dobEncrypted = encryptField(dateOfBirth)
   } catch {
     return res.status(500).json({ error: 'Encryption configuration error' })
   }
@@ -3110,6 +2944,7 @@ app.post('/api/equifax/consent', async (req, res) => {
       tenant_id: user.id,
       universal_application_id: universalApplicationId,
       ssn_encrypted: ssnEncrypted,
+      date_of_birth_encrypted: dobEncrypted,
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       house_number: String(houseNumber).trim(),
@@ -3301,35 +3136,54 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
     return res.json({ id: e.id, status: e.status, equifax_report_id: e.equifax_report_id, requested_at: e.requested_at, tenantHasConsent: true })
   }
 
-  // Insert pending record so the landlord sees progress even if Equifax is slow.
-  // A unique constraint on (landlord_id, tenant_id, universal_application_id)
-  // makes a double-click/double-tab race land here as a conflict rather than
-  // creating two rows (and two billable Equifax pulls) — fall back to the
-  // row the other request created.
-  const { data: newRecord, error: insertErr } = await admin
+  // Retrying after a failure: atomically reclaim the failed row rather than
+  // inserting a new one (the unique constraint on landlord/tenant/window would
+  // just collide with it forever otherwise, silently turning "try again" into
+  // a no-op that keeps returning the stale failed record). The `.eq('status',
+  // 'failed')` guard means only one concurrent retry actually wins the flip.
+  const { data: reclaimed } = await admin
     .from('equifax_credit_reports')
-    .insert({ landlord_id: user.id, tenant_id: tenantId, universal_application_id: universalApplicationId, status: 'pending' })
+    .update({ status: 'pending' })
+    .eq('landlord_id', user.id)
+    .eq('tenant_id', tenantId)
+    .eq('universal_application_id', universalApplicationId)
+    .eq('status', 'failed')
     .select('id')
-    .single()
+    .maybeSingle()
+
   let recordId: string
-  if (insertErr) {
-    if ((insertErr as { code?: string }).code === '23505') {
-      const { data: raced } = await admin
-        .from('equifax_credit_reports')
-        .select('id, status, equifax_report_id, requested_at')
-        .eq('landlord_id', user.id)
-        .eq('tenant_id', tenantId)
-        .eq('universal_application_id', universalApplicationId)
-        .maybeSingle()
-      const e = raced as { id: string; status: string; equifax_report_id: string | null; requested_at: string } | null
-      if (e) {
-        return res.json({ id: e.id, status: e.status, equifax_report_id: e.equifax_report_id, requested_at: e.requested_at, tenantHasConsent: true })
+  if (reclaimed) {
+    recordId = (reclaimed as { id: string }).id
+  } else {
+    // No existing row at all (first-ever request for this window) — insert one.
+    // A unique constraint on (landlord_id, tenant_id, universal_application_id)
+    // makes a double-click/double-tab race land here as a conflict rather than
+    // creating two rows (and two billable Equifax pulls) — fall back to the
+    // row the other request created.
+    const { data: newRecord, error: insertErr } = await admin
+      .from('equifax_credit_reports')
+      .insert({ landlord_id: user.id, tenant_id: tenantId, universal_application_id: universalApplicationId, status: 'pending' })
+      .select('id')
+      .single()
+    if (insertErr) {
+      if ((insertErr as { code?: string }).code === '23505') {
+        const { data: raced } = await admin
+          .from('equifax_credit_reports')
+          .select('id, status, equifax_report_id, requested_at')
+          .eq('landlord_id', user.id)
+          .eq('tenant_id', tenantId)
+          .eq('universal_application_id', universalApplicationId)
+          .maybeSingle()
+        const e = raced as { id: string; status: string; equifax_report_id: string | null; requested_at: string } | null
+        if (e) {
+          return res.json({ id: e.id, status: e.status, equifax_report_id: e.equifax_report_id, requested_at: e.requested_at, tenantHasConsent: true })
+        }
       }
+      return res.status(500).json({ error: 'Could not create credit check record' })
     }
-    return res.status(500).json({ error: 'Could not create credit check record' })
+    if (!newRecord) return res.status(500).json({ error: 'Could not create credit check record' })
+    recordId = (newRecord as { id: string }).id
   }
-  if (!newRecord) return res.status(500).json({ error: 'Could not create credit check record' })
-  recordId = (newRecord as { id: string }).id
 
   // Decrypt SSN → call Equifax → SSN gone from memory when this scope exits
   let reportId: string
@@ -3419,6 +3273,192 @@ app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
     console.error('Equifax PDF proxy error:', (err as Error).message)
     return res.status(502).json({ error: 'Could not retrieve report' })
   }
+})
+
+// ---------------------------------------------------------------------------
+// Equifax background checks: NCIS-Alias (criminal) + AssuredTenant Alias
+// (eviction), scoped to the tenant's current active application window. Only
+// a computed pass/fail is ever stored — never the underlying case/offense/
+// eviction record details, and never the SSN/DOB used to run them.
+// ---------------------------------------------------------------------------
+
+// Landlord: get background-check status for a specific tenant, scoped to
+// their current active application window.
+app.get('/api/equifax/background-check/:tenantId', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const { tenantId } = req.params
+
+  if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
+    return res.status(403).json({ error: 'You must unlock this tenant’s profile before viewing background check status.' })
+  }
+
+  const universalApplicationId = await resolveActiveUniversalApplicationId(admin, tenantId)
+  if (!universalApplicationId) {
+    return res.json({ status: 'none', criminal_pass: null, eviction_pass: null, checked_at: null, tenantHasConsent: false })
+  }
+
+  const [{ data: consent }, { data: check }] = await Promise.all([
+    admin
+      .from('tenant_credit_consent')
+      .select('tenant_id')
+      .eq('tenant_id', tenantId)
+      .eq('universal_application_id', universalApplicationId)
+      .maybeSingle(),
+    admin
+      .from('equifax_background_checks')
+      .select('status, criminal_pass, eviction_pass, checked_at')
+      .eq('tenant_id', tenantId)
+      .eq('universal_application_id', universalApplicationId)
+      .maybeSingle(),
+  ])
+
+  const c = check as { status?: string; criminal_pass?: boolean | null; eviction_pass?: boolean | null; checked_at?: string | null } | null
+  return res.json({
+    status: c?.status ?? 'none',
+    criminal_pass: c?.criminal_pass ?? null,
+    eviction_pass: c?.eviction_pass ?? null,
+    checked_at: c?.checked_at ?? null,
+    tenantHasConsent: !!consent,
+  })
+})
+
+// Landlord: run both background checks on a tenant (requires approval + tenant
+// consent for their current active application window).
+app.post('/api/equifax/background-check/:tenantId', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const { tenantId } = req.params
+
+  const { data: lProfile } = await admin
+    .from('profiles')
+    .select('equifax_approved_at')
+    .eq('id', user.id)
+    .maybeSingle()
+  if (!(lProfile as { equifax_approved_at?: string | null } | null)?.equifax_approved_at) {
+    return res.status(403).json({ error: 'You must be approved for Equifax access before running background checks.' })
+  }
+
+  if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
+    return res.status(403).json({ error: 'You must unlock this tenant’s profile before running a background check.' })
+  }
+
+  const universalApplicationId = await resolveActiveUniversalApplicationId(admin, tenantId)
+  if (!universalApplicationId) {
+    return res.status(400).json({ error: 'Tenant does not have an active application.' })
+  }
+
+  const { data: consent } = await admin
+    .from('tenant_credit_consent')
+    .select('ssn_encrypted, date_of_birth_encrypted, first_name, last_name, house_number, street_name, street_type, city, state, zip')
+    .eq('tenant_id', tenantId)
+    .eq('universal_application_id', universalApplicationId)
+    .maybeSingle()
+  if (!consent) {
+    return res.status(400).json({ error: 'Tenant has not authorized a background check.' })
+  }
+
+  const { data: existing } = await admin
+    .from('equifax_background_checks')
+    .select('id, status, criminal_pass, eviction_pass, checked_at')
+    .eq('tenant_id', tenantId)
+    .eq('universal_application_id', universalApplicationId)
+    .in('status', ['pending', 'complete'])
+    .maybeSingle()
+  if (existing) {
+    const e = existing as { status: string; criminal_pass: boolean | null; eviction_pass: boolean | null; checked_at: string | null }
+    return res.json({ status: e.status, criminal_pass: e.criminal_pass, eviction_pass: e.eviction_pass, checked_at: e.checked_at, tenantHasConsent: true })
+  }
+
+  // Retrying after a failure: atomically reclaim the failed row rather than
+  // inserting a new one (the unique constraint on tenant/window would just
+  // collide with it forever otherwise, silently turning "try again" into a
+  // no-op that keeps returning the stale failed record). The `.eq('status',
+  // 'failed')` guard means only one concurrent retry actually wins the flip.
+  const { data: reclaimed } = await admin
+    .from('equifax_background_checks')
+    .update({ status: 'pending' })
+    .eq('tenant_id', tenantId)
+    .eq('universal_application_id', universalApplicationId)
+    .eq('status', 'failed')
+    .select('id')
+    .maybeSingle()
+
+  if (!reclaimed) {
+    const { error: insertErr } = await admin
+      .from('equifax_background_checks')
+      .insert({ tenant_id: tenantId, universal_application_id: universalApplicationId, status: 'pending' })
+    if (insertErr) {
+      if ((insertErr as { code?: string }).code === '23505') {
+        const { data: raced } = await admin
+          .from('equifax_background_checks')
+          .select('status, criminal_pass, eviction_pass, checked_at')
+          .eq('tenant_id', tenantId)
+          .eq('universal_application_id', universalApplicationId)
+          .maybeSingle()
+        const e = raced as { status: string; criminal_pass: boolean | null; eviction_pass: boolean | null; checked_at: string | null } | null
+        if (e) return res.json({ ...e, tenantHasConsent: true })
+      }
+      return res.status(500).json({ error: 'Could not create background check record' })
+    }
+  }
+
+  const c = consent as {
+    ssn_encrypted: string; date_of_birth_encrypted: string; first_name: string; last_name: string
+    house_number: string; street_name: string; street_type: string; city: string; state: string; zip: string
+  }
+
+  let criminalResult: Awaited<ReturnType<typeof runNcisAliasCheck>>
+  let evictionResult: Awaited<ReturnType<typeof runAssuredTenantCheck>>
+  try {
+    const ssn = decryptField(c.ssn_encrypted)
+    const dobIso = decryptField(c.date_of_birth_encrypted)
+    const [year, month, day] = dobIso.split('-')
+    const subject: BackgroundCheckSubject = {
+      firstName: c.first_name, lastName: c.last_name, ssn, dob: `${month}/${day}/${year}`,
+      houseNumber: c.house_number, streetName: c.street_name, city: c.city, state: c.state, zip: c.zip,
+    }
+    const quoteback = `RC-${tenantId.slice(0, 8)}-${Date.now()}`
+    ;[criminalResult, evictionResult] = await Promise.all([
+      runNcisAliasCheck(subject, quoteback),
+      runAssuredTenantCheck(subject, quoteback),
+    ])
+  } catch (err) {
+    await admin.from('equifax_background_checks').update({ status: 'failed' }).eq('tenant_id', tenantId).eq('universal_application_id', universalApplicationId)
+    console.error('Equifax background check error:', (err as Error).message)
+    return res.status(502).json({ error: 'Could not retrieve background check from Equifax. Please try again.' })
+  }
+
+  // If either check is still pending (offline jurisdiction), report the whole
+  // check as pending rather than complete — a landlord shouldn't see a final
+  // verdict while one product is still processing.
+  const anyPending = criminalResult.status === 'pending' || evictionResult.status === 'pending'
+  const anyFailed = criminalResult.status === 'failed' || evictionResult.status === 'failed'
+  const status = anyFailed ? 'failed' : anyPending ? 'pending' : 'complete'
+  const checkedAt = status === 'complete' ? new Date().toISOString() : null
+
+  await admin
+    .from('equifax_background_checks')
+    .update({
+      status,
+      criminal_pass: criminalResult.pass,
+      eviction_pass: evictionResult.pass,
+      checked_at: checkedAt,
+    })
+    .eq('tenant_id', tenantId)
+    .eq('universal_application_id', universalApplicationId)
+
+  return res.json({
+    status,
+    criminal_pass: criminalResult.pass,
+    eviction_pass: evictionResult.pass,
+    checked_at: checkedAt,
+    tenantHasConsent: true,
+  })
 })
 
 // ---------------------------------------------------------------------------

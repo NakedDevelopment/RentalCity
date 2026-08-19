@@ -15,8 +15,11 @@ import { BankVerificationCard, type PlaidVerificationRow } from '../components/B
 import {
   getCreditCheckInfo,
   requestCreditCheck as apiRequestCreditCheck,
+  getBackgroundCheckInfo,
+  requestBackgroundCheck as apiRequestBackgroundCheck,
   requestEquifaxApproval,
   type CreditCheckInfo,
+  type BackgroundCheckInfo,
 } from '../lib/equifaxApi'
 import { useAuth } from '../lib/useAuth'
 import { safeInternalPath } from '../lib/safeInternalPath'
@@ -136,12 +139,6 @@ export function LandlordTenantProfilePage() {
   } | null>(null)
   const [reviewEditOpen, setReviewEditOpen] = useState(false)
   const [tenantUniversalApplication, setTenantUniversalApplication] = useState<UniversalApplicationRecord | null>(null)
-  const [tenantScreening, setTenantScreening] = useState<{
-    report_status: string | null
-    background_pass: boolean | null
-    income_pass: boolean | null
-    created_at: string
-  } | null>(null)
   const [tenantBankVerification, setTenantBankVerification] = useState<PlaidVerificationRow | null>(null)
   const [landlordEquifaxApproved, setLandlordEquifaxApproved] = useState(false)
   const [landlordEquifaxPending, setLandlordEquifaxPending] = useState(false)
@@ -153,6 +150,10 @@ export function LandlordTenantProfilePage() {
   const [requestingCredit, setRequestingCredit] = useState(false)
   const [viewingReport, setViewingReport] = useState(false)
   const [creditError, setCreditError] = useState<string | null>(null)
+  const [backgroundCheck, setBackgroundCheck] = useState<BackgroundCheckInfo | null>(null)
+  const [backgroundCheckLoading, setBackgroundCheckLoading] = useState(false)
+  const [requestingBackground, setRequestingBackground] = useState(false)
+  const [backgroundError, setBackgroundError] = useState<string | null>(null)
   type LandlordTenantApplicationRow = {
     id: string
     status: string
@@ -456,15 +457,6 @@ export function LandlordTenantProfilePage() {
       }
       setTenantUniversalApplication(ua)
 
-      const { data: screeningRow } = await supabase
-        .from('universal_application_screenings')
-        .select('report_status, background_pass, income_pass, created_at')
-        .eq('tenant_id', id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      setTenantScreening((screeningRow as any) ?? null)
-
       const { data: bankRow } = await supabase
         .from('plaid_financial_verifications')
         .select(
@@ -646,6 +638,27 @@ export function LandlordTenantProfilePage() {
     return () => { cancelled = true }
   }, [user, id, hasUnlockedProfileAccess])
 
+  // Load background check info for this tenant once profile is unlocked
+  useEffect(() => {
+    if (!user || !id || !hasUnlockedProfileAccess) return
+    let cancelled = false
+    ;(async () => {
+      setBackgroundCheckLoading(true)
+      try {
+        const { data: sess } = await supabase.auth.getSession()
+        const token = sess.session?.access_token
+        if (!token || cancelled) return
+        const info = await getBackgroundCheckInfo(token, id)
+        if (!cancelled) setBackgroundCheck(info)
+      } catch {
+        // non-blocking
+      } finally {
+        if (!cancelled) setBackgroundCheckLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [user, id, hasUnlockedProfileAccess])
+
   async function handleRequestApproval() {
     setCreditError(null)
     try {
@@ -672,6 +685,22 @@ export function LandlordTenantProfilePage() {
       setCreditError(err instanceof Error ? err.message : 'Could not request credit check')
     } finally {
       setRequestingCredit(false)
+    }
+  }
+
+  async function handleRequestBackground() {
+    setBackgroundError(null)
+    setRequestingBackground(true)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess.session?.access_token
+      if (!token) throw new Error('Please sign in again.')
+      const info = await apiRequestBackgroundCheck(token, id)
+      setBackgroundCheck(info)
+    } catch (err) {
+      setBackgroundError(err instanceof Error ? err.message : 'Could not request background check')
+    } finally {
+      setRequestingBackground(false)
     }
   }
 
@@ -1144,36 +1173,6 @@ export function LandlordTenantProfilePage() {
                     isUniversalActive={tenantUniversalDisplay.isUniversalActive}
                     showTimeline={false}
                   />
-
-                  {docusignStatus && !docusignStatus.fullyVerified ? (
-                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-                      <p className="text-sm text-gray-600">
-                        Sign the required agreements to view income and background check results.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setDocusignModalOpen(true)}
-                        className="mt-2 text-sm font-medium text-gray-900 underline"
-                      >
-                        Sign agreements
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-4 grid gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-gray-600">Income</span>
-                        <span className="font-medium text-gray-900">
-                          {tenantScreening?.income_pass == null ? '—' : tenantScreening.income_pass ? 'Pass' : 'Fail'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-gray-600">Background</span>
-                        <span className="font-medium text-gray-900">
-                          {tenantScreening?.background_pass == null ? '—' : tenantScreening.background_pass ? 'Pass' : 'Fail'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
                 </ProfileContentCard>
 
                 <BankVerificationCard
@@ -1277,6 +1276,106 @@ export function LandlordTenantProfilePage() {
                       </div>
                     ) : null}
                     {creditError && <p className="mt-2 text-sm text-red-600">{creditError}</p>}
+                  </ProfileContentCard>
+                )}
+
+                {/* Equifax background check (NCIS-Alias + AssuredTenant Alias) — visible only after profile is unlocked */}
+                {hasUnlockedProfileAccess && (
+                  <ProfileContentCard title="Background Check">
+                    {docusignStatus && !docusignStatus.fullyVerified ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-gray-600">
+                          Sign the required agreements before you can run background checks on tenants.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setDocusignModalOpen(true)}
+                          className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white"
+                        >
+                          Sign agreements
+                        </button>
+                      </div>
+                    ) : backgroundCheckLoading ? (
+                      <p className="text-sm text-gray-500">Loading…</p>
+                    ) : !landlordEquifaxApproved ? (
+                      landlordEquifaxPending ? (
+                        <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+                          <p className="text-sm text-amber-800">
+                            Your Equifax access request is pending approval. We'll notify you when you're approved to run background checks.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600">
+                            Get approved to run Equifax background checks on tenants you're considering.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void handleRequestApproval()}
+                            className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white"
+                          >
+                            Get approved
+                          </button>
+                        </div>
+                      )
+                    ) : !backgroundCheck?.tenantHasConsent ? (
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <p className="text-sm text-gray-600">
+                          This tenant hasn't authorized a background check yet.
+                        </p>
+                      </div>
+                    ) : backgroundCheck.status === 'none' || backgroundCheck.status === 'failed' ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-gray-600">
+                          {backgroundCheck.status === 'failed'
+                            ? 'The previous background check failed. You can try again.'
+                            : 'This tenant has authorized a background check.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void handleRequestBackground()}
+                          disabled={requestingBackground}
+                          className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                        >
+                          {requestingBackground ? 'Requesting…' : 'Run background check'}
+                        </button>
+                      </div>
+                    ) : backgroundCheck.status === 'pending' ? (
+                      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                        <p className="text-sm text-blue-800">Background check is being processed…</p>
+                      </div>
+                    ) : backgroundCheck.status === 'complete' ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Complete
+                          </span>
+                          {backgroundCheck.checked_at && (
+                            <span className="text-xs text-gray-400">
+                              {new Date(backgroundCheck.checked_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-gray-600">Criminal</span>
+                            <span className="font-medium text-gray-900">
+                              {backgroundCheck.criminal_pass == null ? '—' : backgroundCheck.criminal_pass ? 'Pass' : 'Fail'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-gray-600">Eviction</span>
+                            <span className="font-medium text-gray-900">
+                              {backgroundCheck.eviction_pass == null ? '—' : backgroundCheck.eviction_pass ? 'Pass' : 'Fail'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    {backgroundError && <p className="mt-2 text-sm text-red-600">{backgroundError}</p>}
                   </ProfileContentCard>
                 )}
 

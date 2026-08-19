@@ -156,35 +156,37 @@ export function equifaxPdfEndpoint(reportId: string): string {
   return `${getEquifaxBase()}/business/oneview/consumer-credit/v1/reports/credit-report/${reportId}`
 }
 
-// ─── SSN encryption (AES-256-GCM) ────────────────────────────────────────────
+// ─── Sensitive-field encryption (AES-256-GCM) ────────────────────────────────
+// Used for both SSN (credit + background checks) and date of birth
+// (background checks only) — same key, same generic string encryption.
 
-function getSsnKey(): Buffer {
+function getFieldEncryptionKey(): Buffer {
   const hex = process.env.SSN_ENCRYPTION_KEY
   if (!hex || hex.length !== 64) throw new Error('SSN_ENCRYPTION_KEY must be a 32-byte hex string (64 chars)')
   return Buffer.from(hex, 'hex')
 }
 
 /**
- * Encrypts an SSN for storage. Format: `<iv_hex>:<authTag_hex>:<ciphertext_hex>`
+ * Encrypts a sensitive field for storage. Format: `<iv_hex>:<authTag_hex>:<ciphertext_hex>`
  * Never log or return the raw output — treat it as opaque ciphertext.
  */
-export function encryptSSN(ssn: string): string {
-  const key = getSsnKey()
+export function encryptField(value: string): string {
+  const key = getFieldEncryptionKey()
   const iv = crypto.randomBytes(16)
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
-  const encrypted = Buffer.concat([cipher.update(ssn, 'utf8'), cipher.final()])
+  const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
   const authTag = cipher.getAuthTag()
   return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`
 }
 
 /**
- * Decrypts an SSN for use in a single Equifax API call.
+ * Decrypts a sensitive field for use in a single Equifax API call.
  * The returned string should be used immediately and never stored.
  */
-export function decryptSSN(stored: string): string {
-  const key = getSsnKey()
+export function decryptField(stored: string): string {
+  const key = getFieldEncryptionKey()
   const parts = stored.split(':')
-  if (parts.length !== 3) throw new Error('Invalid SSN ciphertext format')
+  if (parts.length !== 3) throw new Error('Invalid ciphertext format')
   const [ivHex, authTagHex, dataHex] = parts
   const iv = Buffer.from(ivHex, 'hex')
   const authTag = Buffer.from(authTagHex, 'hex')
@@ -194,3 +196,6 @@ export function decryptSSN(stored: string): string {
   const decrypted = Buffer.concat([decipher.update(data), decipher.final()])
   return decrypted.toString('utf8')
 }
+
+export const encryptSSN = encryptField
+export const decryptSSN = decryptField
