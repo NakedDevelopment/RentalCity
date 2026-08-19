@@ -13,16 +13,22 @@ export function isEmailConfigured(): boolean {
   return Boolean(MAILERSEND_API_KEY && FROM_EMAIL)
 }
 
+export interface EmailAttachment {
+  filename: string
+  contentBase64: string
+}
+
 export interface SendEmailArgs {
   to: string
   subject: string
   html: string
   text?: string
+  attachments?: EmailAttachment[]
 }
 
 // Returns true if the email was accepted by the provider, false otherwise.
 // Never throws.
-export async function sendReportEmail({ to, subject, html, text }: SendEmailArgs): Promise<boolean> {
+export async function sendReportEmail({ to, subject, html, text, attachments }: SendEmailArgs): Promise<boolean> {
   if (!isEmailConfigured()) {
     console.warn(
       'Email not sent: MAILERSEND_API_KEY / FROM_EMAIL not configured. Skipping report email to',
@@ -51,6 +57,9 @@ export async function sendReportEmail({ to, subject, html, text }: SendEmailArgs
         subject,
         html,
         text: text || stripHtml(html),
+        ...(attachments?.length
+          ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.contentBase64, disposition: 'attachment' })) }
+          : {}),
       }),
       signal: controller.signal,
     })

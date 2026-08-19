@@ -24,10 +24,10 @@ import { XMLParser } from 'fast-xml-parser'
 const IDS_BASE = 'https://xml.innovativedatasolutions.com/NatCrimWs/Search.asmx'
 
 function getIdsCredentials(): { login: string; password: string } {
-  const login = process.env.EQUIFAX_IDS_LOGIN
-  const password = process.env.EQUIFAX_IDS_PASSWORD
+  const login = process.env.INNOVATIVE_ENTERPRISES_LOGIN
+  const password = process.env.INNOVATIVE_ENTERPRISES_PASSWORD
   if (!login || !password) {
-    throw new Error('Equifax IDS credentials not configured (EQUIFAX_IDS_LOGIN / EQUIFAX_IDS_PASSWORD)')
+    throw new Error('Equifax IDS credentials not configured (INNOVATIVE_ENTERPRISES_LOGIN / INNOVATIVE_ENTERPRISES_PASSWORD)')
   }
   return { login, password }
 }

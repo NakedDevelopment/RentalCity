@@ -85,15 +85,36 @@ function LockIcon() {
 export function BankVerificationCard({
   verification,
   unlocked = false,
+  docusignVerified = true,
+  onSignAgreements,
 }: {
   verification: PlaidVerificationRow | null
   unlocked?: boolean
+  /** False when the landlord hasn't signed the required Plaid/Equifax agreements yet. */
+  docusignVerified?: boolean
+  onSignAgreements?: () => void
 }) {
   const v = verification
   const hasAny = !!(
     v &&
     (v.income_verified || v.balances_verified || v.debts_verified || v.identity_verified)
   )
+
+  if (!docusignVerified) {
+    return (
+      <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <h2 className="mb-1 text-base font-semibold tracking-tight text-gray-900">Bank verification</h2>
+        <p className="mt-3 text-sm text-gray-500">
+          Sign the required agreements to view this tenant's bank verification data.
+        </p>
+        {onSignAgreements && (
+          <button type="button" onClick={onSignAgreements} className="mt-2 text-sm font-medium text-gray-900 underline">
+            Sign agreements
+          </button>
+        )}
+      </section>
+    )
+  }
   const dtiNum = v && v.dti_ratio != null ? Number(v.dti_ratio) : NaN
   const dtiPct = Number.isFinite(dtiNum) ? Math.round(dtiNum * 100) : null
   const verifiedAt = v?.last_verified_at ? formatDate(v.last_verified_at) : null

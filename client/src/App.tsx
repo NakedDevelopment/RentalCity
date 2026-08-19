@@ -41,6 +41,7 @@ import { LandlordMatchPage } from './pages/LandlordMatchPage'
 import { LeasePreferencesPage } from './pages/LeasePreferencesPage'
 import { TenantQuestionnairePage } from './pages/TenantQuestionnairePage'
 import { IdentityVerificationPage } from './pages/IdentityVerificationPage'
+import { DocusignReturnPage } from './pages/DocusignReturnPage'
 import { CompatibilitySurveyPage } from './pages/CompatibilitySurveyPage'
 import { ApplicationDetailsPage } from './pages/ApplicationDetailsPage'
 import { ReviewSubmittedPage } from './pages/ReviewSubmittedPage'
@@ -199,6 +200,7 @@ export default function App() {
         <Route path="profile" element={<AdminProfilePage />} />
         <Route path="change-password" element={<ChangePasswordPage />} />
       </Route>
+      <Route path="/docusign/return" element={<DocusignReturnPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     </>

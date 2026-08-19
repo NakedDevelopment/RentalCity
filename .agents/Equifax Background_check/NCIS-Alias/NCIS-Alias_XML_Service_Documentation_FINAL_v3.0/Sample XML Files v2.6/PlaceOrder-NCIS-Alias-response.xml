@@ -1,0 +1,119 @@
+<ieiresponse>
+  <requestinformation code="100">
+    <codemessage>RECORDS FOUND</codemessage>
+    <inputs>
+      <firstname>JOHN</firstname>
+      <lastname>DOE</lastname>
+      <dob year="1970" month="01" day="01"/>
+      <ssn>123456789</ssn>
+      <product>NCIS-ALIAS</product>
+      <quoteback>PLACE ORDER TEST NCIS-ALIAS</quoteback>
+      <includecasetypefelony>0</includecasetypefelony>
+      <includecasetypemisdemeanor>1</includecasetypemisdemeanor>
+      <includecasetypetraffic>1</includecasetypetraffic>
+      <includecasetypeunknown>1</includecasetypeunknown>
+      <includenulldob>0</includenulldob>
+      <includesexoffenderdata>1</includesexoffenderdata>
+      <includesexoffendernulldobs>1</includesexoffendernulldobs>
+      <exactdobmatchonly>0</exactdobmatchonly>
+      <exactnamematchonly>0</exactnamematchonly>
+      <probability>DEFAULT</probability>
+      <includejurisdictionssearched>0</includejurisdictionssearched>
+      <includecountyfipscode>1</includecountyfipscode>
+      <groupaddresses>0</groupaddresses>
+    </inputs>
+  </requestinformation>
+  <addressinformation>
+    <message>SSN IS VALID.  ISSUED IN TN</message>
+    <year>IN THE YEAR 1970</year>
+    <records count="1">
+      <record>
+        <fullname>JOHN E DOE</fullname>
+        <firstname>JOHN</firstname>
+        <middlename>E</middlename>
+        <lastname>DOE</lastname>
+        <fulldob>01/01/1970</fulldob>
+        <dob year="1970" month="01" day="01"/>
+        <ssn>XXX-XX-6789</ssn>
+        <age>40</age>
+        <aliases count="1">
+          <alias>
+            <fullname>DOE JOE</fullname>
+          </alias>
+        </aliases>
+        <addresses count="1">
+          <address>
+            <fullstreet>123 SOME LANE</fullstreet>
+            <street-number>123</street-number>
+            <street-name>SOME LANE</street-name>
+            <city>SOMECITY</city>
+            <state>VA</state>
+            <zip>12345</zip>
+            <county>SOME COUNTY</county>
+            <from-date year="2003" month="03"/>
+            <to-date year="2010" month="08"/>
+          </address>
+        </addresses>
+        <phonenumbers count="1">
+          <phonenumber>
+            <fullnumber>1234567890</fullnumber>
+            <areacode>123</areacode>
+            <listed>YES</listed>
+            <firstname>JOHN</firstname>
+            <lastname>DOE</lastname>
+          </phonenumber>
+        </phonenumbers>
+      </record>
+    </records>
+    <summaryinformation>
+      <uniquenames count="2">
+        <fullname>JOHN DOE</fullname>
+        <fullname>DOE JOE</fullname>
+      </uniquenames>
+      <uniquecounties count="1">
+        <county>VA    SOME COUNTY</county>
+      </uniquecounties>
+      <distinctaddresscount>1</distinctaddresscount>
+    </summaryinformation>
+  </addressinformation>
+  <criminalinformation>
+    <records count="1">
+      <record id="LSlEsVS6Ht4mslPbhXRN1JDPCa2U7jWWXXXXXX">
+        <category>CRIMINAL</category>
+        <sourceorjurisdiction>VA COURTS</sourceorjurisdiction>
+        <countycleansed>GLOUCESTER</countycleansed>
+        <fipscode>23604</fipscode>
+        <state>VA</state>
+        <fullname>JOHN DOE</fullname>
+        <firstname>JOHN</firstname>
+        <lastname>DOE</lastname>
+        <fulldob>01/01/1970</fulldob>
+        <sex>MALE</sex>
+        <race>WHITE</race>
+        <casenumber>1234567</casenumber>
+        <countyorjurisdiction>SOME COUNTY</countyorjurisdiction>
+        <addresses count="1">
+          <address>
+            <address1>123 SOME LANE</address1>
+            <city>SOME CITY</city>
+            <state>VA</state>
+          </address>
+        </addresses>
+        <offenses count="1">
+          <offense>
+            <offensedescription>THEFT CK 20</offensedescription>
+            <arrestdate>00000000</arrestdate>
+            <casetype>MISDEMEANOR</casetype>
+            <chargefilingdate>01/14/2009</chargefilingdate>
+            <offensedate>02/09/2007</offensedate>
+            <offensecode>23990033</offensecode>
+            <court>COUNTY CRIMINAL COURT 8</court>
+            <comments>SENTENCE LENGTH: 0000001; PROBATION LENGTH: 0000001</comments>
+          </offense>
+        </offenses>
+      </record>
+    </records>
+  </criminalinformation>
+  <disclaimer_link>**IMPORTANT NOTICE** USE OR DISSEMINATION OF THIS DATA IS SUBJECT TO THE TERMS, CONDITIONS, RESTRICTIONS AND LIMITATIONS SPECIFIED AT: http://www.backgroundscreeningsystems.com/disclaimers.aspx</disclaimer_link>
+</ieiresponse>
+

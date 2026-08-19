@@ -1,0 +1,49 @@
+<ieirequest>
+  <order>
+    <quoteback>SAMPLE ASSUREDTENANT REQUEST</quoteback>
+    <product>
+      <assuredtenant>
+        <settings>
+          <additionaladdresses>5</additionaladdresses>
+          <additionalaliases>5</additionalaliases>
+          <excludenoticetypes>Notice Not Identified|UNKNOWN</excludenoticetypes>
+        </settings>
+      </assuredtenant>
+    </product>
+    <subject>
+      <firstname>JOHN</firstname>
+      <lastname>DOE</lastname>
+      <ssn>123456789</ssn>
+      <aliases>
+        <aliases>
+          <firstname>JOHN</firstname>
+          <lastname>SMITH</lastname>
+        </aliases>
+      </aliases>
+      <address1>
+        <buildingnum>125</buildingnum>
+        <streetname>ANY STREET</streetname>
+        <city>ANY CITY</city>
+        <state>VA</state>
+        <zip>12345</zip>
+      </address1>
+      <address2>
+        <buildingnum>100</buildingnum>
+        <streetname>OPTIONAL ADDRESS 2 AVE</streetname>
+        <city>ANY CITY</city>
+        <state>VA</state>
+        <zip>12345</zip>
+      </address2>
+      <address3>
+        <buildingnum>350</buildingnum>
+        <streetname>OPTIONAL ADDRESS 3 DR</streetname>
+        <city>ANY CITY</city>
+        <state>VA</state>
+        <zip>12345</zip>
+      </address3>
+    </subject>
+  </order>
+</ieirequest>
+
+
+
