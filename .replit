@@ -71,3 +71,4 @@ EQUIFAX_SECURITY_CODE = "@U2"
 
 [userenv.production]
 VITE_TENANT_TEST_EMAIL = "Richard@gorentalcity.com"
+NODE_ENV = "production"
