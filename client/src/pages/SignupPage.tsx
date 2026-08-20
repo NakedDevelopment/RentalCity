@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { TENANT_SIDE_ENABLED } from '../lib/featureFlags'
+import { tenantSideEnabledForEmail } from '../lib/featureFlags'
 
 type Role = 'tenant' | 'landlord'
 
@@ -111,6 +111,8 @@ export function SignupPage() {
     meetsPasswordRequirements(password) &&
     password === confirmPassword
 
+  const tenantSignupEnabled = tenantSideEnabledForEmail(email)
+
   function EyeIcon({ open }: { open: boolean }) {
     return (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,7 +144,7 @@ export function SignupPage() {
               : 'Create your tenant account and get matched with your next home!'}
           </p>
 
-          {TENANT_SIDE_ENABLED ? (
+          {tenantSignupEnabled ? (
             <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
               <button
                 type="button"
@@ -179,7 +181,9 @@ export function SignupPage() {
                   type="email"
                   value={email}
                   onChange={(e) => {
-                  setEmail(e.target.value)
+                  const nextEmail = e.target.value
+                  setEmail(nextEmail)
+                  if (role === 'tenant' && !tenantSideEnabledForEmail(nextEmail)) setRole('landlord')
                   if (emailError) setEmailError(null)
                 }}
                 onBlur={() => {

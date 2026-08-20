@@ -5,7 +5,7 @@ import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { useRedeemPendingLandlordInvite } from '../lib/useRedeemPendingLandlordInvite'
 import { useTenantInviteRestriction } from '../lib/useTenantInviteRestriction'
-import { TENANT_SIDE_ENABLED } from '../lib/featureFlags'
+import { tenantSideEnabledForEmail } from '../lib/featureFlags'
 import { TenantInviteBanner } from './TenantInviteBanner'
 import { TenantSideComingSoon } from './TenantSideComingSoon'
 import { UserMenu } from './UserMenu'
@@ -108,7 +108,7 @@ export function TenantLayout() {
   // Launch sequencing: tenant side stays hidden behind the flag until there's
   // enough landlord inventory. Short-circuits before any tenant-only routes,
   // nav items, or data fetches below ever mount.
-  if (profileRole === 'tenant' && !TENANT_SIDE_ENABLED) {
+  if (profileRole === 'tenant' && !tenantSideEnabledForEmail(user?.email)) {
     return <TenantSideComingSoon />
   }
 

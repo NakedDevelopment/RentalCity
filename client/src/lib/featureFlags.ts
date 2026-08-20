@@ -4,3 +4,10 @@
 // stays testable without setting the env var everywhere.
 export const TENANT_SIDE_ENABLED =
   import.meta.env.VITE_TENANT_SIDE_ENABLED === 'true' || import.meta.env.DEV
+
+const TENANT_TEST_EMAIL = (import.meta.env.VITE_TENANT_TEST_EMAIL || '').trim().toLowerCase()
+
+export function tenantSideEnabledForEmail(email?: string | null): boolean {
+  if (TENANT_SIDE_ENABLED) return true
+  return Boolean(TENANT_TEST_EMAIL && email?.trim().toLowerCase() === TENANT_TEST_EMAIL)
+}

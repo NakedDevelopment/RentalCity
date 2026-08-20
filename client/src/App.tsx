@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/useAuth'
-import { TENANT_SIDE_ENABLED } from './lib/featureFlags'
+import { tenantSideEnabledForEmail } from './lib/featureFlags'
 import { MetaPixelTracker } from './components/MetaPixelTracker'
 import { RecoveryLinkHandler } from './components/RecoveryLinkHandler'
 import { AdminLayout } from './components/AdminLayout'
@@ -110,7 +110,7 @@ export default function App() {
         <Route path="applications" element={user ? <Navigate to="/matches?tab=applied" replace /> : <Navigate to="/login" replace />} />
         <Route
           path="applications/apply"
-          element={TENANT_SIDE_ENABLED ? <UniversalApplicationPage /> : <Navigate to="/" replace />}
+          element={user && tenantSideEnabledForEmail(user.email) ? <UniversalApplicationPage /> : <Navigate to="/login" replace />}
         />
         <Route path="list-from-report" element={<ListFromReportPage />} />
         <Route path="property/:id" element={user ? <PropertyDetailsPage /> : <Navigate to="/login" replace />} />
@@ -185,8 +185,11 @@ export default function App() {
       <Route path="/support" element={<Layout />}>
         <Route index element={<PublicSupportPage />} />
       </Route>
-      <Route path="/invite" element={<Layout />}>
-        <Route path=":token" element={TENANT_SIDE_ENABLED ? <TenantInviteLandingPage /> : <Navigate to="/" replace />} />
+        <Route path="/invite" element={<Layout />}>
+          <Route
+            path=":token"
+            element={tenantSideEnabledForEmail(user?.email) ? <TenantInviteLandingPage /> : <Navigate to="/" replace />}
+          />
       </Route>
       <Route path="/admin" element={user ? <AdminLayout /> : <Navigate to="/login" replace />}>
         <Route index element={<AdminDashboardPage />} />
