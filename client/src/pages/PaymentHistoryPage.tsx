@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase'
 type TenantPayment = {
   id: string
   date: string
-  applicationId: string
+  label: string
   amount: string
   status: string
 }
@@ -87,15 +87,15 @@ export function PaymentHistoryPage() {
           return
         }
 
-        const rows = (data ?? []).filter(
-          (p) => p.application_id != null
-        ) as Array<{ id: string; application_id: string; amount_cents: number; status: string; created_at: string }>
+        const rows = (data ?? []) as Array<{ id: string; application_id: string | null; amount_cents: number; status: string; created_at: string }>
 
         setTenantPayments(
           rows.map((p) => ({
             id: p.id,
             date: formatDate(p.created_at),
-            applicationId: `APP-${p.application_id.slice(0, 8).toUpperCase()}`,
+            label: p.application_id
+              ? `APP-${p.application_id.slice(0, 8).toUpperCase()}`
+              : 'Application Fee',
             amount: formatCurrency(p.amount_cents),
             status: formatDisplayStatus(p.status),
           })),
@@ -418,7 +418,7 @@ export function PaymentHistoryPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900">{payment.date}</p>
-                      <p className="mt-1 text-sm text-gray-500">Application ID: {payment.applicationId}</p>
+                      <p className="mt-1 text-sm text-gray-500">{payment.label}</p>
                     </div>
                   </div>
 

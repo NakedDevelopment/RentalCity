@@ -241,6 +241,32 @@ export function RentalApplicationPage() {
         </section>
       ) : null}
 
+      {/* Profile completion prompt — shown when payment is active but profile is empty */}
+      {isApplicationActive && profile && !profile.display_name && !profile.phone ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <svg className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-amber-800">Complete your profile</p>
+              <p className="mt-0.5 text-sm text-amber-700">
+                Your application is active but your profile is empty. Add your name and contact info so landlords can review your application.
+              </p>
+              <Link
+                to="/account/edit"
+                className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-900 underline hover:text-amber-700"
+              >
+                Complete profile
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="space-y-5">
           <SectionCard
