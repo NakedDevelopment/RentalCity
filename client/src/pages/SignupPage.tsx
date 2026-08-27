@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { tenantSideEnabledForEmail } from '../lib/featureFlags'
+import { trackMetaEvent } from '../lib/metaPixel'
 
 type Role = 'tenant' | 'landlord'
 
@@ -74,6 +75,12 @@ export function SignupPage() {
         setError(signUpError.message)
       }
       return
+    }
+
+    // Supabase can intentionally return a user-shaped response for an already
+    // registered address. A new email signup includes at least one identity.
+    if ((data?.user?.identities?.length ?? 0) > 0) {
+      trackMetaEvent('CompleteRegistration', { content_name: role })
     }
 
     // Update profile role (trigger creates profile with default 'tenant')

@@ -1,11 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-
-declare global {
-  interface Window {
-    fbq?: (...args: unknown[]) => void
-  }
-}
+import { trackMetaEvent } from '../lib/metaPixel'
 
 /**
  * Fires a Meta Pixel PageView on every client-side route change.
@@ -20,7 +15,7 @@ export function MetaPixelTracker() {
       isFirstRender.current = false
       return
     }
-    window.fbq?.('track', 'PageView')
+    trackMetaEvent('PageView')
   }, [location.pathname])
 
   return null

@@ -4,6 +4,7 @@ import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import StripeCheckoutModal from '../components/StripeCheckoutModal'
 import { stripeConfigured } from '../lib/stripe'
+import { trackMetaEvent, trackMetaEventOnce } from '../lib/metaPixel'
 
 const NEW_APPLICATION_FEE = 50
 const UPDATE_APPLICATION_FEE = 50
@@ -102,6 +103,12 @@ export function UniversalApplicationPage() {
           const err = await res.json().catch(() => ({}))
           throw new Error((err as { error?: string }).error || 'We could not confirm your payment.')
         }
+        trackMetaEventOnce(`universal-application-purchase:${sessionId}`, 'Purchase', {
+          value: 50,
+          currency: 'USD',
+          content_name: 'Universal Application',
+          content_type: 'product',
+        })
         if (active) navigate('/account/rental-application', { replace: true })
       } catch (err) {
         if (active) {
@@ -159,6 +166,12 @@ export function UniversalApplicationPage() {
       }
       setClientSecret(json.clientSecret)
       setCheckoutOpen(true)
+      trackMetaEvent('InitiateCheckout', {
+        value: 50,
+        currency: 'USD',
+        content_name: 'Universal Application',
+        content_type: 'product',
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout. Please try again.')
     } finally {

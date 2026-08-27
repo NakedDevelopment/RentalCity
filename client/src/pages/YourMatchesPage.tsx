@@ -5,6 +5,7 @@ import { formatBedrooms, formatCurrency } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
+import { trackMetaEvent } from '../lib/metaPixel'
 import {
   fetchLandlordMatchCatalog,
   fetchMatchesForTenant,
@@ -831,6 +832,9 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     if (error && error.code !== '23505') {
       setError(error.message)
       return
+    }
+    if (!error) {
+      trackMetaEvent('SubmitApplication', { content_name: 'Property Application' })
     }
     setAppliedIds((prev) => new Set(prev).add(match.id))
     setSubmissionModal({ propertyTitle: match.title })

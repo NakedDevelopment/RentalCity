@@ -9,6 +9,7 @@ import {
 } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import { trackMetaCustomEvent } from '../lib/metaPixel'
 
 const PROPERTY_IMAGES_BUCKET = 'property-images'
 
@@ -187,6 +188,7 @@ export function AddPropertyPreviewPage() {
       return
     }
 
+    trackMetaCustomEvent('CreateListing', { listing_status: status })
     clearPropertyDraft()
 
     if (status === 'draft') {

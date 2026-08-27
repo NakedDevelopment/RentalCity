@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { trackMetaCustomEvent } from '../lib/metaPixel'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -28,6 +29,7 @@ export function LoginPage() {
       setError(error.message)
       return
     }
+    trackMetaCustomEvent('LoginSuccess')
     const uid = data.user?.id
     if (uid) {
       const { data: prof } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle()

@@ -26,6 +26,7 @@ import { safeInternalPath } from '../lib/safeInternalPath'
 import { supabase } from '../lib/supabase'
 import StripeCheckoutModal from '../components/StripeCheckoutModal'
 import { stripeConfigured } from '../lib/stripe'
+import { trackMetaEvent, trackMetaEventOnce } from '../lib/metaPixel'
 import { fetchLandlordTenantUniversalApplication } from '../lib/matchesApi'
 import {
   computeUniversalApplicationDisplay,
@@ -235,6 +236,12 @@ export function LandlordTenantProfilePage() {
           throw new Error((err as { error?: string }).error || 'We could not confirm your payment.')
         }
         if (!active) return
+        trackMetaEventOnce(`landlord-profile-unlock:${sessionId}`, 'Purchase', {
+          value: 200,
+          currency: 'USD',
+          content_name: 'Tenant Profile Unlock',
+          content_type: 'product',
+        })
         setPendingUnlockedAt(new Date().toISOString())
         setUnlockPayModalOpen(false)
         const clean = new URLSearchParams()
@@ -923,6 +930,12 @@ export function LandlordTenantProfilePage() {
       setUnlockClientSecret(json.clientSecret)
       setUnlockPayModalOpen(false)
       setUnlockCheckoutOpen(true)
+      trackMetaEvent('InitiateCheckout', {
+        value: 200,
+        currency: 'USD',
+        content_name: 'Tenant Profile Unlock',
+        content_type: 'product',
+      })
     } catch (err) {
       setUnlockPayError(err instanceof Error ? err.message : 'Could not start checkout. Please try again.')
     } finally {

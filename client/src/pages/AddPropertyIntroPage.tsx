@@ -4,6 +4,7 @@ import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import StripeCheckoutModal from '../components/StripeCheckoutModal'
 import { stripeConfigured } from '../lib/stripe'
+import { trackMetaEvent, trackMetaEventOnce } from '../lib/metaPixel'
 
 const ANNUAL_MEMBERSHIP_FEE = 350
 
@@ -90,6 +91,11 @@ export function AddPropertyIntroPage() {
           }
           const json = (await res.json()) as { active?: boolean }
           if (!alive) return
+          if (json.active) {
+            trackMetaEventOnce(`landlord-membership:${sessionId}`, 'Subscribe', {
+              content_name: 'Landlord Annual Membership',
+            })
+          }
           setIsMember(Boolean(json.active))
           setConfirming(false)
           setLoading(false)
@@ -159,6 +165,10 @@ export function AddPropertyIntroPage() {
       }
       setClientSecret(json.clientSecret)
       setCheckoutOpen(true)
+      trackMetaEvent('InitiateCheckout', {
+        content_name: 'Landlord Annual Membership',
+        content_type: 'product',
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout. Please try again.')
     } finally {
