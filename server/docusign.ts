@@ -57,6 +57,16 @@ function normalizedPrivateKeyBuffer(rawValue: string): Buffer {
   }
   value = value.replace(/\\r/g, '').replace(/\\n/g, '\n').trim()
 
+  // Some secret stores flatten multiline values completely, leaving the PEM
+  // header, base64 body, and footer on one line. Restore the standard PEM
+  // wrapping before passing it to Node's key decoder.
+  const pemMatch = value.match(/-----BEGIN ([^-]+)-----([\s\S]*?)-----END \1-----/)
+  if (pemMatch && pemMatch[1].includes('PRIVATE KEY')) {
+    const body = pemMatch[2].replace(/\s/g, '')
+    const wrappedBody = body.match(/.{1,64}/g)?.join('\n') ?? ''
+    value = `-----BEGIN ${pemMatch[1]}-----\n${wrappedBody}\n-----END ${pemMatch[1]}-----`
+  }
+
   // Also accept a base64-encoded PEM, which is a common way to store multiline
   // private keys in deployment secret stores.
   if (!value.includes('PRIVATE KEY')) {

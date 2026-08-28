@@ -65,3 +65,11 @@ A completed paid tenant-profile unlock should immediately request the Equifax cr
 **Why:** The checkout describes credit-report access as part of the purchase; merely unlocking the page and requiring the landlord to discover a separate screening action creates a broken purchase experience.
 
 **How to apply:** Keep the server-side uniqueness/deduplication guard so repeated Stripe returns cannot create duplicate billable pulls. If consent or approval is missing, preserve the successful profile unlock and show the unmet prerequisite instead of treating the payment as failed.
+
+## DocuSign private-key secret formatting
+
+DocuSign JWT key normalization must accept PEM values whose header, base64 body, and footer have been flattened onto one line, in addition to normal PEM, escaped-newline PEM, and base64-encoded PEM.
+
+**Why:** Deployment secret storage can remove all PEM line breaks while preserving the markers; Node’s crypto decoder rejects that otherwise-valid RSA key shape.
+
+**How to apply:** Reconstruct standard 64-character PEM body lines before RSA validation. Continue validating with Node crypto and reject non-RSA or malformed key material without logging the secret.
