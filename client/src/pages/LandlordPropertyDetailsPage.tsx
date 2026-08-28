@@ -493,7 +493,7 @@ export function LandlordPropertyDetailsPage() {
         </div>
       </div>
 
-      <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
           <InfoPanel title="Basic Information">
             <div className="space-y-4">

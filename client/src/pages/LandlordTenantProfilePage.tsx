@@ -945,7 +945,7 @@ export function LandlordTenantProfilePage() {
 
   return (
     <div className="flex min-h-full flex-col px-4 py-4">
-      <div className="w-full">
+      <div className="mx-auto w-full max-w-[1440px]">
         <button
           type="button"
           onClick={handleBackFromProfile}
@@ -957,7 +957,7 @@ export function LandlordTenantProfilePage() {
           Back
         </button>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_200px] lg:items-start">
+        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-4">
                 <ProfileContentCard title="Bio">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

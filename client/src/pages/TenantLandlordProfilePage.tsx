@@ -192,7 +192,7 @@ export function TenantLandlordProfilePage() {
         Back to matches
       </Link>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
           <Card>
             <div className="flex items-start gap-4">

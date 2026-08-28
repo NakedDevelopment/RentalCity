@@ -204,7 +204,7 @@ export function TenantLayout() {
             })}
           </nav>
 
-          <div className="px-4 sm:px-6 lg:px-8 pt-6 pb-10">
+          <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 pb-10 sm:px-6 lg:px-8">
             {profileRole === 'tenant' && inviteRestriction.active ? (
               <TenantInviteBanner restriction={inviteRestriction} />
             ) : null}

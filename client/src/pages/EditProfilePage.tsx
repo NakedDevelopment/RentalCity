@@ -266,7 +266,7 @@ export function EditProfilePage() {
             </div>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="space-y-5">
               <div className="rounded-xl border border-gray-200 bg-white p-5">
                 <h2 className="mb-5 text-[1.45rem] font-medium text-gray-900">Profile Information</h2>

@@ -252,7 +252,7 @@ export function AccountPage() {
       <div className="space-y-6">
         <h1 className="mb-6 text-[2rem] font-medium text-gray-900">My Profile</h1>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-5">
             <Card>
               <div className="flex items-start gap-4">
@@ -462,7 +462,7 @@ export function AccountPage() {
     <div className="space-y-6">
       <h1 className="mb-6 text-[2rem] font-medium text-gray-900">My Profile</h1>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_200px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           <Card title="Bio">
             <div className="flex items-start gap-4">

@@ -267,7 +267,7 @@ export function RentalApplicationPage() {
         </section>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
           <SectionCard
             title="Personal Information"

@@ -307,7 +307,7 @@ export function PropertyDetailsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           <div>
             <nav className="mb-3 flex items-center gap-2 text-sm text-gray-500">

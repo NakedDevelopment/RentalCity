@@ -211,7 +211,7 @@ export function ApplicationDetailsPage() {
   return (
     <>
       <div className="space-y-6">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_200px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-4">
             <DetailCard>
               <div className="flex items-start gap-4">
