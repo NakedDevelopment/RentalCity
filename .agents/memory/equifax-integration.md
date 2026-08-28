@@ -57,3 +57,11 @@ Landlords who already have at least one property but have not signed both agreem
 **Why:** Existing landlords predate the onboarding gate, but they still must understand that tenant credit and background checks remain unavailable until the required agreements are signed.
 
 **How to apply:** Keep the banner visible across landlord pages until both signatures exist. Do not block ordinary property management, and do not keep the banner merely because Equifax admin approval is still pending.
+
+## Paid profile-unlock report handoff
+
+A completed paid tenant-profile unlock should immediately request the Equifax credit report when the landlord is approved and the tenant has current consent. Completed reports must be offered as an explicit authenticated PDF download.
+
+**Why:** The checkout describes credit-report access as part of the purchase; merely unlocking the page and requiring the landlord to discover a separate screening action creates a broken purchase experience.
+
+**How to apply:** Keep the server-side uniqueness/deduplication guard so repeated Stripe returns cannot create duplicate billable pulls. If consent or approval is missing, preserve the successful profile unlock and show the unmet prerequisite instead of treating the payment as failed.

@@ -244,6 +244,25 @@ export function LandlordTenantProfilePage() {
         })
         setPendingUnlockedAt(new Date().toISOString())
         setUnlockPayModalOpen(false)
+
+        // The paid unlock promises access to the tenant's credit report. Start
+        // the Equifax request immediately after fulfillment instead of making
+        // the landlord discover and click a second, unrelated-looking action.
+        // The server safely deduplicates repeated requests for this
+        // landlord/tenant/application window.
+        try {
+          const reportInfo = await apiRequestCreditCheck(accessToken, id)
+          if (active) setCreditCheck(reportInfo)
+        } catch (reportError) {
+          if (active) {
+            setCreditError(
+              reportError instanceof Error
+                ? `Profile unlocked. ${reportError.message}`
+                : 'Profile unlocked, but the credit report could not be requested.',
+            )
+          }
+        }
+
         const clean = new URLSearchParams()
         const app = searchParams.get('application')
         if (app) clean.set('application', app)
@@ -725,14 +744,12 @@ export function LandlordTenantProfilePage() {
       }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
-      // window.open() after an await loses the user-gesture context and gets
-      // silently popup-blocked in most browsers — a synthesized <a> click,
-      // like the existing CSV-download pattern elsewhere in this app, isn't.
       const a = document.createElement('a')
       a.href = url
-      a.target = '_blank'
-      a.rel = 'noopener noreferrer'
+      a.download = `equifax-credit-report-${id}.pdf`
+      document.body.appendChild(a)
       a.click()
+      a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (err) {
       setCreditError(err instanceof Error ? err.message : 'Could not retrieve the credit report')
@@ -1280,7 +1297,7 @@ export function LandlordTenantProfilePage() {
                           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
-                          {viewingReport ? 'Opening…' : 'View Equifax credit report'}
+                          {viewingReport ? 'Preparing download…' : 'Download credit report (PDF)'}
                         </button>
                       </div>
                     ) : null}

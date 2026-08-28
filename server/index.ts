@@ -3268,7 +3268,7 @@ app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
     }
     if (!pdfRes.ok) return res.status(502).json({ error: 'Could not retrieve report from Equifax' })
     res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', 'inline; filename="credit-report.pdf"')
+    res.setHeader('Content-Disposition', 'attachment; filename="equifax-credit-report.pdf"')
     const buf = await pdfRes.arrayBuffer()
     return res.end(Buffer.from(buf))
   } catch (err) {
