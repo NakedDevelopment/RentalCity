@@ -7,6 +7,7 @@ export type DocusignStatus = {
   equifaxApproved: boolean
   equifaxPendingSince: boolean
   plaidSigned: boolean
+  agreementsSigned: boolean
   fullyVerified: boolean
 }
 

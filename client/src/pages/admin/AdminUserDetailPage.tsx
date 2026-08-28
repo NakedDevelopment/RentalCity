@@ -327,6 +327,20 @@ export function AdminUserDetailPage() {
                 ) : (
                   <p className="text-sm text-gray-500">Not requested</p>
                 )}
+                <div className="mt-3 space-y-1 text-xs text-gray-500">
+                  <p>
+                    Equifax agreement:{' '}
+                    <span className={row.docusign_envelope_status === 'completed' ? 'font-medium text-green-700' : 'font-medium text-amber-700'}>
+                      {row.docusign_envelope_status === 'completed' ? 'Signed' : 'Not signed'}
+                    </span>
+                  </p>
+                  <p>
+                    Plaid consent:{' '}
+                    <span className={row.plaid_agreement_signed_at ? 'font-medium text-green-700' : 'font-medium text-amber-700'}>
+                      {row.plaid_agreement_signed_at ? 'Signed' : 'Not signed'}
+                    </span>
+                  </p>
+                </div>
               </div>
               {!isSelf && !isAdminRole ? (
                 row.equifax_approved_at ? (

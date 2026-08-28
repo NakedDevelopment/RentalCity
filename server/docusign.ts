@@ -7,6 +7,7 @@
  */
 
 import docusignPkg from 'docusign-esign'
+import { createPrivateKey } from 'node:crypto'
 import type {
   ApiClient as DsApiClient,
   EnvelopesApi as DsEnvelopesApi,
@@ -38,16 +39,61 @@ function getAuthServer(): string {
 type TokenCache = { token: string; expiresAt: number }
 let tokenCache: TokenCache | null = null
 
+function normalizedPrivateKeyBuffer(rawValue: string): Buffer {
+  let value = rawValue.trim()
+
+  // Replit Secrets may contain a JSON-quoted PEM or a PEM whose newlines were
+  // pasted as literal "\n" characters.
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(value)
+      if (typeof parsed === 'string') value = parsed
+    } catch {
+      // Continue with the original value so validation below returns a safe,
+      // actionable configuration error.
+    }
+  } else if (value.startsWith("'") && value.endsWith("'")) {
+    value = value.slice(1, -1)
+  }
+  value = value.replace(/\\r/g, '').replace(/\\n/g, '\n').trim()
+
+  // Also accept a base64-encoded PEM, which is a common way to store multiline
+  // private keys in deployment secret stores.
+  if (!value.includes('PRIVATE KEY')) {
+    try {
+      const decoded = Buffer.from(value.replace(/\s/g, ''), 'base64').toString('utf8').trim()
+      if (decoded.includes('PRIVATE KEY')) value = decoded
+    } catch {
+      // Validation below handles malformed values without exposing the secret.
+    }
+  }
+
+  try {
+    const key = createPrivateKey({ key: value, format: 'pem' })
+    if (key.asymmetricKeyType !== 'rsa' && key.asymmetricKeyType !== 'rsa-pss') {
+      throw new Error('DocuSign JWT requires an RSA private key')
+    }
+    // Export a canonical PKCS#8 PEM so jsonwebtoken always receives asymmetric
+    // key material even if the original secret used PKCS#1 formatting.
+    return key.export({ type: 'pkcs8', format: 'pem' }) as Buffer
+  } catch {
+    throw new Error(
+      'DOCUSIGN_PRIVATE_KEY is not a valid RSA private key. Use the private key generated for the DocuSign integration key.',
+    )
+  }
+}
+
 export async function getDocusignAccessToken(): Promise<string> {
   const now = Date.now()
   if (tokenCache && tokenCache.expiresAt > now + 30_000) return tokenCache.token
 
   const integrationKey = process.env.DOCUSIGN_INTEGRATION_KEY
   const userId = process.env.DOCUSIGN_USER_ID
-  const privateKey = (process.env.DOCUSIGN_PRIVATE_KEY || '').replace(/\\n/g, '\n')
-  if (!integrationKey || !userId || !privateKey) {
+  const privateKey = process.env.DOCUSIGN_PRIVATE_KEY || ''
+  if (!integrationKey || !userId || !privateKey.trim()) {
     throw new Error('DocuSign credentials not configured (DOCUSIGN_INTEGRATION_KEY / DOCUSIGN_USER_ID / DOCUSIGN_PRIVATE_KEY)')
   }
+  const privateKeyBuffer = normalizedPrivateKeyBuffer(privateKey)
 
   const apiClient = new ApiClient()
   apiClient.setOAuthBasePath(getAuthServer())
@@ -55,7 +101,7 @@ export async function getDocusignAccessToken(): Promise<string> {
     integrationKey,
     userId,
     ['signature', 'impersonation'],
-    Buffer.from(privateKey),
+    privateKeyBuffer,
     3600,
   )
 

@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import StripeCheckoutModal from '../components/StripeCheckoutModal'
 import { stripeConfigured } from '../lib/stripe'
 import { trackMetaEvent, trackMetaEventOnce } from '../lib/metaPixel'
+import { LandlordAgreementsModal } from '../components/LandlordAgreementsModal'
+import { getDocusignStatus, type DocusignStatus } from '../lib/docusignApi'
 
 const ANNUAL_MEMBERSHIP_FEE = 350
 
@@ -59,6 +61,9 @@ export function AddPropertyIntroPage() {
   const [starting, setStarting] = useState(false)
   const [canceled, setCanceled] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [docusignStatus, setDocusignStatus] = useState<DocusignStatus | null>(null)
+  const [docusignAccessToken, setDocusignAccessToken] = useState<string | null>(null)
+  const [docusignModalOpen, setDocusignModalOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -96,7 +101,15 @@ export function AddPropertyIntroPage() {
               content_name: 'Landlord Annual Membership',
             })
           }
-          setIsMember(Boolean(json.active))
+          const active = Boolean(json.active)
+          setIsMember(active)
+          if (active) {
+            const agreementStatus = await getDocusignStatus(accessToken)
+            if (!alive) return
+            setDocusignAccessToken(accessToken)
+            setDocusignStatus(agreementStatus)
+            setDocusignModalOpen(!agreementStatus.agreementsSigned)
+          }
           setConfirming(false)
           setLoading(false)
           navigate('/onboarding/property/intro', { replace: true })
@@ -112,7 +125,15 @@ export function AddPropertyIntroPage() {
         }
         const json = (await res.json()) as { active?: boolean }
         if (!alive) return
-        setIsMember(Boolean(json.active))
+        const active = Boolean(json.active)
+        setIsMember(active)
+        if (active) {
+          const agreementStatus = await getDocusignStatus(accessToken)
+          if (!alive) return
+          setDocusignAccessToken(accessToken)
+          setDocusignStatus(agreementStatus)
+          setDocusignModalOpen(!agreementStatus.agreementsSigned)
+        }
         setLoading(false)
       } catch (e) {
         if (alive) {
@@ -155,6 +176,10 @@ export function AddPropertyIntroPage() {
       // Demo bypass (dev only): membership granted server-side, no payment.
       if (json.demo) {
         setIsMember(true)
+        const agreementStatus = await getDocusignStatus(accessToken)
+        setDocusignAccessToken(accessToken)
+        setDocusignStatus(agreementStatus)
+        setDocusignModalOpen(!agreementStatus.agreementsSigned)
         navigate('/onboarding/property/intro', { replace: true })
         return
       }
@@ -173,6 +198,17 @@ export function AddPropertyIntroPage() {
       setError(err instanceof Error ? err.message : 'Could not start checkout. Please try again.')
     } finally {
       setStarting(false)
+    }
+  }
+
+  async function handleDocusignCompleted() {
+    if (!docusignAccessToken) return
+    try {
+      const nextStatus = await getDocusignStatus(docusignAccessToken)
+      setDocusignStatus(nextStatus)
+      setDocusignModalOpen(!nextStatus.agreementsSigned)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not refresh agreement status.')
     }
   }
 
@@ -360,15 +396,31 @@ export function AddPropertyIntroPage() {
             </div>
           </div>
 
-          <Link
-            to="/onboarding/property/basic-info"
-            className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-lg btn-primary px-6 py-3 text-sm font-semibold text-white"
-          >
-            Add Property
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
+          {docusignStatus?.agreementsSigned ? (
+            <Link
+              to="/onboarding/property/basic-info"
+              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-lg btn-primary px-6 py-3 text-sm font-semibold text-white"
+            >
+              Add Property
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDocusignModalOpen(true)}
+              disabled={!docusignStatus || !docusignAccessToken}
+              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-lg btn-primary px-6 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Sign Agreements to Continue
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
+
+          {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
           <p className="mt-4 text-sm text-gray-400">You can save your progress and continue later.</p>
         </div>
@@ -380,6 +432,18 @@ export function AddPropertyIntroPage() {
           Your property will be visible to matched tenants only after completion
         </div>
       </div>
+
+      {docusignStatus && docusignAccessToken ? (
+        <LandlordAgreementsModal
+          open={docusignModalOpen}
+          status={docusignStatus}
+          accessToken={docusignAccessToken}
+          onSkip={() => undefined}
+          onCompleted={handleDocusignCompleted}
+          required
+          onboarding
+        />
+      ) : null}
     </div>
   )
 }

@@ -2415,7 +2415,7 @@ app.get('/api/admin/directory', async (req, res) => {
 
   const { data: profiles, error: pErr } = await admin
     .from('profiles')
-    .select('id, role, display_name, is_suspended, created_at, phone, avatar_url, equifax_approved_at, equifax_pending_since')
+    .select('id, role, display_name, is_suspended, created_at, phone, avatar_url, equifax_approved_at, equifax_pending_since, docusign_envelope_status, plaid_agreement_signed_at')
     .in('id', ids)
 
   if (pErr) {
@@ -2437,6 +2437,8 @@ app.get('/api/admin/directory', async (req, res) => {
       last_sign_in_at: u.last_sign_in_at ?? null,
       equifax_approved_at: (p?.equifax_approved_at as string | null | undefined) ?? null,
       equifax_pending_since: (p?.equifax_pending_since as string | null | undefined) ?? null,
+      docusign_envelope_status: (p?.docusign_envelope_status as string | null | undefined) ?? null,
+      plaid_agreement_signed_at: (p?.plaid_agreement_signed_at as string | null | undefined) ?? null,
     }
   })
 
@@ -3577,12 +3579,14 @@ app.get('/api/docusign/status', async (req, res) => {
   const equifaxSigned = p?.docusign_envelope_status === 'completed'
   const equifaxApproved = !!p?.equifax_approved_at
   const plaidSigned = !!p?.plaid_agreement_signed_at
+  const agreementsSigned = equifaxSigned && plaidSigned
 
   return res.json({
     equifaxSigned,
     equifaxApproved,
     equifaxPendingSince: equifaxSigned && !equifaxApproved,
     plaidSigned,
+    agreementsSigned,
     fullyVerified: equifaxApproved && plaidSigned,
   })
 })
@@ -3912,12 +3916,18 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
   if (approve) {
     const { data: profile } = await admin
       .from('profiles')
-      .select('docusign_envelope_status')
+      .select('docusign_envelope_status, plaid_agreement_signed_at')
       .eq('id', userId)
       .maybeSingle()
-    const signed = (profile as { docusign_envelope_status?: string | null } | null)?.docusign_envelope_status === 'completed'
-    if (!signed) {
-      return res.status(400).json({ error: 'This landlord has not completed signing the Equifax Broker Subscriber Agreement yet.' })
+    const agreementProfile = profile as {
+      docusign_envelope_status?: string | null
+      plaid_agreement_signed_at?: string | null
+    } | null
+    if (agreementProfile?.docusign_envelope_status !== 'completed') {
+      return res.status(400).json({ error: 'This landlord has not completed the Equifax Broker Subscriber Agreement.' })
+    }
+    if (!agreementProfile?.plaid_agreement_signed_at) {
+      return res.status(400).json({ error: 'This landlord has not completed the Plaid End Client Consent.' })
     }
   }
 

@@ -55,6 +55,7 @@ import { LandlordTenantProfilePage } from './pages/LandlordTenantProfilePage'
 import { TenantLandlordProfilePage } from './pages/TenantLandlordProfilePage'
 import { LandlordTenantReviewsPage } from './pages/LandlordTenantReviewsPage'
 import { AddPropertyIntroPage } from './pages/AddPropertyIntroPage'
+import { LandlordAgreementGate } from './components/LandlordAgreementGate'
 import { AddPropertyBasicInfoPage } from './pages/AddPropertyBasicInfoPage'
 import { AddPropertyCommunityPage } from './pages/AddPropertyCommunityPage'
 import { AddPropertyAmenitiesPage } from './pages/AddPropertyAmenitiesPage'
@@ -155,11 +156,13 @@ export default function App() {
         <Route path="survey" element={<CompatibilitySurveyPage />} />
         <Route path="survey/intro" element={<LandlordMatchPage />} />
         <Route path="property/intro" element={<AddPropertyIntroPage />} />
-        <Route path="property/basic-info" element={<AddPropertyBasicInfoPage />} />
-        <Route path="property/community" element={<AddPropertyCommunityPage />} />
-        <Route path="property/amenities" element={<AddPropertyAmenitiesPage />} />
-        <Route path="property/photos" element={<AddPropertyPhotosPage />} />
-        <Route path="property/preview" element={<AddPropertyPreviewPage />} />
+        <Route path="property" element={<LandlordAgreementGate />}>
+          <Route path="basic-info" element={<AddPropertyBasicInfoPage />} />
+          <Route path="community" element={<AddPropertyCommunityPage />} />
+          <Route path="amenities" element={<AddPropertyAmenitiesPage />} />
+          <Route path="photos" element={<AddPropertyPhotosPage />} />
+          <Route path="preview" element={<AddPropertyPreviewPage />} />
+        </Route>
       </Route>
       <Route path="/login" element={<Layout />}>
         <Route index element={user ? <PostLoginRedirect /> : <LoginPage />} />

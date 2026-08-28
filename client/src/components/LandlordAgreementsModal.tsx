@@ -63,12 +63,16 @@ export function LandlordAgreementsModal({
   accessToken,
   onSkip,
   onCompleted,
+  required = false,
+  onboarding = false,
 }: {
   open: boolean
   status: DocusignStatus
   accessToken: string
   onSkip: () => void
   onCompleted: () => void
+  required?: boolean
+  onboarding?: boolean
 }) {
   const [signingUrl, setSigningUrl] = useState<string | null>(null)
   const [signingType, setSigningType] = useState<AgreementKind | null>(null)
@@ -117,16 +121,18 @@ export function LandlordAgreementsModal({
       <div className="w-full max-w-[560px] rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
           <h2 className="text-base font-medium text-gray-900">Sign required agreements</h2>
-          <button
-            type="button"
-            onClick={onSkip}
-            aria-label="Close"
-            className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
+          {!required ? (
+            <button
+              type="button"
+              onClick={onSkip}
+              aria-label="Close"
+              className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          ) : null}
         </div>
 
         {signingUrl ? (
@@ -140,14 +146,15 @@ export function LandlordAgreementsModal({
         ) : (
           <div className="space-y-4 px-5 py-5">
             <p className="text-sm text-gray-600">
-              Before you can view tenant financial data, credit reports, or background checks,
-              you need to sign two required agreements.
+              {onboarding
+                ? 'Before you add your first property, please sign the two agreements required to access tenant screening information.'
+                : 'Before you can view tenant financial data, credit reports, or background checks, you need to sign two required agreements.'}
             </p>
 
             <AgreementRow
               title="Equifax Broker Subscriber Agreement"
               description="Required to run credit checks. After signing, Equifax reviews and approves access (about 24 hours)."
-              done={status.equifaxApproved}
+              done={status.equifaxSigned}
               pendingApproval={status.equifaxSigned && !status.equifaxApproved}
               onSign={() => void startSigning('equifax')}
               signing={signingType === 'equifax'}
@@ -163,12 +170,18 @@ export function LandlordAgreementsModal({
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <p className="text-center text-sm text-gray-500">
-              <button type="button" onClick={onSkip} className="underline hover:text-gray-700">
-                Skip for now
-              </button>{' '}
-              — you won&apos;t be able to view tenant details until both are signed
-            </p>
+            {required ? (
+              <p className="text-center text-sm text-gray-500">
+                Both agreements must be signed before you can continue to your first property.
+              </p>
+            ) : (
+              <p className="text-center text-sm text-gray-500">
+                <button type="button" onClick={onSkip} className="underline hover:text-gray-700">
+                  Skip for now
+                </button>{' '}
+                — you won&apos;t be able to view tenant details until both are signed
+              </p>
+            )}
           </div>
         )}
       </div>

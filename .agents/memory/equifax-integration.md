@@ -42,10 +42,10 @@ description: Architecture and decisions for the Equifax OneView credit check flo
 - Landlord: credit check card added to `LandlordTenantProfilePage` after `BankVerificationCard`; only visible when profile is unlocked
 - Admin: "Equifax Credit Access" section added to `AdminUserDetailPage` for landlord profiles (Approve/Revoke buttons)
 
-## DocuSign — PENDING
-- Jason has a DocuSign account but hasn't set up API access yet
-- Agreement template: `attached_assets/RENTAL_CITY_INC_-_Broker_Subcriber_Agreement_(Execution_7.10.docx`
-- Delivery email: michael.lucre@equifax.com
-- Current workaround: landlord clicks "Get Approved" → marks pending in DB → admin approves manually via admin panel
+## DocuSign onboarding rule
 
-**Why:** Equifax requires each landlord to sign a Broker Subscriber Agreement before accessing credit data. This is gated in the app by `equifax_approved_at` on the profile. DocuSign automates the signing but isn't blocking — admin can approve manually until DocuSign is wired up.
+Landlords must sign both the Equifax Broker Subscriber Agreement and Plaid End Client Consent after membership activation and before entering the first-property workflow. Signing alone does not grant tenant-screening access.
+
+**Why:** Property onboarding only needs proof that the required contracts were signed, while access to sensitive tenant data also requires a separate manual Equifax approval by an administrator.
+
+**How to apply:** Treat “both agreements signed” and “screening access approved” as separate states. The landlord may add a property once both documents are signed, but their account remains pending until the admin approval timestamp exists.

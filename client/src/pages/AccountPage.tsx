@@ -30,6 +30,7 @@ import {
   type LandlordReviewAboutTenantRow,
 } from '../lib/landlordReviewsAboutTenant'
 import { getTenantQuestionnaireChoiceLabel } from '../lib/tenantQuestionnaire'
+import { getDocusignStatus, type DocusignStatus } from '../lib/docusignApi'
 
 type TenantPreferencesRecord = {
   lease_length_months: number | null
@@ -110,6 +111,7 @@ export function AccountPage() {
     identity_verified: boolean | null
   } | null>(null)
   const [tenantScreening, setTenantScreening] = useState<{ status: string | null } | null>(null)
+  const [landlordAgreementStatus, setLandlordAgreementStatus] = useState<DocusignStatus | null>(null)
 
   useEffect(() => {
     async function loadProfile() {
@@ -173,6 +175,15 @@ export function AccountPage() {
         setLandlordReviewsAboutMe([])
         setBankVerification(null)
         setTenantScreening(null)
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (token) {
+          try {
+            setLandlordAgreementStatus(await getDocusignStatus(token))
+          } catch {
+            setLandlordAgreementStatus(null)
+          }
+        }
       }
     }
 
@@ -391,6 +402,45 @@ export function AccountPage() {
           </div>
 
           <div className="space-y-5">
+            <Card title="Screening Access">
+              {landlordAgreementStatus ? (
+                <>
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      landlordAgreementStatus.fullyVerified
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : landlordAgreementStatus.agreementsSigned
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-red-50 text-red-700'
+                    }`}
+                  >
+                    {landlordAgreementStatus.fullyVerified
+                      ? 'Approved'
+                      : landlordAgreementStatus.agreementsSigned
+                        ? 'Pending admin approval'
+                        : 'Agreements required'}
+                  </span>
+                  <p className="mt-3 text-xs leading-5 text-gray-500">
+                    {landlordAgreementStatus.fullyVerified
+                      ? 'Your account is approved to access tenant screening information.'
+                      : landlordAgreementStatus.agreementsSigned
+                        ? 'Both agreements are signed. Rental City is reviewing your screening access.'
+                        : 'Sign the Equifax and Plaid agreements to continue landlord onboarding.'}
+                  </p>
+                  {!landlordAgreementStatus.agreementsSigned ? (
+                    <Link
+                      to="/onboarding/property/intro"
+                      className="mt-4 inline-flex rounded-lg btn-primary px-4 py-2.5 text-sm font-medium text-white"
+                    >
+                      Sign agreements
+                    </Link>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">Agreement status is temporarily unavailable.</p>
+              )}
+            </Card>
+
             <Card title="Responsiveness">
               {responseMetricsLoading ? (
                 <p className="text-sm text-gray-500">Calculating your score…</p>

@@ -620,7 +620,7 @@ export function LandlordTenantProfilePage() {
       setDocusignStatus(result)
       // Only auto-close once BOTH required agreements are done — one signed
       // document isn't enough, so keep the modal open to prompt the other.
-      if (result.fullyVerified) setDocusignModalOpen(false)
+      if (result.agreementsSigned) setDocusignModalOpen(false)
     })
   }
 
