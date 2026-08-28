@@ -6,6 +6,7 @@ import { useProfileRole } from '../lib/useProfileRole'
 import { useRedeemPendingLandlordInvite } from '../lib/useRedeemPendingLandlordInvite'
 import { useTenantInviteRestriction } from '../lib/useTenantInviteRestriction'
 import { tenantSideEnabledForEmail } from '../lib/featureFlags'
+import { supabase } from '../lib/supabase'
 import { TenantInviteBanner } from './TenantInviteBanner'
 import { TenantSideComingSoon } from './TenantSideComingSoon'
 import { UserMenu } from './UserMenu'
@@ -104,7 +105,8 @@ export function TenantLayout() {
           sessionStorage.setItem(skippedKey, 'true')
           setAgreementModalOpen(true)
         }
-      } catch {
+      } catch (error) {
+        console.error('Could not load landlord agreement reminder status:', error)
         // Agreement reminders are non-blocking. The existing tenant-profile
         // screen still handles its own access check if this request fails.
       }
