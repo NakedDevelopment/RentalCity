@@ -583,9 +583,9 @@ export function LandlordTenantProfilePage() {
       })
   }, [user])
 
-  // Landlord must sign both required agreements before viewing tenant details
-  // (Plaid data, credit check, background check). Show a skippable pop-up
-  // once per session if they haven't completed both yet.
+  // Load agreement state for this tenant profile. The shared TenantLayout owns
+  // the login reminder and persistent banner; this page still supports opening
+  // the modal from its screening/access cards.
   useEffect(() => {
     if (!user || !hasUnlockedProfileAccess) return
     let cancelled = false
@@ -598,10 +598,6 @@ export function LandlordTenantProfilePage() {
         const result = await getDocusignStatus(token)
         if (cancelled) return
         setDocusignStatus(result)
-        const skippedKey = `docusign-agreements-skipped-${user.id}`
-        if (!result.fullyVerified && sessionStorage.getItem(skippedKey) !== 'true') {
-          setDocusignModalOpen(true)
-        }
       } catch {
         // non-blocking — don't gate the page if the status check itself fails
       }

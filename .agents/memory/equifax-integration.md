@@ -49,3 +49,11 @@ Landlords must sign both the Equifax Broker Subscriber Agreement and Plaid End C
 **Why:** Property onboarding only needs proof that the required contracts were signed, while access to sensitive tenant data also requires a separate manual Equifax approval by an administrator.
 
 **How to apply:** Treat “both agreements signed” and “screening access approved” as separate states. The landlord may add a property once both documents are signed, but their account remains pending until the admin approval timestamp exists.
+
+## Existing-landlord reminder rule
+
+Landlords who already have at least one property but have not signed both agreements get a skippable reminder once per login. Deferring it leaves a persistent authenticated-app banner with direct signing access.
+
+**Why:** Existing landlords predate the onboarding gate, but they still must understand that tenant credit and background checks remain unavailable until the required agreements are signed.
+
+**How to apply:** Keep the banner visible across landlord pages until both signatures exist. Do not block ordinary property management, and do not keep the banner merely because Equifax admin approval is still pending.

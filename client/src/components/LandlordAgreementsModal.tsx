@@ -85,7 +85,10 @@ export function LandlordAgreementsModal({
       if (data?.source !== 'docusign-return') return
       setSigningUrl(null)
       setSigningType(null)
-      if (data.completed) onCompleted()
+       if (data.completed) {
+         window.dispatchEvent(new Event('rental-city-docusign-completed'))
+         onCompleted()
+       }
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
@@ -177,7 +180,7 @@ export function LandlordAgreementsModal({
             ) : (
               <p className="text-center text-sm text-gray-500">
                 <button type="button" onClick={onSkip} className="underline hover:text-gray-700">
-                  Skip for now
+                  No, I&apos;ll do this later
                 </button>{' '}
                 — you won&apos;t be able to view tenant details until both are signed
               </p>

@@ -9,6 +9,8 @@ import { tenantSideEnabledForEmail } from '../lib/featureFlags'
 import { TenantInviteBanner } from './TenantInviteBanner'
 import { TenantSideComingSoon } from './TenantSideComingSoon'
 import { UserMenu } from './UserMenu'
+import { LandlordAgreementsModal } from './LandlordAgreementsModal'
+import { getDocusignStatus, type DocusignStatus } from '../lib/docusignApi'
 
 type NavItem = { path: string; label: string; icon: LucideIcon; external?: boolean }
 
@@ -52,6 +54,10 @@ export function TenantLayout() {
   const navigate = useNavigate()
   const { role: profileRole, displayName, landlordSurveyCompletedAt, loading: roleLoading } = useProfileRole(user)
   const [inviteBannerKey, setInviteBannerKey] = useState(0)
+  const [landlordAgreementStatus, setLandlordAgreementStatus] = useState<DocusignStatus | null>(null)
+  const [landlordAgreementToken, setLandlordAgreementToken] = useState<string | null>(null)
+  const [hasLandlordProperties, setHasLandlordProperties] = useState(false)
+  const [agreementModalOpen, setAgreementModalOpen] = useState(false)
 
   useRedeemPendingLandlordInvite(user, profileRole, roleLoading)
   const inviteRestriction = useTenantInviteRestriction(user, profileRole, inviteBannerKey)
@@ -63,6 +69,81 @@ export function TenantLayout() {
     window.addEventListener('rental-city-invite-redeemed', onRedeemed)
     return () => window.removeEventListener('rental-city-invite-redeemed', onRedeemed)
   }, [])
+
+  // Existing landlords with properties should be reminded at login, but can
+  // defer the modal. The banner remains until both agreements are signed.
+  useEffect(() => {
+    if (roleLoading || !user || profileRole !== 'landlord') {
+      setLandlordAgreementStatus(null)
+      setLandlordAgreementToken(null)
+      setHasLandlordProperties(false)
+      setAgreementModalOpen(false)
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [{ count: propertyCount }, { data: sessionData }] = await Promise.all([
+          supabase.from('properties').select('id', { count: 'exact', head: true }).eq('landlord_id', user.id),
+          supabase.auth.getSession(),
+        ])
+        const token = sessionData.session?.access_token
+        if (!token || cancelled) return
+        const status = await getDocusignStatus(token)
+        if (cancelled) return
+
+        const hasProperties = (propertyCount ?? 0) > 0
+        setLandlordAgreementToken(token)
+        setLandlordAgreementStatus(status)
+        setHasLandlordProperties(hasProperties)
+
+        const loginMarker = user.last_sign_in_at ?? user.updated_at
+        const skippedKey = `docusign-agreements-reminder-seen-${user.id}-${loginMarker}`
+        if (hasProperties && !status.agreementsSigned && sessionStorage.getItem(skippedKey) !== 'true') {
+          sessionStorage.setItem(skippedKey, 'true')
+          setAgreementModalOpen(true)
+        }
+      } catch {
+        // Agreement reminders are non-blocking. The existing tenant-profile
+        // screen still handles its own access check if this request fails.
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [profileRole, roleLoading, user])
+
+  async function refreshLandlordAgreementStatus() {
+    if (!landlordAgreementToken) return
+    try {
+      const status = await getDocusignStatus(landlordAgreementToken)
+      setLandlordAgreementStatus(status)
+      if (status.agreementsSigned) {
+        setAgreementModalOpen(false)
+      }
+    } catch {
+      // Keep the current reminder visible if a refresh temporarily fails.
+    }
+  }
+
+  useEffect(() => {
+    if (!landlordAgreementToken || profileRole !== 'landlord') return
+    const handleDocusignCompleted = () => {
+      void refreshLandlordAgreementStatus()
+    }
+    window.addEventListener('rental-city-docusign-completed', handleDocusignCompleted)
+    return () => window.removeEventListener('rental-city-docusign-completed', handleDocusignCompleted)
+  }, [landlordAgreementToken, profileRole])
+
+  function skipLandlordAgreementReminder() {
+    if (user) {
+      const loginMarker = user.last_sign_in_at ?? user.updated_at
+      sessionStorage.setItem(`docusign-agreements-reminder-seen-${user.id}-${loginMarker}`, 'true')
+    }
+    setAgreementModalOpen(false)
+  }
 
   useEffect(() => {
     if (roleLoading) return
@@ -178,6 +259,24 @@ export function TenantLayout() {
 
         {/* Content Area */}
         <main className="flex-1 overflow-auto min-w-0 bg-[#F8FAFD]">
+          {profileRole === 'landlord' && hasLandlordProperties && landlordAgreementStatus && !landlordAgreementStatus.agreementsSigned ? (
+            <div
+              role="alert"
+              className="flex flex-col gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"
+            >
+              <p>
+                <span className="font-semibold">Action required:</span> Sign your agreements to run credit checks or background checks on tenants.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAgreementModalOpen(true)}
+                className="inline-flex shrink-0 items-center justify-center rounded-lg bg-amber-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
+              >
+                Sign agreements
+              </button>
+            </div>
+          ) : null}
+
           {/* Mobile nav (sidebar is hidden under md) */}
           <nav className="md:hidden flex items-center gap-1.5 overflow-x-auto bg-white border-b border-gray-200/60 px-4 py-2">
             {navItems.map((item) => {
@@ -225,6 +324,16 @@ export function TenantLayout() {
           </nav>
         </div>
       </footer>
+
+      {profileRole === 'landlord' && landlordAgreementStatus && landlordAgreementToken ? (
+        <LandlordAgreementsModal
+          open={agreementModalOpen}
+          status={landlordAgreementStatus}
+          accessToken={landlordAgreementToken}
+          onSkip={skipLandlordAgreementReminder}
+          onCompleted={() => void refreshLandlordAgreementStatus()}
+        />
+      ) : null}
     </div>
   )
 }
