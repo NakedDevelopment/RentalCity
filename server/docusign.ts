@@ -202,6 +202,10 @@ export async function createEmbeddedEnvelope(args: CreateEmbeddedEnvelopeArgs): 
     name: args.signer.name,
     recipientId: '1',
     clientUserId: args.signer.clientUserId,
+    // These agreements are intended to be signed by the already-authenticated
+    // landlord in the embedded ceremony. Explicitly disable DocuSign recipient
+    // ID lookup so an account-level SMS/phone-auth default is not inherited.
+    requireIdLookup: 'false',
     tabs: buildTabs(args.tabs),
   }
 
