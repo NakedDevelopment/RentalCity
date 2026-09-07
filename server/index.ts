@@ -3470,6 +3470,22 @@ app.post('/api/equifax/background-check/:tenantId', async (req, res) => {
 // (self-serve — stored on our end only, no external approval).
 // ---------------------------------------------------------------------------
 
+function isHttpNotFound(error: unknown): boolean {
+  const err = error as {
+    status?: number
+    statusCode?: number
+    response?: { status?: number; statusCode?: number }
+    message?: string
+  }
+  return (
+    err.status === 404 ||
+    err.statusCode === 404 ||
+    err.response?.status === 404 ||
+    err.response?.statusCode === 404 ||
+    /status code 404/i.test(err.message ?? '')
+  )
+}
+
 type LandlordProfileRow = {
   display_name?: string | null
   business_name?: string | null
@@ -3609,17 +3625,16 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
   const returnUrl = `${lifecycleAppUrl(req)}/docusign/return?type=equifax`
 
   try {
-    let envelopeId = p?.docusign_envelope_id || null
-    if (!envelopeId || p?.docusign_envelope_status === 'declined' || p?.docusign_envelope_status === 'voided') {
+    const createEnvelope = async () => {
       const { base64, fileExtension } = loadEquifaxAgreementDocument()
       const tabs: AnchorTab[] = [
-        { anchorString: 'SUBSCRIBER:', type: 'text', value: businessName, xOffset: '10' },
-        { anchorString: 'Signed by:', type: 'sign', xOffset: '10' },
-        { anchorString: 'Printed Name', type: 'text', value: landlordName, xOffset: '75' },
-        { anchorString: 'Title:', type: 'text', xOffset: '10' },
-        { anchorString: 'Date:', type: 'text', value: new Date().toISOString().slice(0, 10), xOffset: '10' },
+        { anchorString: 'SUBSCRIBER:', type: 'text' as const, value: businessName, xOffset: '10' },
+        { anchorString: 'Signed by:', type: 'sign' as const, xOffset: '10' },
+        { anchorString: 'Printed Name', type: 'text' as const, value: landlordName, xOffset: '75' },
+        { anchorString: 'Title:', type: 'text' as const, xOffset: '10' },
+        { anchorString: 'Date:', type: 'text' as const, value: new Date().toISOString().slice(0, 10), xOffset: '10' },
       ]
-      envelopeId = await createEmbeddedEnvelope({
+      const createdEnvelopeId = await createEmbeddedEnvelope({
         documentBase64: base64,
         documentName: 'Equifax Broker Subscriber Agreement.docx',
         fileExtension,
@@ -3629,16 +3644,35 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
         returnUrl,
       })
       await admin.from('profiles').update({
-        docusign_envelope_id: envelopeId,
+        docusign_envelope_id: createdEnvelopeId,
         docusign_envelope_status: 'sent',
       }).eq('id', user.id)
+      return createdEnvelopeId
     }
 
-    const signingUrl = await createEmbeddedSigningUrl(
-      envelopeId,
-      { name: landlordName, email: user.email ?? '', clientUserId: user.id },
-      `${returnUrl}&envelopeId=${envelopeId}`,
-    )
+    let envelopeId = p?.docusign_envelope_id || null
+    if (!envelopeId || p?.docusign_envelope_status === 'declined' || p?.docusign_envelope_status === 'voided') {
+      envelopeId = await createEnvelope()
+    }
+
+    let signingUrl: string
+    try {
+      signingUrl = await createEmbeddedSigningUrl(
+        envelopeId,
+        { name: landlordName, email: user.email ?? '', clientUserId: user.id },
+        `${returnUrl}&envelopeId=${envelopeId}`,
+      )
+    } catch (err) {
+      if (p?.docusign_envelope_status === 'completed' || !isHttpNotFound(err)) throw err
+      // Demo envelope IDs do not exist after switching to production. Replace
+      // only an incomplete missing envelope; completed agreement state is kept.
+      envelopeId = await createEnvelope()
+      signingUrl = await createEmbeddedSigningUrl(
+        envelopeId,
+        { name: landlordName, email: user.email ?? '', clientUserId: user.id },
+        `${returnUrl}&envelopeId=${envelopeId}`,
+      )
+    }
     return res.json({ envelopeId, signingUrl })
   } catch (err) {
     console.error('DocuSign Equifax envelope error:', (err as Error).message)
@@ -3664,14 +3698,13 @@ app.post('/api/docusign/plaid-consent/create', async (req, res) => {
   const returnUrl = `${lifecycleAppUrl(req)}/docusign/return?type=plaid`
 
   try {
-    let envelopeId = p?.plaid_agreement_envelope_id || null
-    if (!envelopeId) {
+    const createEnvelope = async () => {
       const { base64, fileExtension } = loadPlaidConsentDocument({ name: landlordName, businessName })
       const tabs: AnchorTab[] = [
-        { anchorString: 'Signature:', type: 'sign', xOffset: '10' },
-        { anchorString: 'Date:', type: 'text', value: new Date().toISOString().slice(0, 10), xOffset: '10' },
+        { anchorString: 'Signature:', type: 'sign' as const, xOffset: '10' },
+        { anchorString: 'Date:', type: 'text' as const, value: new Date().toISOString().slice(0, 10), xOffset: '10' },
       ]
-      envelopeId = await createEmbeddedEnvelope({
+      const createdEnvelopeId = await createEmbeddedEnvelope({
         documentBase64: base64,
         documentName: 'Plaid End Client Consent Agreement.html',
         fileExtension,
@@ -3680,14 +3713,31 @@ app.post('/api/docusign/plaid-consent/create', async (req, res) => {
         tabs,
         returnUrl,
       })
-      await admin.from('profiles').update({ plaid_agreement_envelope_id: envelopeId }).eq('id', user.id)
+      await admin.from('profiles').update({ plaid_agreement_envelope_id: createdEnvelopeId }).eq('id', user.id)
+      return createdEnvelopeId
     }
 
-    const signingUrl = await createEmbeddedSigningUrl(
-      envelopeId,
-      { name: landlordName, email: user.email ?? '', clientUserId: user.id },
-      `${returnUrl}&envelopeId=${envelopeId}`,
-    )
+    let envelopeId = p?.plaid_agreement_envelope_id || null
+    if (!envelopeId) {
+      envelopeId = await createEnvelope()
+    }
+
+    let signingUrl: string
+    try {
+      signingUrl = await createEmbeddedSigningUrl(
+        envelopeId,
+        { name: landlordName, email: user.email ?? '', clientUserId: user.id },
+        `${returnUrl}&envelopeId=${envelopeId}`,
+      )
+    } catch (err) {
+      if (p?.plaid_agreement_signed_at || !isHttpNotFound(err)) throw err
+      envelopeId = await createEnvelope()
+      signingUrl = await createEmbeddedSigningUrl(
+        envelopeId,
+        { name: landlordName, email: user.email ?? '', clientUserId: user.id },
+        `${returnUrl}&envelopeId=${envelopeId}`,
+      )
+    }
     return res.json({ envelopeId, signingUrl })
   } catch (err) {
     console.error('DocuSign Plaid envelope error:', (err as Error).message)
