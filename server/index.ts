@@ -3038,6 +3038,39 @@ app.post('/api/equifax/landlord/request-approval', async (req, res) => {
   return res.json({ ok: true })
 })
 
+async function getLandlordScreeningAccess(admin: SupabaseClient, landlordId: string) {
+  const { data } = await admin
+    .from('profiles')
+    .select('equifax_approved_at, docusign_envelope_status, plaid_agreement_signed_at')
+    .eq('id', landlordId)
+    .maybeSingle()
+  const profile = data as {
+    equifax_approved_at?: string | null
+    docusign_envelope_status?: string | null
+    plaid_agreement_signed_at?: string | null
+  } | null
+  return {
+    approved: !!profile?.equifax_approved_at,
+    agreementsSigned:
+      profile?.docusign_envelope_status === 'completed' &&
+      !!profile?.plaid_agreement_signed_at,
+  }
+}
+
+async function requireLandlordScreeningAccess(
+  admin: SupabaseClient,
+  landlordId: string,
+): Promise<{ allowed: true } | { allowed: false; status: number; error: string }> {
+  const access = await getLandlordScreeningAccess(admin, landlordId)
+  if (!access.agreementsSigned) {
+    return { allowed: false, status: 403, error: 'You must sign both required agreements before accessing tenant screening.' }
+  }
+  if (!access.approved) {
+    return { allowed: false, status: 403, error: 'You must be approved for Equifax access before accessing tenant screening.' }
+  }
+  return { allowed: true }
+}
+
 // Landlord: get credit check info for a specific tenant, scoped to the
 // tenant's current active application window.
 app.get('/api/equifax/credit-check/:tenantId', async (req, res) => {
@@ -3046,6 +3079,11 @@ app.get('/api/equifax/credit-check/:tenantId', async (req, res) => {
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { tenantId } = req.params
+
+  const screeningAccess = await requireLandlordScreeningAccess(admin, user.id)
+  if (!screeningAccess.allowed) {
+    return res.status(screeningAccess.status).json({ error: screeningAccess.error })
+  }
 
   if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
     return res.status(403).json({ error: 'You must unlock this tenant’s profile before viewing credit check status.' })
@@ -3094,14 +3132,9 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { tenantId } = req.params
 
-  // Landlord must be Equifax-approved
-  const { data: lProfile } = await admin
-    .from('profiles')
-    .select('equifax_approved_at')
-    .eq('id', user.id)
-    .maybeSingle()
-  if (!(lProfile as { equifax_approved_at?: string | null } | null)?.equifax_approved_at) {
-    return res.status(403).json({ error: 'You must be approved for Equifax access before running credit checks.' })
+  const screeningAccess = await requireLandlordScreeningAccess(admin, user.id)
+  if (!screeningAccess.allowed) {
+    return res.status(screeningAccess.status).json({ error: screeningAccess.error })
   }
 
   if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
@@ -3232,6 +3265,11 @@ app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { tenantId } = req.params
 
+  const screeningAccess = await requireLandlordScreeningAccess(admin, user.id)
+  if (!screeningAccess.allowed) {
+    return res.status(screeningAccess.status).json({ error: screeningAccess.error })
+  }
+
   if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
     return res.status(403).json({ error: 'You must unlock this tenant’s profile before viewing a credit report.' })
   }
@@ -3293,6 +3331,11 @@ app.get('/api/equifax/background-check/:tenantId', async (req, res) => {
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { tenantId } = req.params
 
+  const screeningAccess = await requireLandlordScreeningAccess(admin, user.id)
+  if (!screeningAccess.allowed) {
+    return res.status(screeningAccess.status).json({ error: screeningAccess.error })
+  }
+
   if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
     return res.status(403).json({ error: 'You must unlock this tenant’s profile before viewing background check status.' })
   }
@@ -3336,13 +3379,9 @@ app.post('/api/equifax/background-check/:tenantId', async (req, res) => {
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { tenantId } = req.params
 
-  const { data: lProfile } = await admin
-    .from('profiles')
-    .select('equifax_approved_at')
-    .eq('id', user.id)
-    .maybeSingle()
-  if (!(lProfile as { equifax_approved_at?: string | null } | null)?.equifax_approved_at) {
-    return res.status(403).json({ error: 'You must be approved for Equifax access before running background checks.' })
+  const screeningAccess = await requireLandlordScreeningAccess(admin, user.id)
+  if (!screeningAccess.allowed) {
+    return res.status(screeningAccess.status).json({ error: screeningAccess.error })
   }
 
   if (!(await landlordHasUnlockedTenant(admin, user.id, tenantId))) {
