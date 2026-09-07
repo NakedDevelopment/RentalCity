@@ -1204,14 +1204,14 @@ export function LandlordTenantProfilePage() {
                 <BankVerificationCard
                   verification={tenantBankVerification}
                   unlocked={hasUnlockedProfileAccess}
-                  docusignVerified={!docusignStatus || docusignStatus.fullyVerified}
+                  docusignVerified={!docusignStatus || docusignStatus.agreementsSigned}
                   onSignAgreements={() => setDocusignModalOpen(true)}
                 />
 
                 {/* Equifax credit check — visible only after profile is unlocked */}
                 {hasUnlockedProfileAccess && (
                   <ProfileContentCard title="Credit Check">
-                    {docusignStatus && !docusignStatus.fullyVerified ? (
+                    {docusignStatus && !docusignStatus.agreementsSigned ? (
                       <div className="space-y-3">
                         <p className="text-sm text-gray-600">
                           Sign the required agreements before you can run credit checks on tenants.
@@ -1308,7 +1308,7 @@ export function LandlordTenantProfilePage() {
                 {/* Equifax background check (NCIS-Alias + AssuredTenant Alias) — visible only after profile is unlocked */}
                 {hasUnlockedProfileAccess && (
                   <ProfileContentCard title="Background Check">
-                    {docusignStatus && !docusignStatus.fullyVerified ? (
+                    {docusignStatus && !docusignStatus.agreementsSigned ? (
                       <div className="space-y-3">
                         <p className="text-sm text-gray-600">
                           Sign the required agreements before you can run background checks on tenants.
