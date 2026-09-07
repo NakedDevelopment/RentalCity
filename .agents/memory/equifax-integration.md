@@ -73,3 +73,11 @@ DocuSign JWT key normalization must accept PEM values whose header, base64 body,
 **Why:** Deployment secret storage can remove all PEM line breaks while preserving the markers; Node’s crypto decoder rejects that otherwise-valid RSA key shape.
 
 **How to apply:** Reconstruct standard 64-character PEM body lines before RSA validation. Continue validating with Node crypto and reject non-RSA or malformed key material without logging the secret.
+
+## DocuSign production promotion
+
+Legacy-promoted DocuSign integrations have separate production authentication settings even though the production integration-key value can match demo. Register an RSA public key and redirect/legal URLs from the paid account's Apps and Keys editor, then grant `signature impersonation` consent to the production user.
+
+**Why:** Demo RSA keys and redirect URLs may remain visible on the developer account without being usable in production. `no_valid_keys_or_signatures` indicates the private key has no matching production public key; `consent_required` means the key works but production-user consent is missing.
+
+**How to apply:** Confirm the account base URI does not contain `demo`; use the paid account's API Account ID, User ID, and base URI. Verify with a token-only JWT request and a read-only account API request before creating any production envelope.
