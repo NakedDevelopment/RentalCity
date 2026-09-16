@@ -32,6 +32,14 @@ Equifax dashboard applications promoted to Test use the UAT host, while the OAut
 - Format: `<iv_hex>:<authTag_hex>:<ciphertext_hex>`
 - Decrypted only in memory during the Equifax API call; SSN never logged or returned to clients
 
+## Encryption-key rotation
+
+Existing encrypted tenant consent cannot be decrypted after `SSN_ENCRYPTION_KEY` changes unless the old key is retained for migration or the tenant submits consent again.
+
+**Why:** A CTEST consent seeded under an earlier key failed before reaching Equifax with Node's “Unsupported state or unable to authenticate data” AES-GCM error.
+
+**How to apply:** Treat key changes as data migrations. Version ciphertext/key IDs or re-encrypt existing consent before activating a new key; for disposable test records, regenerate the encrypted CTEST consent with the active key.
+
 ## Database schema (migration 20260811000001)
 - `profiles`: `equifax_approved_at`, `equifax_pending_since`, `docusign_envelope_id`, `docusign_envelope_status`
 - `tenant_credit_consent` (PK: tenant_id): encrypted SSN + address fields needed for Equifax pull; tenant-only RLS
