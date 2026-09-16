@@ -11,6 +11,11 @@ config({ path: '.env.development.local' })
 config({ path: '.env.local' })
 config()
 import { createClient } from '@supabase/supabase-js'
+// Real encryptField/decryptField from the app itself (not a reimplementation) — Node's
+// native TS type-stripping (server/equifax.ts has no non-erasable syntax) lets a plain
+// `node` script import it directly, so the seeded SSN is genuinely encrypted the same
+// way the real /api/equifax/consent route encrypts it.
+import { encryptField, decryptField } from '../server/equifax.ts'
 
 const url = process.env.VITE_SUPABASE_URL
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -51,7 +56,10 @@ async function main() {
   /** Extra tenant accounts so landlord@test can have many distinct ratings (unique per tenant_external_id). */
   const ratingDemoTenants = []
 
-  const { data: existingUsers } = await supabase.auth.admin.listUsers({ perPage: 100 })
+  // perPage must cover the project's real total user count, or accounts created
+  // outside page 1 (like a long-lived test landlord in an active project) silently
+  // fail every existence check below and this then tries to (re)create them.
+  const { data: existingUsers } = await supabase.auth.admin.listUsers({ perPage: 1000 })
   const landlordUser = existingUsers?.users?.find((u) => u.email === 'landlord@test.rentalcity.com')
   const tenantUser = existingUsers?.users?.find((u) => u.email === 'tenant@test.rentalcity.com')
   const declinedTenantUser = existingUsers?.users?.find((u) => u.email === 'declined@test.rentalcity.com')
@@ -909,6 +917,172 @@ async function main() {
       .update({ role: 'admin', display_name: 'System Admin' })
       .eq('id', adminId)
     if (arErr) console.warn('Admin profile role update:', arErr.message)
+  }
+
+  // ─── Equifax credit-check demo state (landlord@test ↔ tenant@test) ──────────
+  // Puts both accounts in the exact state server/index.ts's gating functions require,
+  // so "Run credit check" / "Download credit report (PDF)" are clickable immediately
+  // after seeding — no manual DocuSign signing or admin approval needed locally.
+  // Reuses tenant@test's existing *approved* application to 123 Oak Street (landlordId),
+  // which already satisfies landlordHasUnlockedTenant on its own — no separate "unlock"
+  // step needed for this pair. Uses the same CTEST 666000001 test consumer already
+  // verified against Equifax UAT via scripts/test-equifax-sandbox.ts.
+  {
+    const nowIso = new Date().toISOString()
+
+    // 1. Landlord: mark both required agreements signed + Equifax-approved.
+    //    (getLandlordScreeningAccess in server/index.ts checks exactly these 3 columns.)
+    const { error: landlordApprovalErr } = await supabase
+      .from('profiles')
+      .update({
+        equifax_approved_at: nowIso,
+        docusign_envelope_id: 'demo-envelope-equifax-broker-subscriber',
+        docusign_envelope_status: 'completed',
+        plaid_agreement_envelope_id: 'demo-envelope-plaid-end-client',
+        plaid_agreement_signed_at: nowIso,
+      })
+      .eq('id', landlordId)
+    if (landlordApprovalErr) {
+      console.error('Equifax demo: landlord approval update:', landlordApprovalErr.message)
+    } else {
+      console.log('Equifax demo: landlord@test approved + both agreements marked signed')
+    }
+
+    // 2. Tenant: ensure an active 6-month universal application window
+    //    (resolveActiveUniversalApplicationId requires status='active' AND valid_until > now()).
+    const { data: existingActiveWindow } = await supabase
+      .from('universal_applications')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'active')
+      .gt('valid_until', nowIso)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    let universalApplicationId = existingActiveWindow?.id ?? null
+    if (!universalApplicationId) {
+      const validUntil = new Date()
+      validUntil.setMonth(validUntil.getMonth() + 6)
+      const { data: newWindow, error: windowErr } = await supabase
+        .from('universal_applications')
+        .insert({ tenant_id: tenantId, status: 'active', valid_until: validUntil.toISOString() })
+        .select('id')
+        .single()
+      if (windowErr) {
+        console.error('Equifax demo: universal application window:', windowErr.message)
+      } else {
+        universalApplicationId = newWindow.id
+        console.log('Equifax demo: opened active universal_applications window for tenant@test:', universalApplicationId)
+      }
+    } else {
+      console.log('Equifax demo: tenant@test already has an active universal_applications window:', universalApplicationId)
+    }
+
+    // 3. Tenant credit consent: real CTEST test consumer (666000001), encrypted with the
+    //    same encryptField() the real POST /api/equifax/consent route uses.
+    if (universalApplicationId) {
+      let ssnEncrypted, dobEncrypted
+      try {
+        ssnEncrypted = encryptField('666000001')
+        dobEncrypted = encryptField('1971-06-03')
+      } catch (err) {
+        console.error(
+          'Equifax demo: could not encrypt consent (is SSN_ENCRYPTION_KEY set in .env?):',
+          err.message,
+        )
+      }
+      if (ssnEncrypted && dobEncrypted) {
+        const { error: consentErr } = await supabase.from('tenant_credit_consent').upsert(
+          {
+            tenant_id: tenantId,
+            universal_application_id: universalApplicationId,
+            ssn_encrypted: ssnEncrypted,
+            date_of_birth_encrypted: dobEncrypted,
+            first_name: 'KBJGCP',
+            last_name: 'XSCNF',
+            house_number: '1886',
+            street_name: 'VBPLDNRC',
+            street_type: 'TRWY',
+            city: 'TUSCALOOSA',
+            state: 'AL',
+            zip: '35425',
+            consent_given_at: nowIso,
+            updated_at: nowIso,
+          },
+          { onConflict: 'tenant_id,universal_application_id' },
+        )
+        if (consentErr) {
+          console.error('Equifax demo: tenant_credit_consent upsert:', consentErr.message)
+        } else {
+          console.log('Equifax demo: tenant@test consent saved (CTEST SSN 666000001, AES-256-GCM encrypted)')
+        }
+
+        // Prove the ciphertext is genuinely readable by the real decrypt path, not just
+        // insertable — the same decryptField() server/index.ts calls at credit-check time.
+        try {
+          const roundTrip = decryptField(ssnEncrypted)
+          console.log(
+            roundTrip === '666000001'
+              ? 'Equifax demo: encryption round-trip verified (decryptField matches the seeded SSN)'
+              : 'Equifax demo: WARNING — decrypted SSN does not match what was seeded',
+          )
+        } catch (err) {
+          console.error('Equifax demo: encryption round-trip check failed:', err.message)
+        }
+      }
+    }
+
+    // 4. Verify the actual gating logic — not just that rows exist, but that the same
+    //    queries server/index.ts runs at request time would actually pass.
+    const { data: gateProfile } = await supabase
+      .from('profiles')
+      .select('equifax_approved_at, docusign_envelope_status, plaid_agreement_signed_at')
+      .eq('id', landlordId)
+      .maybeSingle()
+    const gateApproved = !!gateProfile?.equifax_approved_at
+    const gateAgreementsSigned =
+      gateProfile?.docusign_envelope_status === 'completed' && !!gateProfile?.plaid_agreement_signed_at
+
+    const { data: gateApps } = await supabase
+      .from('applications')
+      .select('status, unlocked_at, property:property_id(landlord_id)')
+      .eq('tenant_id', tenantId)
+    const gateUnlocked = (gateApps ?? [])
+      .map((r) => ({ ...r, property: Array.isArray(r.property) ? r.property[0] : r.property }))
+      .filter((r) => r.property?.landlord_id === landlordId)
+      .some((r) => r.status === 'approved' || r.status === 'rejected' || (r.status === 'pending' && r.unlocked_at != null))
+
+    const { data: gateWindow } = await supabase
+      .from('universal_applications')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'active')
+      .gt('valid_until', nowIso)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const { data: gateConsent } = await supabase
+      .from('tenant_credit_consent')
+      .select('tenant_id')
+      .eq('tenant_id', tenantId)
+      .eq('universal_application_id', gateWindow?.id ?? '')
+      .maybeSingle()
+
+    const allGatesPass = gateAgreementsSigned && gateApproved && gateUnlocked && !!gateWindow?.id && !!gateConsent
+    console.log('')
+    console.log('Equifax credit-check gating check (mirrors server/index.ts exactly):')
+    console.log(`  [${gateAgreementsSigned ? 'PASS' : 'FAIL'}] landlord agreements signed (docusign_envelope_status='completed' + plaid_agreement_signed_at set)`)
+    console.log(`  [${gateApproved ? 'PASS' : 'FAIL'}] landlord Equifax-approved (equifax_approved_at set)`)
+    console.log(`  [${gateUnlocked ? 'PASS' : 'FAIL'}] landlord has unlocked tenant@test's profile`)
+    console.log(`  [${gateWindow?.id ? 'PASS' : 'FAIL'}] tenant has an active universal application window`)
+    console.log(`  [${gateConsent ? 'PASS' : 'FAIL'}] tenant credit consent saved for that window`)
+    console.log(
+      allGatesPass
+        ? '  => "Run credit check" should be clickable for tenant@test on the 123 Oak Street application.'
+        : '  => NOT all gates pass — see FAIL lines above before expecting the button to work.',
+    )
   }
 
   console.log('Seeding complete.')

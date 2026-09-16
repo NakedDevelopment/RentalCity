@@ -12,10 +12,20 @@
 import crypto from 'crypto'
 
 const SANDBOX_BASE = 'https://api.sandbox.equifax.com'
+const UAT_BASE = 'https://api.uat.equifax.com'
 const PROD_BASE = 'https://api.equifax.com'
 
+// Sandbox and UAT are separate Equifax environments with separate product
+// entitlements, not just separate data sets — an application "promoted to
+// Test" (Equifax's dashboard label for UAT) is no longer recognized by the
+// plain Sandbox host, and vice versa. Calling the wrong host for your
+// application's actual promotion state fails OAuth with a generic
+// "No product match found", not an environment-specific error.
 export function getEquifaxBase(): string {
-  return process.env.EQUIFAX_ENV === 'production' ? PROD_BASE : SANDBOX_BASE
+  const env = process.env.EQUIFAX_ENV
+  if (env === 'production') return PROD_BASE
+  if (env === 'uat') return UAT_BASE
+  return SANDBOX_BASE
 }
 
 // ─── OAuth token (in-process cache) ──────────────────────────────────────────
