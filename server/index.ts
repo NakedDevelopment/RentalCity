@@ -3470,8 +3470,8 @@ app.post('/api/equifax/background-check/:tenantId', async (req, res) => {
     ])
   } catch (err) {
     await admin.from('equifax_background_checks').update({ status: 'failed' }).eq('tenant_id', tenantId).eq('universal_application_id', universalApplicationId)
-    console.error('Equifax background check error:', (err as Error).message)
-    return res.status(502).json({ error: 'Could not retrieve background check from Equifax. Please try again.' })
+    console.error('IDS background check error:', (err as Error).message)
+    return res.status(502).json({ error: 'Could not retrieve background check from the screening provider. Please try again.' })
   }
 
   // If either check is still pending (offline jurisdiction), report the whole
