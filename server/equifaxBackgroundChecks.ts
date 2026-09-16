@@ -127,11 +127,13 @@ async function placeOrder(inputXml: string): Promise<any> {
  * no ieiresponse at the root, look for a single string-valued child and parse
  * that as the real response.
  */
-function parseIeiResponse(rawText: string): any {
+export function parseIeiResponse(rawText: string): any {
   const direct = parser.parse(rawText)
   if (direct?.ieiresponse) return direct.ieiresponse
 
-  const rootKey = Object.keys(direct ?? {})[0]
+  // fast-xml-parser preserves the XML declaration as a top-level `?xml`
+  // property. The actual ASMX response wrapper is the next root element.
+  const rootKey = Object.keys(direct ?? {}).find((key) => key !== '?xml')
   const inner = rootKey ? direct[rootKey] : null
   const innerText = typeof inner === 'string' ? inner : typeof inner === 'object' ? inner?.['#text'] : null
   if (typeof innerText === 'string') {
