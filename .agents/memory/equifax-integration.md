@@ -7,15 +7,25 @@ description: Architecture and decisions for the Equifax OneView credit check flo
 
 ## Product: Equifax OneView Consumer Credit
 - Sandbox base: `https://api.sandbox.equifax.com`
+- UAT/Test base: `https://api.uat.equifax.com`
+- Production base: `https://api.equifax.com`
 - Token endpoint: `POST /v2/oauth/token` (Basic Auth with client_id:secret, scope is always production URL)
 - Credit report: `POST /business/oneview/consumer-credit/v1/reports/credit-report`
 - PDF retrieval: `GET /business/oneview/consumer-credit/v1/reports/credit-report/{reportId}`
 
-## Credentials stored as env vars
+## Credentials stored as secrets
 - `EQUIFAX_CLIENT_ID`, `EQUIFAX_CLIENT_SECRET` — OAuth2 credentials
 - `EQUIFAX_MEMBER_NUMBER`, `EQUIFAX_SECURITY_CODE`, `EQUIFAX_CUSTOMER_CODE` — Rental City subscriber credentials in the request body
-- `EQUIFAX_ENV` — `sandbox` or `production`
+- `EQUIFAX_ENV` — `sandbox`, `uat`, or `production`
 - `SSN_ENCRYPTION_KEY` — 64-char hex, 32-byte AES-256-GCM key
+
+## UAT environment routing
+
+Equifax dashboard applications promoted to Test use the UAT host, while the OAuth scope still references the production hostname. Keep `EQUIFAX_ENV` in secure environment configuration and do not duplicate it in `.replit` user environment settings.
+
+**Why:** A hardcoded `.replit` value overrode the secure UAT setting, silently routed the app to Sandbox, and produced Equifax's generic “No product match found” OAuth error even though direct UAT authentication succeeded.
+
+**How to apply:** After changing the secure environment value, restart the workflow and verify both the resolved base URL and a token-only request before running a CTEST report. Do not infer the active host from the secret editor alone.
 
 ## SSN handling
 - Encrypted at rest in `tenant_credit_consent` using AES-256-GCM (`encryptSSN`/`decryptSSN` in `server/equifax.ts`)

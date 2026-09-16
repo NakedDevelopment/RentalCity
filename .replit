@@ -60,7 +60,6 @@ build = ["npm", "run", "build"]
 
 [userenv.shared]
 PLAID_ENV = "production"
-EQUIFAX_ENV = "sandbox"
 
 [userenv.development]
 

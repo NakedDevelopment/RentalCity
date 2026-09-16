@@ -927,7 +927,10 @@ async function main() {
   // which already satisfies landlordHasUnlockedTenant on its own — no separate "unlock"
   // step needed for this pair. Uses the same CTEST 666000001 test consumer already
   // verified against Equifax UAT via scripts/test-equifax-sandbox.ts.
-  {
+  if (
+    process.env.ALLOW_EQUIFAX_TEST_SEED === 'true' &&
+    process.env.EQUIFAX_ENV !== 'production'
+  ) {
     const nowIso = new Date().toISOString()
 
     // 1. Landlord: mark both required agreements signed + Equifax-approved.
@@ -1082,6 +1085,10 @@ async function main() {
       allGatesPass
         ? '  => "Run credit check" should be clickable for tenant@test on the 123 Oak Street application.'
         : '  => NOT all gates pass — see FAIL lines above before expecting the button to work.',
+    )
+  } else {
+    console.log(
+      'Equifax credit-check demo state skipped. Set ALLOW_EQUIFAX_TEST_SEED=true in a non-production Equifax environment to enable it.',
     )
   }
 

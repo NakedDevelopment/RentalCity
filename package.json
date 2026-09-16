@@ -14,7 +14,7 @@
     "db:types": "supabase gen types typescript --local > client/src/types/supabase.ts",
     "db:migrate": "node scripts/run-migrations.mjs",
     "db:apply-sql": "node scripts/apply-sql.mjs",
-    "db:seed": "node scripts/seed.mjs",
+    "db:seed": "tsx scripts/seed.mjs",
     "db:seed-questionnaires": "node scripts/seed-questionnaires.mjs",
     "db:eval-matches": "node scripts/eval-matches.mjs"
   },

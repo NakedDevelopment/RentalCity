@@ -22,10 +22,11 @@ const PROD_BASE = 'https://api.equifax.com'
 // application's actual promotion state fails OAuth with a generic
 // "No product match found", not an environment-specific error.
 export function getEquifaxBase(): string {
-  const env = process.env.EQUIFAX_ENV
+  const env = process.env.EQUIFAX_ENV?.toLowerCase()
   if (env === 'production') return PROD_BASE
   if (env === 'uat') return UAT_BASE
-  return SANDBOX_BASE
+  if (env === 'sandbox') return SANDBOX_BASE
+  throw new Error('EQUIFAX_ENV must be set to sandbox, uat, or production')
 }
 
 // ─── OAuth token (in-process cache) ──────────────────────────────────────────
@@ -56,8 +57,7 @@ export async function getEquifaxToken(): Promise<string> {
   })
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Equifax auth failed (${res.status}): ${text}`)
+    throw new Error(`Equifax auth failed (${res.status})`)
   }
 
   const json = (await res.json()) as { access_token: string; expires_in?: number }
@@ -88,6 +88,10 @@ export async function requestCreditReport(
   consumer: EquifaxConsumer,
 ): Promise<EquifaxReportResult> {
   const base = getEquifaxBase()
+  const env = process.env.EQUIFAX_ENV?.toLowerCase()
+  if (env !== 'production' && consumer.ssn.replace(/\D/g, '') !== '666000001') {
+    throw new Error('Non-production Equifax environments accept only the approved CTEST consumer')
+  }
   const token = await getEquifaxToken()
 
   const memberNumber = process.env.EQUIFAX_MEMBER_NUMBER
@@ -147,8 +151,7 @@ export async function requestCreditReport(
   )
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Equifax credit report failed (${res.status}): ${text}`)
+    throw new Error(`Equifax credit report failed (${res.status})`)
   }
 
   // Equifax's response has no top-level reportId field — the PDF reference is
