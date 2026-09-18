@@ -14,6 +14,12 @@ export type AdminDirectoryUser = {
   equifax_pending_since: string | null
   docusign_envelope_status: string | null
   plaid_agreement_signed_at: string | null
+  equifax_credentials: {
+    memberNumberLast4: string
+    securityCodeLast4: string
+    customerCodeLast4: string
+    updatedAt: string | null
+  } | null
 }
 
 export async function fetchAdminDirectory(): Promise<AdminDirectoryUser[]> {

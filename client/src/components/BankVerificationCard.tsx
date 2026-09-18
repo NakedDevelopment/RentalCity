@@ -1,4 +1,6 @@
 export type PlaidVerificationRow = {
+  /** Assets and Bank Income are async, webhook-driven reports — 'processing' until at least the Asset Report lands. */
+  status: 'processing' | 'complete' | 'failed'
   institution_name: string | null
   accounts_count: number | null
   income_verified: boolean | null
@@ -127,7 +129,17 @@ export function BankVerificationCard({
     <section className="rounded-xl border border-gray-200 bg-white p-5">
       <h2 className="mb-1 text-base font-semibold tracking-tight text-gray-900">Bank verification</h2>
 
-      {!hasAny ? (
+      {v?.status === 'processing' ? (
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+          <svg className="h-4 w-4 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+          </svg>
+          <p className="text-sm text-gray-600">This tenant's bank verification is still in progress.</p>
+        </div>
+      ) : v?.status === 'failed' ? (
+        <p className="mt-3 text-sm text-gray-500">This tenant's bank verification failed. They can reconnect their bank to try again.</p>
+      ) : !hasAny ? (
         <p className="mt-3 text-sm text-gray-500">
           This tenant hasn't verified their finances with a bank yet.
         </p>

@@ -148,7 +148,19 @@ export function AdminUserDetailPage() {
     setRow({ ...row, is_suspended: next })
   }
 
-  async function setEquifaxApproved(approve: boolean) {
+  const [showCredsForm, setShowCredsForm] = useState(false)
+  const [memberNumber, setMemberNumber] = useState('')
+  const [securityCode, setSecurityCode] = useState('')
+  const [customerCode, setCustomerCode] = useState('')
+
+  function resetCredsForm() {
+    setShowCredsForm(false)
+    setMemberNumber('')
+    setSecurityCode('')
+    setCustomerCode('')
+  }
+
+  async function setEquifaxApproved(approve: boolean, credentials?: { memberNumber: string; securityCode: string; customerCode: string }) {
     if (!id || !row || busy) return
     setBusy(true)
     const { data: sess } = await supabase.auth.getSession()
@@ -158,22 +170,41 @@ export function AdminUserDetailPage() {
       const res = await fetch(`/api/admin/equifax/approve/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ approve }),
+        body: JSON.stringify({ approve, ...credentials }),
       })
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string }
         setError(j.error ?? 'Failed to update Equifax access')
         return
       }
+      setError(null)
+      resetCredsForm()
       const now = new Date().toISOString()
       setRow({
         ...row,
-        equifax_approved_at: approve ? now : null,
+        equifax_approved_at: approve ? (row.equifax_approved_at ?? now) : null,
         equifax_pending_since: approve ? null : row.equifax_pending_since,
+        equifax_credentials: approve
+          ? {
+              memberNumberLast4: credentials?.memberNumber.slice(-4) ?? row.equifax_credentials?.memberNumberLast4 ?? '',
+              securityCodeLast4: credentials?.securityCode.slice(-4) ?? row.equifax_credentials?.securityCodeLast4 ?? '',
+              customerCodeLast4: credentials?.customerCode.slice(-4) ?? row.equifax_credentials?.customerCodeLast4 ?? '',
+              updatedAt: now,
+            }
+          : row.equifax_credentials,
       })
     } finally {
       setBusy(false)
     }
+  }
+
+  function submitCredsForm() {
+    const trimmed = { memberNumber: memberNumber.trim(), securityCode: securityCode.trim(), customerCode: customerCode.trim() }
+    if (!trimmed.memberNumber || !trimmed.securityCode || !trimmed.customerCode) {
+      setError('Member number, security code, and customer code are all required.')
+      return
+    }
+    void setEquifaxApproved(true, trimmed)
   }
 
   if (loading) {
@@ -312,7 +343,7 @@ export function AdminUserDetailPage() {
         {row.role === 'landlord' ? (
           <div className={admin.panelPaddedLg}>
             <h2 className={admin.detailTitle}>Equifax Credit Access</h2>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
               <div>
                 {row.equifax_approved_at ? (
                   <>
@@ -340,30 +371,107 @@ export function AdminUserDetailPage() {
                       {row.plaid_agreement_signed_at ? 'Signed' : 'Not signed'}
                     </span>
                   </p>
+                  <p>
+                    Equifax credentials:{' '}
+                    {row.equifax_credentials ? (
+                      <span className="font-medium text-green-700">
+                        Member •••{row.equifax_credentials.memberNumberLast4} · Security •••{row.equifax_credentials.securityCodeLast4} · Customer •••{row.equifax_credentials.customerCodeLast4}
+                      </span>
+                    ) : (
+                      <span className="font-medium text-amber-700">Not entered</span>
+                    )}
+                  </p>
                 </div>
               </div>
               {!isSelf && !isAdminRole ? (
-                row.equifax_approved_at ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void setEquifaxApproved(false)}
-                    className={admin.btnWarning}
-                  >
-                    Revoke access
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void setEquifaxApproved(true)}
-                    className={admin.btnSuccess}
-                  >
-                    Approve access
-                  </button>
-                )
+                <div className="flex gap-2">
+                  {row.equifax_approved_at ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => (showCredsForm ? resetCredsForm() : setShowCredsForm(true))}
+                        className={admin.btnSecondary}
+                      >
+                        {showCredsForm ? 'Cancel' : 'Edit credentials'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void setEquifaxApproved(false)}
+                        className={admin.btnWarning}
+                      >
+                        Revoke access
+                      </button>
+                    </>
+                  ) : showCredsForm ? (
+                    <button type="button" disabled={busy} onClick={resetCredsForm} className={admin.btnSecondary}>
+                      Cancel
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setShowCredsForm(true)}
+                      className={admin.btnSuccess}
+                    >
+                      Approve access
+                    </button>
+                  )}
+                </div>
               ) : null}
             </div>
+
+            {showCredsForm ? (
+              <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+                <p className={admin.muted}>
+                  Enter the member number, security code, and customer code Equifax sent for this landlord.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label htmlFor="equifax-member-number" className={admin.fieldLabel}>Member Number</label>
+                    <input
+                      id="equifax-member-number"
+                      type="text"
+                      value={memberNumber}
+                      onChange={(e) => setMemberNumber(e.target.value)}
+                      className={`${admin.inputField} mt-1`}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="equifax-security-code" className={admin.fieldLabel}>Security Code</label>
+                    <input
+                      id="equifax-security-code"
+                      type="text"
+                      value={securityCode}
+                      onChange={(e) => setSecurityCode(e.target.value)}
+                      className={`${admin.inputField} mt-1`}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="equifax-customer-code" className={admin.fieldLabel}>Customer Code</label>
+                    <input
+                      id="equifax-customer-code"
+                      type="text"
+                      value={customerCode}
+                      onChange={(e) => setCustomerCode(e.target.value)}
+                      className={`${admin.inputField} mt-1`}
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy || !memberNumber.trim() || !securityCode.trim() || !customerCode.trim()}
+                  onClick={submitCredsForm}
+                  className={admin.btnSuccess}
+                >
+                  {row.equifax_approved_at ? 'Save credentials' : 'Confirm approval'}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

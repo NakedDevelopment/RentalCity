@@ -139,8 +139,10 @@ async function getEnvelopesApi(): Promise<{ api: DsEnvelopesApi; accountId: stri
 export type AnchorTab = {
   anchorString: string
   type: 'sign' | 'initial' | 'text' | 'checkbox'
-  /** Required for type 'text' — the pre-filled value. */
+  /** Pre-filled value for type 'text'. Omit for a blank field the signer fills in themselves. */
   value?: string
+  /** type 'text' only — false leaves the field editable by the signer instead of pre-filled/locked. Defaults to true. */
+  locked?: boolean
   xOffset?: string
   yOffset?: string
 }
@@ -180,7 +182,7 @@ function buildTabs(tabs: AnchorTab[]) {
     if (t.type === 'sign') signHereTabs.push(base as DsSignHere)
     else if (t.type === 'initial') initialHereTabs.push(base as DsInitialHere)
     else if (t.type === 'checkbox') checkboxTabs.push(base as DsCheckbox)
-    else textTabs.push({ ...base, value: t.value ?? '', locked: 'true' } as DsText)
+    else textTabs.push({ ...base, value: t.value ?? '', locked: t.locked === false ? 'false' : 'true' } as DsText)
   }
 
   return { signHereTabs, initialHereTabs, textTabs, checkboxTabs }

@@ -4,20 +4,43 @@ import {
   PlaidEnvironments,
   Products,
   CountryCode,
+  IncomeVerificationSourceType,
 } from 'plaid'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
+// No silent default: an unset or misspelled PLAID_ENV must fail loudly rather
+// than quietly routing every call to sandbox (the same bug class that hit the
+// Equifax integration when a stale .replit value silently overrode the
+// intended environment — see getEquifaxBase in equifax.ts).
 export function getPlaidEnv(): string {
-  return (process.env.PLAID_ENV || 'sandbox').toLowerCase()
+  const env = process.env.PLAID_ENV?.toLowerCase()
+  if (env !== 'sandbox' && env !== 'production') {
+    throw new Error('PLAID_ENV must be set to sandbox or production')
+  }
+  return env
 }
 
-/** Returns a configured Plaid client, or null if credentials are missing. */
+/**
+ * Returns a configured Plaid client, or null if credentials are missing OR
+ * PLAID_ENV is unset/invalid. Called unguarded (no try/catch) at the top of
+ * most Plaid route handlers, so getPlaidEnv()'s throw is caught here and
+ * turned into the same "not configured" null every caller already handles
+ * via plaidUnavailable(res) — a config typo should 503 cleanly, not crash
+ * the request as an unhandled rejection.
+ */
 export function getPlaidClient(): PlaidApi | null {
   const clientId = process.env.PLAID_CLIENT_ID
   const secret = process.env.PLAID_SECRET
   if (!clientId || !secret) return null
 
-  const env = getPlaidEnv()
-  const basePath = PlaidEnvironments[env] ?? PlaidEnvironments.sandbox
+  let env: 'sandbox' | 'production'
+  try {
+    env = getPlaidEnv() as 'sandbox' | 'production'
+  } catch (err) {
+    console.error('Plaid client not configured:', (err as Error).message)
+    return null
+  }
+  const basePath = PlaidEnvironments[env]
 
   const configuration = new Configuration({
     basePath,
@@ -31,19 +54,47 @@ export function getPlaidClient(): PlaidApi | null {
   return new PlaidApi(configuration)
 }
 
-export async function createLinkToken(client: PlaidApi, userId: string): Promise<string> {
+/**
+ * Returns this app user's Plaid platform-level user id (from `/user/create`),
+ * creating and persisting one on first use. Required as the top-level `user_id`
+ * field on `/link/token/create` for the Income Verification (Bank Income)
+ * product — reused across all of a user's linked accounts rather than
+ * recreated per link session.
+ */
+async function getOrCreatePlaidUserId(
+  client: PlaidApi,
+  admin: SupabaseClient,
+  userId: string,
+): Promise<string> {
+  const { data } = await admin.from('profiles').select('plaid_user_id').eq('id', userId).maybeSingle()
+  const existing = (data as { plaid_user_id?: string | null } | null)?.plaid_user_id
+  if (existing) return existing
+
+  const resp = await client.userCreate({ client_user_id: userId })
+  const plaidUserId = resp.data.user_id
+  const { error } = await admin.from('profiles').update({ plaid_user_id: plaidUserId }).eq('id', userId)
+  if (error) throw error
+  return plaidUserId
+}
+
+// This account is only enabled for Assets, Identity Verification, and Income
+// Verification (Bank Income) — confirmed directly via Plaid's dashboard.
+// Transactions, Identity, and Liabilities are NOT enabled; requesting them
+// makes the whole link-token call fail with INVALID_PRODUCT.
+export async function createLinkToken(client: PlaidApi, admin: SupabaseClient, userId: string): Promise<string> {
+  const plaidUserId = await getOrCreatePlaidUserId(client, admin, userId)
   const resp = await client.linkTokenCreate({
     user: { client_user_id: userId },
+    // Required alongside `user` for the Income Verification (Bank Income)
+    // product on accounts using Plaid's post-2025-12-10 User API — must be a
+    // TOP-LEVEL field, not nested inside `user`.
+    user_id: plaidUserId,
     client_name: 'Rental City',
-    // transactions -> income streams; identity -> name match; liabilities -> debts/DTI
-    // assets + income_verification added for richer Income/Assets product access
-    products: [
-      Products.Transactions,
-      Products.Identity,
-      Products.Liabilities,
-      Products.Assets,
-      Products.IncomeVerification,
-    ],
+    products: [Products.Assets, Products.IncomeVerification],
+    income_verification: {
+      income_source_types: [IncomeVerificationSourceType.Bank],
+      bank_income: { days_requested: 90 },
+    },
     country_codes: [CountryCode.Us],
     language: 'en',
   })
@@ -155,14 +206,6 @@ export type AccountInfo = {
   currentCents: number | null
 }
 
-export type DebtInfo = {
-  name: string
-  kind: 'credit' | 'student' | 'mortgage'
-  balanceCents: number | null
-  monthlyPaymentCents: number | null
-  aprPercent: number | null
-}
-
 export type AssetTier = 'low' | 'moderate' | 'high' | 'very_high'
 
 /**
@@ -207,23 +250,16 @@ export type PlaidFinancialSummary = {
   assetTier: AssetTier | null
   accounts: AccountInfo[]
 
-  // Debts / DTI
+  // Debts / DTI — an aggregate loan-payment-outflow signal from Asset Report
+  // Insights, not a per-loan breakdown (no balances/APRs — that needs
+  // Liabilities, which this account doesn't have).
   debtsVerified: boolean
   totalMonthlyDebtCents: number
-  debts: DebtInfo[]
   dtiRatio: number | null
 
-  // Identity (bank account name match — separate from Plaid IDV)
+  // Identity (bank account owner name match, from the Asset Report's own
+  // owner data — separate from Plaid's government-ID Identity Verification).
   identityVerified: boolean
-}
-
-// Plaid recurring-stream frequency -> approximate number of occurrences per month.
-const FREQUENCY_TO_MONTHLY: Record<string, number> = {
-  WEEKLY: 52 / 12,
-  BIWEEKLY: 26 / 12,
-  SEMI_MONTHLY: 2,
-  MONTHLY: 1,
-  ANNUALLY: 1 / 12,
 }
 
 const toCents = (n: number | null | undefined) =>
@@ -240,221 +276,158 @@ function monthsBetween(start?: string | null, end?: string | null): number | nul
   return months < 0 ? 0 : months + 1
 }
 
-/**
- * Pulls a full financial picture for a linked item: income (recurring deposit
- * streams), balances + reserves (proof of funds), debts -> debt-to-income, and
- * the identity on the account. Each product call is wrapped defensively so a
- * not-ready / unsupported product degrades gracefully instead of failing the
- * whole request.
- */
-export async function fetchFinancialSummary(
+// Assets and Bank Income are report-based products: create, then wait for a
+// webhook (PRODUCT_READY / BANK_INCOME_COMPLETE) before the data is fetchable.
+const REPORT_DAYS_REQUESTED = 90
+
+/** Starts Asset Report generation; the report is fetchable once the ASSETS/PRODUCT_READY webhook fires. */
+export async function createAssetReport(
   client: PlaidApi,
   accessToken: string,
-): Promise<PlaidFinancialSummary> {
-  // --- Balances + accounts (proof of funds) ---
+  webhookUrl: string,
+): Promise<{ assetReportId: string; assetReportToken: string }> {
+  const resp = await client.assetReportCreate({
+    access_tokens: [accessToken],
+    days_requested: REPORT_DAYS_REQUESTED,
+    options: { webhook: webhookUrl },
+  })
+  return { assetReportId: resp.data.asset_report_id, assetReportToken: resp.data.asset_report_token }
+}
+
+/** Fetches a completed Asset Report with Insights (categorized transactions + risk/affordability data). */
+export async function getAssetReport(client: PlaidApi, assetReportToken: string) {
+  const resp = await client.assetReportGet({ asset_report_token: assetReportToken, include_insights: true })
+  return resp.data.report
+}
+
+/** Fetches the Bank Income report for this Plaid platform user, or null if none exists yet. */
+export async function getBankIncome(client: PlaidApi, plaidUserId: string) {
+  const resp = await client.creditBankIncomeGet({ user_id: plaidUserId })
+  return resp.data.bank_income?.[0] ?? null
+}
+
+/** Requests a new Asset Report for an existing item (Asset Reports are immutable). Fires its own PRODUCT_READY webhook. */
+export async function refreshAssetReport(
+  client: PlaidApi,
+  assetReportToken: string,
+  webhookUrl: string,
+): Promise<{ assetReportId: string; assetReportToken: string }> {
+  const resp = await client.assetReportRefresh({
+    asset_report_token: assetReportToken,
+    options: { webhook: webhookUrl },
+  })
+  return { assetReportId: resp.data.asset_report_id, assetReportToken: resp.data.asset_report_token }
+}
+
+/** Basic Item metadata lookup — not gated by any specific product entitlement. */
+export async function getInstitutionName(client: PlaidApi, accessToken: string): Promise<string | null> {
+  try {
+    const itemResp = await client.itemGet({ access_token: accessToken })
+    const institutionId = itemResp.data.item?.institution_id
+    if (!institutionId) return null
+    const instResp = await client.institutionsGetById({
+      institution_id: institutionId,
+      country_codes: [CountryCode.Us],
+    })
+    return instResp.data.institution?.name ?? null
+  } catch {
+    return null
+  }
+}
+
+type AssetReportData = Awaited<ReturnType<typeof getAssetReport>>
+type BankIncomeData = Awaited<ReturnType<typeof getBankIncome>>
+
+/**
+ * Combines whichever of the two async reports have arrived so far into one
+ * summary. Assets (balances, owner-name identity, aggregate debt) and Bank
+ * Income (income) land independently via separate webhooks — either may be
+ * null if its report hasn't completed yet, in which case that section of the
+ * summary stays unverified rather than failing the whole computation.
+ */
+export function computeFinancialSummary(
+  assetReport: AssetReportData | null,
+  bankIncome: BankIncomeData | null,
+): PlaidFinancialSummary {
+  let institutionName: string | null = null
   let accountsCount = 0
   let available = 0
   let current = 0
   let totalAssets = 0
   let balancesVerified = false
+  let identityVerified = false
+  let debtsVerified = false
+  let totalMonthlyDebtCents = 0
   const accounts: AccountInfo[] = []
-  const accountNameById = new Map<string, string>()
-  const accountBalanceById = new Map<string, number | null>()
 
-  try {
-    const balResp = await client.accountsBalanceGet({ access_token: accessToken })
-    const apiAccounts = balResp.data.accounts ?? []
-    accountsCount = apiAccounts.length
-    for (const a of apiAccounts) {
-      const label = a.official_name || a.name || a.subtype || 'Account'
-      accountNameById.set(a.account_id, `${label}${a.mask ? ` ••${a.mask}` : ''}`)
-      accountBalanceById.set(a.account_id, toCentsOrNull(a.balances?.current))
-      const isDepository = a.type === 'depository'
-      accounts.push({
-        name: label,
-        mask: a.mask ?? null,
-        subtype: a.subtype ?? null,
-        availableCents: toCentsOrNull(a.balances?.available),
-        currentCents: toCentsOrNull(a.balances?.current),
-      })
-      if (isDepository) {
-        const avail = typeof a.balances?.available === 'number' ? a.balances.available : null
-        const curr = typeof a.balances?.current === 'number' ? a.balances.current : null
-        if (avail !== null) available += avail
-        if (curr !== null) current += curr
-        totalAssets += avail ?? curr ?? 0
+  if (assetReport) {
+    institutionName = assetReport.items[0]?.institution_name ?? null
+    for (const item of assetReport.items) {
+      for (const a of item.accounts) {
+        accountsCount += 1
+        accounts.push({
+          name: a.official_name || a.name || a.subtype || 'Account',
+          mask: a.mask,
+          subtype: a.subtype ?? null,
+          availableCents: toCentsOrNull(a.balances.available),
+          currentCents: toCentsOrNull(a.balances.current),
+        })
+        if (a.type === 'depository') {
+          const avail = typeof a.balances.available === 'number' ? a.balances.available : null
+          const curr = typeof a.balances.current === 'number' ? a.balances.current : null
+          if (avail !== null) available += avail
+          if (curr !== null) current += curr
+          totalAssets += avail ?? curr ?? 0
+        }
+        if (a.owners.some((o) => (o.names ?? []).some((n) => !!n))) identityVerified = true
       }
     }
     balancesVerified = accountsCount > 0
-  } catch {
-    // leave balances unverified
-  }
 
-  // --- Institution name ---
-  let institutionName: string | null = null
-  try {
-    const itemResp = await client.itemGet({ access_token: accessToken })
-    const institutionId = itemResp.data.item?.institution_id
-    if (institutionId) {
-      const instResp = await client.institutionsGetById({
-        institution_id: institutionId,
-        country_codes: [CountryCode.Us],
-      })
-      institutionName = instResp.data.institution?.name ?? null
+    const loanPayments = assetReport.insights?.risk?.loan_payments
+    if (loanPayments) {
+      debtsVerified = true
+      totalMonthlyDebtCents = toCents(loanPayments.monthly_average?.amount ?? 0)
     }
-  } catch {
-    // institution name is best-effort
   }
 
-  // --- Income: recurring inflow streams ---
-  let monthlyIncome = 0
+  let monthlyIncomeCents = 0
   const incomeStreams: IncomeStream[] = []
-  try {
-    const recResp = await client.transactionsRecurringGet({ access_token: accessToken })
-    const inflows = recResp.data.inflow_streams ?? []
-    for (const stream of inflows) {
-      const freq = String(stream.frequency ?? '').toUpperCase()
-      const mult = FREQUENCY_TO_MONTHLY[freq]
-      if (!mult) continue
-      const amt = Math.abs(Number(stream.average_amount?.amount ?? 0))
-      if (!Number.isFinite(amt) || amt <= 0) continue
-      const monthlyAmountCents = Math.round(amt * mult * 100)
-      monthlyIncome += amt * mult
-      incomeStreams.push({
-        name: stream.merchant_name || stream.description || 'Recurring deposit',
-        monthlyAmountCents,
-        frequency: freq,
-        monthsSeen: monthsBetween(stream.first_date, stream.last_date),
-      })
-    }
-  } catch {
-    // recurring not ready; fall back below
-  }
-
-  if (monthlyIncome <= 0) {
-    try {
-      const end = new Date()
-      const start = new Date()
-      start.setDate(start.getDate() - 30)
-      const fmt = (d: Date) => d.toISOString().slice(0, 10)
-      const txResp = await client.transactionsGet({
-        access_token: accessToken,
-        start_date: fmt(start),
-        end_date: fmt(end),
-        options: { count: 250, offset: 0 },
-      })
-      let inflow = 0
-      for (const t of txResp.data.transactions ?? []) {
-        // Plaid convention: negative amount = money into the account (deposit).
-        if (typeof t.amount === 'number' && t.amount < 0) inflow += Math.abs(t.amount)
+  if (bankIncome) {
+    const monthsInWindow = (bankIncome.days_requested || REPORT_DAYS_REQUESTED) / 30
+    for (const item of bankIncome.items ?? []) {
+      for (const source of item.bank_income_sources ?? []) {
+        const totalAmount = Math.abs(source.total_amount ?? 0)
+        if (totalAmount <= 0) continue
+        const monthlyAmountCents = Math.round((totalAmount / monthsInWindow) * 100)
+        monthlyIncomeCents += monthlyAmountCents
+        incomeStreams.push({
+          name: source.income_description || 'Income source',
+          monthlyAmountCents,
+          frequency: source.pay_frequency ?? 'UNKNOWN',
+          monthsSeen: monthsBetween(source.start_date, source.end_date),
+        })
       }
-      monthlyIncome = inflow
-    } catch {
-      // transactions not ready; income stays 0 / unverified
     }
+    incomeStreams.sort((a, b) => b.monthlyAmountCents - a.monthlyAmountCents)
   }
-
-  incomeStreams.sort((a, b) => b.monthlyAmountCents - a.monthlyAmountCents)
-  const monthlyIncomeCents = Math.round(monthlyIncome * 100)
 
   // Build a ±15 % income range for display purposes. Only set when income was
   // actually detected; null when we have nothing to show.
-  const monthlyIncomeRangeLowCents = monthlyIncomeCents > 0
-    ? Math.round(monthlyIncomeCents * 0.85)
-    : null
-  const monthlyIncomeRangeHighCents = monthlyIncomeCents > 0
-    ? Math.round(monthlyIncomeCents * 1.15)
-    : null
+  const monthlyIncomeRangeLowCents = monthlyIncomeCents > 0 ? Math.round(monthlyIncomeCents * 0.85) : null
+  const monthlyIncomeRangeHighCents = monthlyIncomeCents > 0 ? Math.round(monthlyIncomeCents * 1.15) : null
 
-  // --- Debts: liabilities -> monthly obligations + DTI ---
-  let debtsVerified = false
-  let totalMonthlyDebt = 0
-  const debts: DebtInfo[] = []
-  try {
-    const liabResp = await client.liabilitiesGet({ access_token: accessToken })
-    // Merge any account names / balances we didn't already have.
-    for (const a of liabResp.data.accounts ?? []) {
-      if (!accountNameById.has(a.account_id)) {
-        const label = a.official_name || a.name || a.subtype || 'Account'
-        accountNameById.set(a.account_id, `${label}${a.mask ? ` ••${a.mask}` : ''}`)
-      }
-      if (!accountBalanceById.has(a.account_id)) {
-        accountBalanceById.set(a.account_id, toCentsOrNull(a.balances?.current))
-      }
-    }
-    const liabilities = liabResp.data.liabilities
-    debtsVerified = true
-
-    const debtBalance = (id: string | null) =>
-      (id != null ? accountBalanceById.get(id) ?? null : null)
-
-    for (const c of liabilities?.credit ?? []) {
-      const monthly = toCentsOrNull(c.minimum_payment_amount)
-      const apr = c.aprs?.find((x) => x.apr_type === 'purchase_apr')?.apr_percentage
-        ?? c.aprs?.[0]?.apr_percentage
-        ?? null
-      debts.push({
-        name: (c.account_id && accountNameById.get(c.account_id)) || 'Credit card',
-        kind: 'credit',
-        balanceCents: debtBalance(c.account_id) ?? toCentsOrNull(c.last_statement_balance),
-        monthlyPaymentCents: monthly,
-        aprPercent: typeof apr === 'number' ? apr : null,
-      })
-      if (monthly) totalMonthlyDebt += monthly
-    }
-
-    for (const s of liabilities?.student ?? []) {
-      const monthly = toCentsOrNull(s.minimum_payment_amount)
-      debts.push({
-        name: (s.account_id && accountNameById.get(s.account_id)) || 'Student loan',
-        kind: 'student',
-        balanceCents: debtBalance(s.account_id ?? null),
-        monthlyPaymentCents: monthly,
-        aprPercent: typeof s.interest_rate_percentage === 'number' ? s.interest_rate_percentage : null,
-      })
-      if (monthly) totalMonthlyDebt += monthly
-    }
-
-    for (const m of liabilities?.mortgage ?? []) {
-      const monthly = toCentsOrNull(m.next_monthly_payment)
-      debts.push({
-        name: (m.account_id && accountNameById.get(m.account_id)) || 'Mortgage',
-        kind: 'mortgage',
-        balanceCents: debtBalance(m.account_id ?? null),
-        monthlyPaymentCents: monthly,
-        aprPercent: typeof m.interest_rate?.percentage === 'number' ? m.interest_rate.percentage : null,
-      })
-      if (monthly) totalMonthlyDebt += monthly
-    }
-  } catch {
-    // liabilities not available for this institution
-  }
-
-  const totalMonthlyDebtCents = Math.round(totalMonthlyDebt)
-  // DTI is only meaningful with reliably captured income. A ratio above ~500%
-  // means income wasn't detected properly (e.g. only stray interest deposits),
-  // so we null it rather than surface an absurd percentage.
+  // DTI needs both halves to have landed. A ratio above ~500% means income
+  // wasn't detected reliably, so it's nulled rather than shown as an absurd
+  // percentage (same guard as the previous implementation).
   const rawDti =
-    monthlyIncomeCents > 0 ? Math.round((totalMonthlyDebtCents / monthlyIncomeCents) * 10000) / 10000 : null
+    monthlyIncomeCents > 0 && debtsVerified
+      ? Math.round((totalMonthlyDebtCents / monthlyIncomeCents) * 10000) / 10000
+      : null
   const dtiRatio = rawDti !== null && rawDti <= 5 ? rawDti : null
 
-  // --- Identity on the account ---
-  // We only retain whether the account holder's identity could be verified
-  // (a name is present on the account). No contact PII (email / phone /
-  // address) and not even the name itself is collected, stored, or returned.
-  let identityVerified = false
-  try {
-    const idResp = await client.identityGet({ access_token: accessToken })
-    const owners = (idResp.data.accounts ?? []).flatMap((a) => a.owners ?? [])
-    identityVerified = owners.some((o) => (o.names ?? []).some((n) => !!n))
-  } catch {
-    // identity not available for this institution
-  }
-
   const totalAssetsCentsVal = toCents(totalAssets)
-  const assetTier = balancesVerified
-    ? computeAssetTier(totalAssetsCentsVal, monthlyIncomeCents)
-    : null
+  const assetTier = balancesVerified ? computeAssetTier(totalAssetsCentsVal, monthlyIncomeCents) : null
 
   return {
     institutionName,
@@ -475,7 +448,6 @@ export async function fetchFinancialSummary(
 
     debtsVerified,
     totalMonthlyDebtCents,
-    debts,
     dtiRatio,
 
     identityVerified,

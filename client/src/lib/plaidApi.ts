@@ -1,4 +1,6 @@
 export type PlaidVerification = {
+  /** Assets and Bank Income are async, webhook-driven reports — 'processing' until at least the Asset Report lands. */
+  status: 'processing' | 'complete' | 'failed'
   institutionName: string | null
   accountsCount: number
 

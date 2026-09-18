@@ -15,34 +15,52 @@ const SANDBOX_BASE = 'https://api.sandbox.equifax.com'
 const UAT_BASE = 'https://api.uat.equifax.com'
 const PROD_BASE = 'https://api.equifax.com'
 
+export type EquifaxEnv = 'sandbox' | 'uat' | 'production'
+
+export function isEquifaxEnv(value: string | undefined): value is EquifaxEnv {
+  return value === 'sandbox' || value === 'uat' || value === 'production'
+}
+
 // Sandbox and UAT are separate Equifax environments with separate product
 // entitlements, not just separate data sets — an application "promoted to
 // Test" (Equifax's dashboard label for UAT) is no longer recognized by the
 // plain Sandbox host, and vice versa. Calling the wrong host for your
 // application's actual promotion state fails OAuth with a generic
 // "No product match found", not an environment-specific error.
-export function getEquifaxBase(): string {
-  const env = process.env.EQUIFAX_ENV?.toLowerCase()
+//
+// Each landlord's Equifax-issued member number is itself environment-locked
+// (reseller subscribers only receive production numbers), so the caller must
+// state which environment a given credential set belongs to rather than this
+// reading one process-wide default.
+export function getEquifaxBase(env: EquifaxEnv): string {
   if (env === 'production') return PROD_BASE
   if (env === 'uat') return UAT_BASE
-  if (env === 'sandbox') return SANDBOX_BASE
-  throw new Error('EQUIFAX_ENV must be set to sandbox, uat, or production')
+  return SANDBOX_BASE
 }
 
-// ─── OAuth token (in-process cache) ──────────────────────────────────────────
+/** Resolves Rental City's own internal test environment from EQUIFAX_ENV (sandbox/uat only — never production). */
+export function getInternalTestEnv(): EquifaxEnv {
+  const env = process.env.EQUIFAX_ENV?.toLowerCase()
+  if (env === 'uat') return 'uat'
+  if (env === 'sandbox') return 'sandbox'
+  throw new Error('EQUIFAX_ENV must be set to sandbox or uat')
+}
+
+// ─── OAuth token (in-process cache, one per environment host) ───────────────
 
 type TokenCache = { token: string; expiresAt: number }
-let tokenCache: TokenCache | null = null
+const tokenCacheByBase = new Map<string, TokenCache>()
 
-export async function getEquifaxToken(): Promise<string> {
+export async function getEquifaxToken(env: EquifaxEnv): Promise<string> {
+  const base = getEquifaxBase(env)
   const now = Date.now()
-  if (tokenCache && tokenCache.expiresAt > now + 30_000) return tokenCache.token
+  const cached = tokenCacheByBase.get(base)
+  if (cached && cached.expiresAt > now + 30_000) return cached.token
 
   const clientId = process.env.EQUIFAX_CLIENT_ID
   const clientSecret = process.env.EQUIFAX_CLIENT_SECRET
   if (!clientId || !clientSecret) throw new Error('Equifax credentials not configured')
 
-  const base = getEquifaxBase()
   const res = await fetch(`${base}/v2/oauth/token`, {
     method: 'POST',
     headers: {
@@ -62,8 +80,9 @@ export async function getEquifaxToken(): Promise<string> {
 
   const json = (await res.json()) as { access_token: string; expires_in?: number }
   const ttlMs = (json.expires_in ?? 3600) * 1000
-  tokenCache = { token: json.access_token, expiresAt: now + ttlMs }
-  return tokenCache.token
+  const entry = { token: json.access_token, expiresAt: now + ttlMs }
+  tokenCacheByBase.set(base, entry)
+  return entry.token
 }
 
 // ─── Credit report ────────────────────────────────────────────────────────────
@@ -84,19 +103,24 @@ export type EquifaxReportResult = {
   reportId: string
 }
 
+export type EquifaxSubscriberCredentials = {
+  memberNumber: string
+  securityCode: string
+  customerCode: string
+}
+
 export async function requestCreditReport(
   consumer: EquifaxConsumer,
+  credentials: EquifaxSubscriberCredentials,
+  env: EquifaxEnv,
 ): Promise<EquifaxReportResult> {
-  const base = getEquifaxBase()
-  const env = process.env.EQUIFAX_ENV?.toLowerCase()
+  const base = getEquifaxBase(env)
   if (env !== 'production' && consumer.ssn.replace(/\D/g, '') !== '666000001') {
     throw new Error('Non-production Equifax environments accept only the approved CTEST consumer')
   }
-  const token = await getEquifaxToken()
+  const token = await getEquifaxToken(env)
 
-  const memberNumber = process.env.EQUIFAX_MEMBER_NUMBER
-  const securityCode = process.env.EQUIFAX_SECURITY_CODE
-  const customerCode = process.env.EQUIFAX_CUSTOMER_CODE
+  const { memberNumber, securityCode, customerCode } = credentials
   if (!memberNumber || !securityCode || !customerCode) {
     throw new Error('Equifax account credentials (memberNumber / securityCode / customerCode) not configured')
   }
@@ -165,8 +189,8 @@ export async function requestCreditReport(
 }
 
 /** Returns the authenticated URL to fetch a credit-report PDF from Equifax. */
-export function equifaxPdfEndpoint(reportId: string): string {
-  return `${getEquifaxBase()}/business/oneview/consumer-credit/v1/reports/credit-report/${reportId}`
+export function equifaxPdfEndpoint(reportId: string, env: EquifaxEnv): string {
+  return `${getEquifaxBase(env)}/business/oneview/consumer-credit/v1/reports/credit-report/${reportId}`
 }
 
 // ─── Sensitive-field encryption (AES-256-GCM) ────────────────────────────────

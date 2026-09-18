@@ -149,14 +149,20 @@ export function LandlordAgreementsModal({
         ) : (
           <div className="space-y-4 px-5 py-5">
             <p className="text-sm text-gray-600">
-              {onboarding
-                ? 'Before you add your first property, please sign the two agreements required to access tenant screening information.'
-                : 'Before you can view tenant financial data, credit reports, or background checks, you need to sign two required agreements.'}
+              {status.equifaxNeedsResign
+                ? 'Equifax agreement terms have been updated — click to sign the updated agreement.'
+                : onboarding
+                  ? 'Before you add your first property, please sign the two agreements required to access tenant screening information.'
+                  : 'Before you can view tenant financial data, credit reports, or background checks, you need to sign two required agreements.'}
             </p>
 
             <AgreementRow
               title="Equifax Broker Subscriber Agreement"
-              description="Required to run credit checks. After signing, Equifax reviews and approves access (about 24 hours)."
+              description={
+                status.equifaxNeedsResign
+                  ? 'The agreement terms were updated since you last signed. Please sign the updated agreement to keep credit-check access.'
+                  : "Required to run credit checks. After signing, Equifax reviews and approves access (about 24 hours)."
+              }
               done={status.equifaxSigned}
               pendingApproval={status.equifaxSigned && !status.equifaxApproved}
               onSign={() => void startSigning('equifax')}

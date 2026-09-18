@@ -6,6 +6,8 @@ export type DocusignStatus = {
   equifaxSigned: boolean
   equifaxApproved: boolean
   equifaxPendingSince: boolean
+  /** True when a prior signature was invalidated (e.g. corrected agreement terms) and a fresh signature is required. */
+  equifaxNeedsResign: boolean
   plaidSigned: boolean
   agreementsSigned: boolean
   fullyVerified: boolean

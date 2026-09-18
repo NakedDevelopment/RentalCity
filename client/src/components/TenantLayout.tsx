@@ -5,10 +5,8 @@ import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { useRedeemPendingLandlordInvite } from '../lib/useRedeemPendingLandlordInvite'
 import { useTenantInviteRestriction } from '../lib/useTenantInviteRestriction'
-import { tenantSideEnabledForEmail } from '../lib/featureFlags'
 import { supabase } from '../lib/supabase'
 import { TenantInviteBanner } from './TenantInviteBanner'
-import { TenantSideComingSoon } from './TenantSideComingSoon'
 import { UserMenu } from './UserMenu'
 import { LandlordAgreementsModal } from './LandlordAgreementsModal'
 import { getDocusignStatus, type DocusignStatus } from '../lib/docusignApi'
@@ -186,13 +184,6 @@ export function TenantLayout() {
 
   if (profileRole === 'admin') {
     return <Navigate to="/admin" replace />
-  }
-
-  // Launch sequencing: tenant side stays hidden behind the flag until there's
-  // enough landlord inventory. Short-circuits before any tenant-only routes,
-  // nav items, or data fetches below ever mount.
-  if (profileRole === 'tenant' && !tenantSideEnabledForEmail(user?.email)) {
-    return <TenantSideComingSoon />
   }
 
   return (

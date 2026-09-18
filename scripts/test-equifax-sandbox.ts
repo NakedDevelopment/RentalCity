@@ -8,33 +8,47 @@ config()
 import {
   equifaxPdfEndpoint,
   getEquifaxToken,
+  getInternalTestEnv,
   requestCreditReport,
 } from '../server/equifax.ts'
 
-const env = process.env.EQUIFAX_ENV?.toLowerCase()
-if (env !== 'sandbox' && env !== 'uat') {
-  throw new Error('This test can run only with EQUIFAX_ENV=sandbox or EQUIFAX_ENV=uat')
-}
+// This script exercises Rental City's own reseller test credentials — the
+// account Equifax will only ever promote as far as sandbox/UAT. Real
+// per-landlord production credentials are entered by an admin per-landlord
+// and exercised through the app's own /api/equifax/credit-check endpoint,
+// not this script.
+const env = getInternalTestEnv()
 if (process.env.ALLOW_EQUIFAX_TEST_PULL !== 'true') {
   throw new Error('Set ALLOW_EQUIFAX_TEST_PULL=true to confirm this non-production CTEST report request')
 }
 
-const result = await requestCreditReport({
-  firstName: 'KBJGCP',
-  lastName: 'XSCNF',
-  ssn: '666000001',
-  houseNumber: '1886',
-  streetName: 'VBPLDNRC',
-  streetType: 'TRWY',
-  city: 'TUSCALOOSA',
-  state: 'AL',
-  zip: '35425',
-})
+const memberNumber = process.env.EQUIFAX_MEMBER_NUMBER
+const securityCode = process.env.EQUIFAX_SECURITY_CODE
+const customerCode = process.env.EQUIFAX_CUSTOMER_CODE
+if (!memberNumber || !securityCode || !customerCode) {
+  throw new Error('EQUIFAX_MEMBER_NUMBER / EQUIFAX_SECURITY_CODE / EQUIFAX_CUSTOMER_CODE must be set (Rental City\'s own reseller test credentials) to run this script')
+}
 
-const token = await getEquifaxToken()
+const result = await requestCreditReport(
+  {
+    firstName: 'KBJGCP',
+    lastName: 'XSCNF',
+    ssn: '666000001',
+    houseNumber: '1886',
+    streetName: 'VBPLDNRC',
+    streetType: 'TRWY',
+    city: 'TUSCALOOSA',
+    state: 'AL',
+    zip: '35425',
+  },
+  { memberNumber, securityCode, customerCode },
+  env,
+)
+
+const token = await getEquifaxToken(env)
 let pdfResponse: Response | null = null
 for (let attempt = 1; attempt <= 15; attempt += 1) {
-  pdfResponse = await fetch(equifaxPdfEndpoint(result.reportId), {
+  pdfResponse = await fetch(equifaxPdfEndpoint(result.reportId, env), {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (pdfResponse.ok || pdfResponse.status !== 409) break

@@ -26,6 +26,8 @@ export const admin = {
     'rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 shadow-sm transition hover:bg-amber-100 disabled:opacity-50',
   inputSearch:
     'w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-3 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm transition focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-200',
+  inputField:
+    'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm transition focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-200',
   tabsBar: 'flex gap-1 border-b border-gray-200',
   tab(active: boolean) {
     return [

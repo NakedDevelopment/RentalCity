@@ -99,6 +99,25 @@ export function EditIncomePage() {
     })
   }, [user])
 
+  // Assets and Bank Income are async, webhook-driven reports — poll while
+  // status is 'processing' so the scorecard updates without a manual refresh.
+  useEffect(() => {
+    if (!user || verification?.status !== 'processing') return
+    let cancelled = false
+    const interval = setInterval(() => {
+      getAccessToken().then((token) => {
+        if (!token || cancelled) return
+        getPlaidVerification(token)
+          .then((v) => { if (!cancelled) setVerification(v) })
+          .catch(() => {})
+      })
+    }, 8000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [user, verification?.status])
+
   const incomeNum = useMemo(() => {
     const v = monthlyIncome.trim()
     if (!v) return 0
@@ -259,7 +278,32 @@ export function EditIncomePage() {
           ) : null}
         </div>
 
-        {v && hasAnyVerification ? (
+        {v && v.status === 'processing' ? (
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+            <svg className="h-4 w-4 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+            <p className="text-sm text-gray-600">
+              Verifying with your bank{v.institutionName ? ` (${v.institutionName})` : ''} — this can take a few
+              minutes.
+            </p>
+          </div>
+        ) : v && v.status === 'failed' ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-red-600">
+              We couldn’t verify this account. Try reconnecting your bank.
+            </p>
+            <button
+              type="button"
+              onClick={handleConnectBank}
+              disabled={plaidLoading}
+              className="rounded-lg btn-primary px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {plaidLoading ? 'Connecting...' : 'Reconnect bank'}
+            </button>
+          </div>
+        ) : v && hasAnyVerification ? (
           <div className="mt-4 space-y-4">
             {v.institutionName ? (
               <p className="text-xs text-gray-500">

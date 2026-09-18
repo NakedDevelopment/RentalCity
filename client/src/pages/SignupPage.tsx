@@ -1,14 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { tenantSideEnabledForEmail } from '../lib/featureFlags'
 import { trackMetaEvent } from '../lib/metaPixel'
 
 type Role = 'tenant' | 'landlord'
 
 export function SignupPage() {
-  // Landlord-first launch: tenant self-signup is hidden unless the tenant side
-  // is enabled (always on in development for testing).
   const [role, setRole] = useState<Role>('landlord')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -118,8 +115,6 @@ export function SignupPage() {
     meetsPasswordRequirements(password) &&
     password === confirmPassword
 
-  const tenantSignupEnabled = tenantSideEnabledForEmail(email)
-
   function EyeIcon({ open }: { open: boolean }) {
     return (
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -151,28 +146,26 @@ export function SignupPage() {
               : 'Create your tenant account and get matched with your next home!'}
           </p>
 
-          {tenantSignupEnabled ? (
-            <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-              <button
-                type="button"
-                onClick={() => setRole('landlord')}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  role === 'landlord' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                I&apos;m a landlord
-              </button>
-              <button
-                type="button"
-                onClick={() => setRole('tenant')}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  role === 'tenant' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                I&apos;m a tenant
-              </button>
-            </div>
-          ) : null}
+          <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
+            <button
+              type="button"
+              onClick={() => setRole('landlord')}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                role === 'landlord' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              I&apos;m a landlord
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('tenant')}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                role === 'tenant' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              I&apos;m a tenant
+            </button>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -188,9 +181,7 @@ export function SignupPage() {
                   type="email"
                   value={email}
                   onChange={(e) => {
-                  const nextEmail = e.target.value
-                  setEmail(nextEmail)
-                  if (role === 'tenant' && !tenantSideEnabledForEmail(nextEmail)) setRole('landlord')
+                  setEmail(e.target.value)
                   if (emailError) setEmailError(null)
                 }}
                 onBlur={() => {

@@ -486,7 +486,7 @@ export function LandlordTenantProfilePage() {
       const { data: bankRow } = await supabase
         .from('plaid_financial_verifications')
         .select(
-          'institution_name, accounts_count, income_verified, balances_verified, debts_verified, dti_ratio, identity_verified, monthly_income_range_low_cents, monthly_income_range_high_cents, asset_tier, last_verified_at',
+          'status, institution_name, accounts_count, income_verified, balances_verified, debts_verified, dti_ratio, identity_verified, monthly_income_range_low_cents, monthly_income_range_high_cents, asset_tier, last_verified_at',
         )
         .eq('user_id', id)
         .maybeSingle()

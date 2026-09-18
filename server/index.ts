@@ -16,13 +16,19 @@ import {
   computeMatch,
   type MatchResult,
 } from './match'
+import type { PlaidApi } from 'plaid'
 import {
   getPlaidClient,
   getPlaidEnv,
   createLinkToken,
   createIdvLinkToken,
   exchangePublicToken,
-  fetchFinancialSummary,
+  createAssetReport,
+  refreshAssetReport,
+  getAssetReport,
+  getBankIncome,
+  getInstitutionName,
+  computeFinancialSummary,
   createIdentityVerificationSession,
   getIdentityVerificationSession,
 } from './plaid'
@@ -34,7 +40,8 @@ import {
   requestCreditReport,
   equifaxPdfEndpoint,
   getEquifaxToken,
-  getEquifaxBase,
+  isEquifaxEnv,
+  type EquifaxEnv,
 } from './equifax'
 import { runNcisAliasCheck, runAssuredTenantCheck, type BackgroundCheckSubject } from './equifaxBackgroundChecks'
 import {
@@ -2422,9 +2429,25 @@ app.get('/api/admin/directory', async (req, res) => {
     return res.status(500).json({ error: pErr.message })
   }
 
+  const { data: credentials, error: cErr } = await admin
+    .from('equifax_landlord_credentials')
+    .select('landlord_id, member_number_last4, security_code_last4, customer_code_last4, updated_at')
+    .in('landlord_id', ids)
+
+  if (cErr) {
+    return res.status(500).json({ error: cErr.message })
+  }
+
   const profById = new Map((profiles ?? []).map((p) => [p.id as string, p]))
+  const credById = new Map((credentials ?? []).map((c) => [c.landlord_id as string, c]))
   const rows = users.map((u) => {
     const p = profById.get(u.id)
+    const c = credById.get(u.id) as {
+      member_number_last4?: string
+      security_code_last4?: string
+      customer_code_last4?: string
+      updated_at?: string
+    } | undefined
     return {
       id: u.id,
       email: u.email ?? '',
@@ -2439,6 +2462,14 @@ app.get('/api/admin/directory', async (req, res) => {
       equifax_pending_since: (p?.equifax_pending_since as string | null | undefined) ?? null,
       docusign_envelope_status: (p?.docusign_envelope_status as string | null | undefined) ?? null,
       plaid_agreement_signed_at: (p?.plaid_agreement_signed_at as string | null | undefined) ?? null,
+      equifax_credentials: c
+        ? {
+            memberNumberLast4: c.member_number_last4 ?? '',
+            securityCodeLast4: c.security_code_last4 ?? '',
+            customerCodeLast4: c.customer_code_last4 ?? '',
+            updatedAt: c.updated_at ?? null,
+          }
+        : null,
     }
   })
 
@@ -2466,6 +2497,7 @@ async function bearerUser(req: express.Request) {
 // figures, per-account details, the account-holder name, and contact PII are
 // deliberately never surfaced (and are no longer stored — see storeVerification).
 function verificationRow(row: {
+  status?: string | null
   institution_name: string | null
   accounts_count: number | null
   income_verified: boolean | null
@@ -2481,6 +2513,7 @@ function verificationRow(row: {
   const num = (v: number | string | null | undefined) =>
     v === null || v === undefined ? null : Number(v)
   return {
+    status: (row.status as 'processing' | 'complete' | 'failed' | null) ?? 'processing',
     institutionName: row.institution_name,
     accountsCount: row.accounts_count ?? 0,
 
@@ -2503,8 +2536,10 @@ app.post('/api/plaid/link-token/create', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
   const client = getPlaidClient()
   if (!client) return plaidUnavailable(res)
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   try {
-    const linkToken = await createLinkToken(client, user.id)
+    const linkToken = await createLinkToken(client, admin, user.id)
     return res.json({ linkToken })
   } catch (err) {
     const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
@@ -2526,23 +2561,49 @@ app.post('/api/plaid/exchange', async (req, res) => {
 
   try {
     const { accessToken, itemId } = await exchangePublicToken(client, publicToken)
-    const summary = await fetchFinancialSummary(client, accessToken)
     const env = getPlaidEnv()
+    const institutionName = await getInstitutionName(client, accessToken)
+
+    // Assets is a report-based product: kick off generation now, the report
+    // itself is only fetchable once the ASSETS/PRODUCT_READY webhook fires
+    // (see /api/plaid/assets/webhook below). Income Verification (Bank
+    // Income) was already initiated inside the same Link session via
+    // createLinkToken's income_verification config, and completes on its own
+    // timeline via /api/plaid/bank-income/webhook.
+    const webhookUrl = `${lifecycleAppUrl(req)}/api/plaid/assets/webhook`
+    const { assetReportId, assetReportToken } = await createAssetReport(client, accessToken, webhookUrl)
 
     const { error: itemErr } = await admin.from('plaid_items').upsert(
       {
         user_id: user.id,
         access_token: accessToken,
         item_id: itemId,
-        institution_name: summary.institutionName,
+        institution_name: institutionName,
         environment: env,
+        asset_report_id: assetReportId,
+        asset_report_token: assetReportToken,
       },
       { onConflict: 'user_id' },
     )
     if (itemErr) throw itemErr
 
-    const verification = await storeVerification(admin, user.id, summary, env)
-    return res.json(verification)
+    const { data, error: verErr } = await admin
+      .from('plaid_financial_verifications')
+      .upsert(
+        {
+          user_id: user.id,
+          status: 'processing',
+          institution_name: institutionName,
+          environment: env,
+          last_verified_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' },
+      )
+      .select('*')
+      .single()
+    if (verErr) throw verErr
+
+    return res.json(verificationRow(data))
   } catch (err) {
     const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
     console.error('Plaid exchange error:', msg || (err as Error)?.message)
@@ -2565,6 +2626,35 @@ app.get('/api/plaid/verification', async (req, res) => {
     console.error('Plaid verification read error:', error.message)
     return res.status(500).json({ error: 'Could not load verification status' })
   }
+
+  // Self-heal: the client polls this endpoint every few seconds while
+  // status is 'processing', so use each poll as a retry opportunity too —
+  // covers the rare case where a PRODUCT_READY webhook arrived before
+  // plaid_items was written (dropped, no lookup match) or a transient error
+  // during a prior webhook-triggered reconcile, either of which would
+  // otherwise strand this row at 'processing' forever.
+  if ((data as { status?: string } | null)?.status === 'processing') {
+    const client = getPlaidClient()
+    const { data: item } = await admin
+      .from('plaid_items')
+      .select('asset_report_token')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (client && item?.asset_report_token) {
+      try {
+        const verification = await reconcilePlaidVerification(
+          admin,
+          client,
+          user.id,
+          item.asset_report_token as string,
+        )
+        return res.json({ verification })
+      } catch (err) {
+        console.error('Plaid verification self-heal error:', (err as Error)?.message)
+      }
+    }
+  }
+
   return res.json({ verification: data ? verificationRow(data) : null })
 })
 
@@ -2578,21 +2668,111 @@ app.post('/api/plaid/refresh', async (req, res) => {
 
   const { data: item, error: itemErr } = await admin
     .from('plaid_items')
-    .select('access_token')
+    .select('asset_report_token')
     .eq('user_id', user.id)
     .maybeSingle()
   if (itemErr) return res.status(500).json({ error: 'Could not load linked bank' })
-  if (!item?.access_token) return res.status(404).json({ error: 'No linked bank to refresh' })
+  if (!item?.asset_report_token) return res.status(404).json({ error: 'No linked bank to refresh' })
 
   try {
-    const summary = await fetchFinancialSummary(client, item.access_token as string)
-    const verification = await storeVerification(admin, user.id, summary, getPlaidEnv())
-    return res.json(verification)
+    // Asset Reports are immutable — refreshing means requesting a new one,
+    // fetchable once its own PRODUCT_READY webhook fires. Bank Income isn't
+    // force-refreshed here (that endpoint is deprecated in favor of Link
+    // Update Mode); the existing report is re-read as-is.
+    const webhookUrl = `${lifecycleAppUrl(req)}/api/plaid/assets/webhook`
+    const { assetReportId, assetReportToken } = await refreshAssetReport(
+      client,
+      item.asset_report_token as string,
+      webhookUrl,
+    )
+    await admin
+      .from('plaid_items')
+      .update({ asset_report_id: assetReportId, asset_report_token: assetReportToken })
+      .eq('user_id', user.id)
+
+    const { data, error: verErr } = await admin
+      .from('plaid_financial_verifications')
+      .update({ status: 'processing' })
+      .eq('user_id', user.id)
+      .select('*')
+      .single()
+    if (verErr) throw verErr
+    return res.json(verificationRow(data))
   } catch (err) {
     const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
     console.error('Plaid refresh error:', msg || (err as Error)?.message)
     return res.status(502).json({ error: msg || 'Could not refresh verification' })
   }
+})
+
+// Fired when a requested/refreshed Asset Report finishes generating.
+app.post('/api/plaid/assets/webhook', express.json(), async (req, res) => {
+  const admin = getSupabaseAdmin()
+  const client = getPlaidClient()
+  if (!admin || !client) return res.json({ received: true })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body = req.body as any
+  const webhookType: string = body?.webhook_type ?? ''
+  const webhookCode: string = body?.webhook_code ?? ''
+  const assetReportId: string = body?.asset_report_id ?? ''
+  if (webhookType !== 'ASSETS' || !assetReportId) return res.json({ received: true })
+
+  try {
+    const { data: item } = await admin
+      .from('plaid_items')
+      .select('user_id, asset_report_token')
+      .eq('asset_report_id', assetReportId)
+      .maybeSingle()
+    if (!item?.asset_report_token) return res.json({ received: true })
+
+    if (webhookCode === 'ERROR') {
+      await admin.from('plaid_financial_verifications').update({ status: 'failed' }).eq('user_id', item.user_id)
+      return res.json({ received: true })
+    }
+    if (webhookCode !== 'PRODUCT_READY') return res.json({ received: true })
+
+    await reconcilePlaidVerification(admin, client, item.user_id as string, item.asset_report_token as string)
+  } catch (err) {
+    console.error('Plaid assets webhook error:', (err as Error)?.message)
+  }
+  return res.json({ received: true })
+})
+
+// Fired when a Bank Income (Income Verification) report finishes generating.
+app.post('/api/plaid/bank-income/webhook', express.json(), async (req, res) => {
+  const admin = getSupabaseAdmin()
+  const client = getPlaidClient()
+  if (!admin || !client) return res.json({ received: true })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body = req.body as any
+  const webhookType: string = body?.webhook_type ?? ''
+  const webhookCode: string = body?.webhook_code ?? ''
+  const plaidUserId: string = body?.user_id ?? ''
+  if (webhookType !== 'INCOME' || webhookCode !== 'BANK_INCOME_COMPLETE' || !plaidUserId) {
+    return res.json({ received: true })
+  }
+
+  try {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('plaid_user_id', plaidUserId)
+      .maybeSingle()
+    if (!profile?.id) return res.json({ received: true })
+
+    const { data: item } = await admin
+      .from('plaid_items')
+      .select('asset_report_token')
+      .eq('user_id', profile.id)
+      .maybeSingle()
+
+    await reconcilePlaidVerification(admin, client, profile.id as string, (item?.asset_report_token as string) ?? null)
+  } catch (err) {
+    console.error('Plaid bank income webhook error:', (err as Error)?.message)
+  }
+  return res.json({ received: true })
 })
 
 // --- Plaid Identity Verification endpoints ---
@@ -2739,19 +2919,52 @@ app.post('/api/plaid/identity-verification/webhook', express.json(), async (req,
   return res.json({ received: true })
 })
 
-async function storeVerification(
+/**
+ * Re-derives the full verification signal set from whichever of the two
+ * async reports (Asset Report, Bank Income) are currently fetchable, and
+ * stores it. Called from both webhook handlers — each just tells us
+ * "something changed"; this re-fetches from Plaid rather than trusting the
+ * webhook body, same pattern as the existing Identity Verification webhook.
+ *
+ * Status becomes 'complete' once the Asset Report (the backbone signal —
+ * balances, owner-name identity, debt) has been successfully fetched, even
+ * if Bank Income hasn't landed yet; a later Bank Income webhook re-runs this
+ * and updates the income fields without regressing status.
+ */
+async function reconcilePlaidVerification(
   admin: SupabaseClient,
+  client: PlaidApi,
   userId: string,
-  summary: Awaited<ReturnType<typeof fetchFinancialSummary>>,
-  env: string,
+  assetReportToken: string | null,
 ) {
+  let assetReport: Awaited<ReturnType<typeof getAssetReport>> | null = null
+  if (assetReportToken) {
+    try {
+      assetReport = await getAssetReport(client, assetReportToken)
+    } catch {
+      // Not ready yet (PRODUCT_NOT_READY) or errored — leave null, status stays processing.
+    }
+  }
+
+  let bankIncome: Awaited<ReturnType<typeof getBankIncome>> | null = null
+  const { data: profile } = await admin.from('profiles').select('plaid_user_id').eq('id', userId).maybeSingle()
+  const plaidUserId = (profile as { plaid_user_id?: string | null } | null)?.plaid_user_id
+  if (plaidUserId) {
+    try {
+      bankIncome = await getBankIncome(client, plaidUserId)
+    } catch {
+      // Not ready yet, or Bank Income wasn't completed during Link — leave null.
+    }
+  }
+
+  const summary = computeFinancialSummary(assetReport, bankIncome)
+
   // Data minimization: persist ONLY verification signals + the computed DTI.
   // Raw figures (income / balance / debt amounts), per-account breakdowns, the
-  // account-holder name, and any contact PII are intentionally NOT stored --
-  // the columns that used to hold them have been dropped from the table (see
-  // migration 20260609120000_plaid_minimize_signals_only.sql).
+  // account-holder name, and any contact PII are intentionally NOT stored.
   const payload = {
     user_id: userId,
+    status: assetReport ? 'complete' : 'processing',
     institution_name: summary.institutionName,
     accounts_count: summary.accountsCount,
 
@@ -2765,7 +2978,6 @@ async function storeVerification(
     monthly_income_range_high_cents: summary.monthlyIncomeRangeHighCents,
     asset_tier: summary.assetTier,
 
-    environment: env,
     last_verified_at: new Date().toISOString(),
   }
   const { data, error } = await admin
@@ -3141,6 +3353,34 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
     return res.status(403).json({ error: 'You must unlock this tenant’s profile before running a credit check.' })
   }
 
+  // Rental City is a reseller: each approved landlord has their own
+  // Equifax-issued production member number/security code/customer code,
+  // entered by an admin. Real pulls only ever run against production.
+  const { data: landlordCreds } = await admin
+    .from('equifax_landlord_credentials')
+    .select('member_number_encrypted, security_code_encrypted, customer_code_encrypted')
+    .eq('landlord_id', user.id)
+    .maybeSingle()
+  const lc = landlordCreds as {
+    member_number_encrypted: string
+    security_code_encrypted: string
+    customer_code_encrypted: string
+  } | null
+  if (!lc) {
+    return res.status(400).json({ error: 'Equifax credentials have not been set up for this account yet. Contact support.' })
+  }
+  let subscriberCredentials: { memberNumber: string; securityCode: string; customerCode: string }
+  try {
+    subscriberCredentials = {
+      memberNumber: decryptField(lc.member_number_encrypted),
+      securityCode: decryptField(lc.security_code_encrypted),
+      customerCode: decryptField(lc.customer_code_encrypted),
+    }
+  } catch (err) {
+    console.error('Equifax landlord credential decrypt error:', (err as Error).message)
+    return res.status(500).json({ error: 'Could not read this account\'s Equifax credentials. Contact support.' })
+  }
+
   const universalApplicationId = await resolveActiveUniversalApplicationId(admin, tenantId)
   if (!universalApplicationId) {
     return res.status(400).json({ error: 'Tenant does not have an active application.' })
@@ -3178,7 +3418,7 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
   // 'failed')` guard means only one concurrent retry actually wins the flip.
   const { data: reclaimed } = await admin
     .from('equifax_credit_reports')
-    .update({ status: 'pending' })
+    .update({ status: 'pending', environment: 'production' })
     .eq('landlord_id', user.id)
     .eq('tenant_id', tenantId)
     .eq('universal_application_id', universalApplicationId)
@@ -3197,7 +3437,7 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
     // row the other request created.
     const { data: newRecord, error: insertErr } = await admin
       .from('equifax_credit_reports')
-      .insert({ landlord_id: user.id, tenant_id: tenantId, universal_application_id: universalApplicationId, status: 'pending' })
+      .insert({ landlord_id: user.id, tenant_id: tenantId, universal_application_id: universalApplicationId, status: 'pending', environment: 'production' })
       .select('id')
       .single()
     if (insertErr) {
@@ -3229,11 +3469,15 @@ app.post('/api/equifax/credit-check/:tenantId', async (req, res) => {
       city: string; state: string; zip: string
     }
     const ssn = decryptSSN(c.ssn_encrypted)
-    const result = await requestCreditReport({
-      firstName: c.first_name, lastName: c.last_name, ssn,
-      houseNumber: c.house_number, streetName: c.street_name, streetType: c.street_type,
-      city: c.city, state: c.state, zip: c.zip,
-    })
+    const result = await requestCreditReport(
+      {
+        firstName: c.first_name, lastName: c.last_name, ssn,
+        houseNumber: c.house_number, streetName: c.street_name, streetType: c.street_type,
+        city: c.city, state: c.state, zip: c.zip,
+      },
+      subscriberCredentials,
+      'production',
+    )
     reportId = result.reportId
   } catch (err) {
     await admin.from('equifax_credit_reports').update({ status: 'failed' }).eq('id', recordId)
@@ -3279,18 +3523,21 @@ app.get('/api/equifax/credit-check/:tenantId/pdf', async (req, res) => {
 
   const { data: report } = await admin
     .from('equifax_credit_reports')
-    .select('equifax_report_id')
+    .select('equifax_report_id, environment')
     .eq('landlord_id', user.id)
     .eq('tenant_id', tenantId)
     .eq('universal_application_id', universalApplicationId)
     .eq('status', 'complete')
     .maybeSingle()
-  const r = report as { equifax_report_id?: string | null } | null
+  const r = report as { equifax_report_id?: string | null; environment?: string | null } | null
   if (!r?.equifax_report_id) return res.status(404).json({ error: 'No completed credit report found' })
+  // Re-derive the host this specific report was actually created against,
+  // rather than trusting whatever EQUIFAX_ENV happens to be set to now.
+  const reportEnv: EquifaxEnv = isEquifaxEnv(r.environment ?? undefined) ? r.environment as EquifaxEnv : 'production'
 
   try {
-    const token = await getEquifaxToken()
-    const pdfUrl = equifaxPdfEndpoint(r.equifax_report_id)
+    const token = await getEquifaxToken(reportEnv)
+    const pdfUrl = equifaxPdfEndpoint(r.equifax_report_id, reportEnv)
 
     // Equifax generates the PDF asynchronously (up to ~10s after the initial
     // request) and returns 409 while it's not yet ready — retry briefly
@@ -3640,6 +3887,7 @@ app.get('/api/docusign/status', async (req, res) => {
     equifaxSigned,
     equifaxApproved,
     equifaxPendingSince: equifaxSigned && !equifaxApproved,
+    equifaxNeedsResign: p?.docusign_envelope_status === 'needs_resign',
     plaidSigned,
     agreementsSigned,
     fullyVerified: equifaxApproved && plaidSigned,
@@ -3667,11 +3915,25 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
     const createEnvelope = async () => {
       const { base64, fileExtension } = loadEquifaxAgreementDocument()
       const tabs: AnchorTab[] = [
+        // California retail-seller certification (page 1): Rental City landlords never
+        // issue credit to consumers in person, so this is always "No" — Equifax rejected
+        // a prior envelope for leaving it blank.
+        { anchorString: '______No', type: 'initial' as const },
+        // Vermont Fair Credit Reporting certification (page 2): Rental City only orders
+        // Vermont reports with prior consumer consent, so this is always "Yes".
+        { anchorString: '______ Yes', type: 'initial' as const },
         { anchorString: 'SUBSCRIBER:', type: 'text' as const, value: businessName, xOffset: '10' },
+        // No business-address field exists in profiles yet — left unlocked so the
+        // landlord fills in their own address during signing rather than left blank.
+        { anchorString: 'ADDRESS:', type: 'text' as const, locked: false, xOffset: '10' },
         { anchorString: 'Signed by:', type: 'sign' as const, xOffset: '10' },
         { anchorString: 'Printed Name', type: 'text' as const, value: landlordName, xOffset: '75' },
-        { anchorString: 'Title:', type: 'text' as const, xOffset: '10' },
+        { anchorString: 'Title:', type: 'text' as const, locked: false, xOffset: '10' },
         { anchorString: 'Date:', type: 'text' as const, value: new Date().toISOString().slice(0, 10), xOffset: '10' },
+        // Exhibit B service selections: Rental City only orders core credit reports
+        // (ACROFILE) and the FICO 8 score, per the owner's confirmed selection.
+        { anchorString: '______ ACROFILE', type: 'initial' as const },
+        { anchorString: 'Classic v8', type: 'initial' as const },
       ]
       const createdEnvelopeId = await createEmbeddedEnvelope({
         documentBase64: base64,
@@ -3993,24 +4255,34 @@ app.get('/api/admin/dashboard-stats', async (req, res) => {
   })
 })
 
-// Admin: approve or revoke a landlord's Equifax access
+// Admin: approve or revoke a landlord's Equifax access. On approve, the admin
+// also supplies the landlord's own Equifax-issued production member number,
+// security code, and customer code — Rental City is a reseller, so these are
+// per-landlord, not something Rental City's own account can supply globally.
 app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
   const ok = await requireAdmin(req, res)
   if (ok === null) return
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   const { userId } = req.params
-  const approve = (req.body as { approve?: boolean } | null)?.approve !== false
+  const body = req.body as {
+    approve?: boolean
+    memberNumber?: string
+    securityCode?: string
+    customerCode?: string
+  } | null
+  const approve = body?.approve !== false
 
   if (approve) {
     const { data: profile } = await admin
       .from('profiles')
-      .select('docusign_envelope_status, plaid_agreement_signed_at')
+      .select('docusign_envelope_status, plaid_agreement_signed_at, equifax_approved_at')
       .eq('id', userId)
       .maybeSingle()
     const agreementProfile = profile as {
       docusign_envelope_status?: string | null
       plaid_agreement_signed_at?: string | null
+      equifax_approved_at?: string | null
     } | null
     if (agreementProfile?.docusign_envelope_status !== 'completed') {
       return res.status(400).json({ error: 'This landlord has not completed the Equifax Broker Subscriber Agreement.' })
@@ -4018,14 +4290,40 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
     if (!agreementProfile?.plaid_agreement_signed_at) {
       return res.status(400).json({ error: 'This landlord has not completed the Plaid End Client Consent.' })
     }
+
+    const memberNumber = (body?.memberNumber ?? '').trim()
+    const securityCode = (body?.securityCode ?? '').trim()
+    const customerCode = (body?.customerCode ?? '').trim()
+    if (!memberNumber || !securityCode || !customerCode) {
+      return res.status(400).json({ error: 'Member number, security code, and customer code are all required to approve access.' })
+    }
+
+    const credErr = (
+      await admin.from('equifax_landlord_credentials').upsert({
+        landlord_id: userId,
+        member_number_encrypted: encryptField(memberNumber),
+        member_number_last4: memberNumber.slice(-4),
+        security_code_encrypted: encryptField(securityCode),
+        security_code_last4: securityCode.slice(-4),
+        customer_code_encrypted: encryptField(customerCode),
+        customer_code_last4: customerCode.slice(-4),
+        updated_at: new Date().toISOString(),
+      })
+    ).error
+    if (credErr) return res.status(500).json({ error: credErr.message })
+
+    // Only set the approval timestamp on first approval — re-submitting to
+    // edit credentials for an already-approved landlord shouldn't reset it.
+    const update: Record<string, string | null> = { equifax_pending_since: null }
+    if (!agreementProfile?.equifax_approved_at) {
+      update.equifax_approved_at = new Date().toISOString()
+    }
+    const { error: upErr } = await admin.from('profiles').update(update).eq('id', userId)
+    if (upErr) return res.status(500).json({ error: upErr.message })
+    return res.json({ ok: true })
   }
 
-  const update: Record<string, string | null> = {
-    equifax_approved_at: approve ? new Date().toISOString() : null,
-  }
-  if (approve) update.equifax_pending_since = null
-
-  const { error: upErr } = await admin.from('profiles').update(update).eq('id', userId)
+  const { error: upErr } = await admin.from('profiles').update({ equifax_approved_at: null }).eq('id', userId)
   if (upErr) return res.status(500).json({ error: upErr.message })
   return res.json({ ok: true })
 })
