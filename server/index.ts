@@ -29,6 +29,7 @@ import {
   getBankIncome,
   getInstitutionName,
   computeFinancialSummary,
+  verifyPlaidWebhook,
   createIdentityVerificationSession,
   getIdentityVerificationSession,
 } from './plaid'
@@ -43,7 +44,13 @@ import {
   isEquifaxEnv,
   type EquifaxEnv,
 } from './equifax'
-import { runNcisAliasCheck, runAssuredTenantCheck, type BackgroundCheckSubject } from './equifaxBackgroundChecks'
+import {
+  runNcisAliasCheck,
+  runAssuredTenantCheck,
+  pollNcisAliasCheck,
+  pollAssuredTenantCheck,
+  type BackgroundCheckSubject,
+} from './equifaxBackgroundChecks'
 import {
   createEmbeddedEnvelope,
   createEmbeddedSigningUrl,
@@ -106,7 +113,15 @@ app.use(cors({ origin: true }))
 // must be registered before express.json() parses the body.
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
 
-app.use(express.json())
+type RawBodyRequest = Request & { rawBody?: Buffer }
+
+app.use(express.json({
+  verify: (req, _res, buffer) => {
+    if ((req.url ?? '').startsWith('/api/plaid/') && req.headers['plaid-verification']) {
+      ;(req as RawBodyRequest).rawBody = Buffer.from(buffer)
+    }
+  },
+}))
 
 function getSupabaseAdmin() {
   if (!supabaseUrl || !supabaseServiceKey) return null
@@ -1710,9 +1725,13 @@ app.post('/api/stripe/landlord/membership/confirm', async (req, res) => {
 const PROPERTY_RANGE_MINIMUMS: Record<string, number> = { '1': 1, '2-5': 2, '6-10': 6, '10+': 10 }
 
 function lifecycleAppUrl(req?: Request): string {
+  const configured = process.env.APP_URL?.replace(/\/+$/, '')
+  if (configured) return configured
   const origin =
-    (req?.headers.origin as string | undefined) ||
-    (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
+    process.env.NODE_ENV !== 'production'
+      ? (req?.headers.origin as string | undefined) ||
+        (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
+      : ''
   return origin || 'http://localhost:5000'
 }
 
@@ -2710,6 +2729,12 @@ app.post('/api/plaid/assets/webhook', express.json(), async (req, res) => {
   const admin = getSupabaseAdmin()
   const client = getPlaidClient()
   if (!admin || !client) return res.json({ received: true })
+  const verified = await verifyPlaidWebhook(
+    client,
+    req.header('Plaid-Verification'),
+    (req as RawBodyRequest).rawBody,
+  )
+  if (!verified) return res.status(401).json({ error: 'Invalid webhook signature' })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body = req.body as any
@@ -2744,6 +2769,12 @@ app.post('/api/plaid/bank-income/webhook', express.json(), async (req, res) => {
   const admin = getSupabaseAdmin()
   const client = getPlaidClient()
   if (!admin || !client) return res.json({ received: true })
+  const verified = await verifyPlaidWebhook(
+    client,
+    req.header('Plaid-Verification'),
+    (req as RawBodyRequest).rawBody,
+  )
+  if (!verified) return res.status(401).json({ error: 'Invalid webhook signature' })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body = req.body as any
@@ -2882,6 +2913,14 @@ app.get('/api/plaid/identity-verification/status', async (req, res) => {
 app.post('/api/plaid/identity-verification/webhook', express.json(), async (req, res) => {
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const client = getPlaidClient()
+  if (!client) return res.json({ received: true })
+  const verified = await verifyPlaidWebhook(
+    client,
+    req.header('Plaid-Verification'),
+    (req as RawBodyRequest).rawBody,
+  )
+  if (!verified) return res.status(401).json({ error: 'Invalid webhook signature' })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body = req.body as any
@@ -2896,9 +2935,6 @@ app.post('/api/plaid/identity-verification/webhook', express.json(), async (req,
   ) {
     return res.json({ received: true })
   }
-
-  const client = getPlaidClient()
-  if (!client) return res.json({ received: true })
 
   try {
     const session = await getIdentityVerificationSession(client, sessionId)
@@ -3650,73 +3686,156 @@ app.post('/api/equifax/background-check/:tenantId', async (req, res) => {
     return res.status(400).json({ error: 'Tenant has not authorized a background check.' })
   }
 
+  const trackingColumns =
+    'id, status, criminal_pass, eviction_pass, checked_at, criminal_status, eviction_status, criminal_reference_id, eviction_reference_id'
+  type BackgroundTrackingRow = {
+    id: string
+    status: string
+    criminal_pass: boolean | null
+    eviction_pass: boolean | null
+    checked_at: string | null
+    criminal_status: 'not_started' | 'pending' | 'complete' | 'failed'
+    eviction_status: 'not_started' | 'pending' | 'complete' | 'failed'
+    criminal_reference_id: string | null
+    eviction_reference_id: string | null
+  }
+
   const { data: existing } = await admin
     .from('equifax_background_checks')
-    .select('id, status, criminal_pass, eviction_pass, checked_at')
+    .select(trackingColumns)
     .eq('tenant_id', tenantId)
     .eq('universal_application_id', universalApplicationId)
     .in('status', ['pending', 'complete'])
     .maybeSingle()
-  if (existing) {
-    const e = existing as { status: string; criminal_pass: boolean | null; eviction_pass: boolean | null; checked_at: string | null }
+  if ((existing as BackgroundTrackingRow | null)?.status === 'complete') {
+    const e = existing as BackgroundTrackingRow
     return res.json({ status: e.status, criminal_pass: e.criminal_pass, eviction_pass: e.eviction_pass, checked_at: e.checked_at, tenantHasConsent: true })
   }
 
-  // Retrying after a failure: atomically reclaim the failed row rather than
-  // inserting a new one (the unique constraint on tenant/window would just
-  // collide with it forever otherwise, silently turning "try again" into a
-  // no-op that keeps returning the stale failed record). The `.eq('status',
-  // 'failed')` guard means only one concurrent retry actually wins the flip.
-  const { data: reclaimed } = await admin
-    .from('equifax_background_checks')
-    .update({ status: 'pending' })
-    .eq('tenant_id', tenantId)
-    .eq('universal_application_id', universalApplicationId)
-    .eq('status', 'failed')
-    .select('id')
-    .maybeSingle()
+  let tracking = existing as BackgroundTrackingRow | null
+  if (!tracking) {
+    const { data: reclaimed } = await admin
+      .from('equifax_background_checks')
+      .update({ status: 'pending' })
+      .eq('tenant_id', tenantId)
+      .eq('universal_application_id', universalApplicationId)
+      .eq('status', 'failed')
+      .select(trackingColumns)
+      .maybeSingle()
+    tracking = reclaimed as BackgroundTrackingRow | null
+  }
 
-  if (!reclaimed) {
-    const { error: insertErr } = await admin
+  if (!tracking) {
+    const { data: inserted, error: insertErr } = await admin
       .from('equifax_background_checks')
       .insert({ tenant_id: tenantId, universal_application_id: universalApplicationId, status: 'pending' })
+      .select(trackingColumns)
+      .single()
     if (insertErr) {
       if ((insertErr as { code?: string }).code === '23505') {
         const { data: raced } = await admin
           .from('equifax_background_checks')
-          .select('status, criminal_pass, eviction_pass, checked_at')
+          .select(trackingColumns)
           .eq('tenant_id', tenantId)
           .eq('universal_application_id', universalApplicationId)
           .maybeSingle()
-        const e = raced as { status: string; criminal_pass: boolean | null; eviction_pass: boolean | null; checked_at: string | null } | null
-        if (e) return res.json({ ...e, tenantHasConsent: true })
+        tracking = raced as BackgroundTrackingRow | null
       }
-      return res.status(500).json({ error: 'Could not create background check record' })
+      if (!tracking) return res.status(500).json({ error: 'Could not create background check record' })
+    } else {
+      tracking = inserted as BackgroundTrackingRow
     }
   }
 
+  const rowId = tracking.id
   const c = consent as {
     ssn_encrypted: string; date_of_birth_encrypted: string; first_name: string; last_name: string
     house_number: string; street_name: string; street_type: string; city: string; state: string; zip: string
   }
 
-  let criminalResult: Awaited<ReturnType<typeof runNcisAliasCheck>>
-  let evictionResult: Awaited<ReturnType<typeof runAssuredTenantCheck>>
-  try {
+  let subject: BackgroundCheckSubject | null = null
+  const getSubject = () => {
+    if (subject) return subject
     const ssn = decryptField(c.ssn_encrypted)
     const dobIso = decryptField(c.date_of_birth_encrypted)
     const [year, month, day] = dobIso.split('-')
-    const subject: BackgroundCheckSubject = {
+    subject = {
       firstName: c.first_name, lastName: c.last_name, ssn, dob: `${month}/${day}/${year}`,
       houseNumber: c.house_number, streetName: c.street_name, city: c.city, state: c.state, zip: c.zip,
     }
-    const quoteback = `RC-${tenantId.slice(0, 8)}-${Date.now()}`
-    ;[criminalResult, evictionResult] = await Promise.all([
-      runNcisAliasCheck(subject, quoteback),
-      runAssuredTenantCheck(subject, quoteback),
-    ])
+    return subject
+  }
+
+  type ProductResult = Awaited<ReturnType<typeof runNcisAliasCheck>>
+  const processProduct = async (product: 'criminal' | 'eviction'): Promise<ProductResult> => {
+    const statusKey = `${product}_status` as 'criminal_status' | 'eviction_status'
+    const referenceKey = `${product}_reference_id` as 'criminal_reference_id' | 'eviction_reference_id'
+    const passKey = `${product}_pass` as 'criminal_pass' | 'eviction_pass'
+    const currentStatus = tracking![statusKey]
+    const referenceId = tracking![referenceKey]
+
+    let result: ProductResult
+    if (currentStatus === 'complete') {
+      return { status: 'complete', pass: tracking![passKey], message: '', referenceId }
+    }
+    if (currentStatus === 'pending' && referenceId) {
+      result =
+        product === 'criminal'
+          ? await pollNcisAliasCheck(referenceId)
+          : await pollAssuredTenantCheck(referenceId)
+    } else if (currentStatus === 'pending') {
+      return { status: 'pending', pass: null, message: 'Order is being placed', referenceId: null }
+    } else {
+      // Claim this product before calling IDS so concurrent requests cannot
+      // place the same billable order twice.
+      const { data: claimed } = await admin
+        .from('equifax_background_checks')
+        .update({ [statusKey]: 'pending' })
+        .eq('id', rowId)
+        .eq(statusKey, currentStatus)
+        .select('id')
+        .maybeSingle()
+      if (!claimed) return { status: 'pending', pass: null, message: 'Order is being placed', referenceId: null }
+      const quoteback = `RC-${rowId.slice(0, 8)}-${product}`
+      result =
+        product === 'criminal'
+          ? await runNcisAliasCheck(getSubject(), quoteback)
+          : await runAssuredTenantCheck(getSubject(), quoteback)
+    }
+
+    const { error } = await admin
+      .from('equifax_background_checks')
+      .update({
+        [statusKey]: result.status,
+        [passKey]: result.pass,
+        [referenceKey]: result.referenceId,
+      })
+      .eq('id', rowId)
+    if (error) throw error
+    return result
+  }
+
+  let criminalResult: ProductResult
+  let evictionResult: ProductResult
+  try {
+    const results = await Promise.allSettled([processProduct('criminal'), processProduct('eviction')])
+    criminalResult =
+      results[0].status === 'fulfilled'
+        ? results[0].value
+        : { status: 'failed', pass: null, message: 'Criminal check request failed', referenceId: tracking.criminal_reference_id }
+    evictionResult =
+      results[1].status === 'fulfilled'
+        ? results[1].value
+        : { status: 'failed', pass: null, message: 'Eviction check request failed', referenceId: tracking.eviction_reference_id }
+    if (results[0].status === 'rejected') {
+      await admin.from('equifax_background_checks').update({ criminal_status: 'failed' }).eq('id', rowId)
+      console.error('IDS criminal check error:', (results[0].reason as Error)?.message)
+    }
+    if (results[1].status === 'rejected') {
+      await admin.from('equifax_background_checks').update({ eviction_status: 'failed' }).eq('id', rowId)
+      console.error('IDS eviction check error:', (results[1].reason as Error)?.message)
+    }
   } catch (err) {
-    await admin.from('equifax_background_checks').update({ status: 'failed' }).eq('tenant_id', tenantId).eq('universal_application_id', universalApplicationId)
     console.error('IDS background check error:', (err as Error).message)
     return res.status(502).json({ error: 'Could not retrieve background check from the screening provider. Please try again.' })
   }
@@ -3857,7 +3976,11 @@ app.get('/api/docusign/status', async (req, res) => {
   // user closed the tab before the return-page callback fired), reconcile
   // with DocuSign's live status rather than staying stuck forever.
   try {
-    if (p?.docusign_envelope_id && p.docusign_envelope_status !== 'completed') {
+    if (
+      p?.docusign_envelope_id &&
+      p.docusign_envelope_status !== 'completed' &&
+      p.docusign_envelope_status !== 'needs_resign'
+    ) {
       const live = await getEnvelopeStatus(p.docusign_envelope_id)
       if (live.status === 'completed') await processDocusignCompletion(admin, user.id, user.email, 'equifax')
     }
@@ -3952,7 +4075,12 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
     }
 
     let envelopeId = p?.docusign_envelope_id || null
-    if (!envelopeId || p?.docusign_envelope_status === 'declined' || p?.docusign_envelope_status === 'voided') {
+    if (
+      !envelopeId ||
+      p?.docusign_envelope_status === 'declined' ||
+      p?.docusign_envelope_status === 'voided' ||
+      p?.docusign_envelope_status === 'needs_resign'
+    ) {
       envelopeId = await createEnvelope()
     }
 

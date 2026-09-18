@@ -7,6 +7,7 @@ import {
   IncomeVerificationSourceType,
 } from 'plaid'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto'
 
 // No silent default: an unset or misspelled PLAID_ENV must fail loudly rather
 // than quietly routing every call to sandbox (the same bug class that hit the
@@ -52,6 +53,68 @@ export function getPlaidClient(): PlaidApi | null {
     },
   })
   return new PlaidApi(configuration)
+}
+
+type PlaidWebhookClaims = {
+  iat?: number
+  request_body_sha256?: string
+}
+
+/**
+ * Verifies Plaid's ES256 webhook JWT and binds it to the exact raw request body.
+ * Plaid rotates keys, so the JWT's kid is resolved through Plaid's authenticated
+ * verification-key endpoint rather than from local configuration.
+ */
+export async function verifyPlaidWebhook(
+  client: PlaidApi,
+  token: string | undefined,
+  rawBody: Buffer | undefined,
+): Promise<boolean> {
+  if (!token || !rawBody) return false
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+
+  let header: { alg?: string; kid?: string }
+  let claims: PlaidWebhookClaims
+  try {
+    header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'))
+    claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+  } catch {
+    return false
+  }
+  if (header.alg !== 'ES256' || !header.kid) return false
+
+  const now = Math.floor(Date.now() / 1000)
+  if (typeof claims.iat !== 'number' || Math.abs(now - claims.iat) > 5 * 60) return false
+  const bodyHash = createHash('sha256').update(rawBody).digest('hex')
+  if (claims.request_body_sha256 !== bodyHash) return false
+
+  try {
+    const { data } = await client.webhookVerificationKeyGet({ key_id: header.kid })
+    const jwk = data.key
+    if (
+      jwk.kid !== header.kid ||
+      jwk.alg !== 'ES256' ||
+      jwk.kty !== 'EC' ||
+      jwk.crv !== 'P-256' ||
+      jwk.use !== 'sig' ||
+      (jwk.expired_at != null && jwk.expired_at <= now)
+    ) {
+      return false
+    }
+    const publicKey = createPublicKey({
+      key: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y },
+      format: 'jwk',
+    })
+    return verifySignature(
+      'sha256',
+      Buffer.from(`${parts[0]}.${parts[1]}`),
+      { key: publicKey, dsaEncoding: 'ieee-p1363' },
+      Buffer.from(parts[2], 'base64url'),
+    )
+  } catch {
+    return false
+  }
 }
 
 /**

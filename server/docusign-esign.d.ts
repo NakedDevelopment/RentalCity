@@ -50,6 +50,7 @@ declare module 'docusign-esign' {
     name: string
     recipientId: string
     clientUserId?: string
+    requireIdLookup?: string
     tabs?: SignerTabs
   }
 

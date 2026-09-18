@@ -10,7 +10,18 @@
 -- verification now has a processing lifecycle.
 
 ALTER TABLE plaid_financial_verifications
-  ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'processing';
+  ADD COLUMN IF NOT EXISTS status TEXT;
+
+-- Rows created by the previous synchronous Plaid flow already contain their
+-- final computed verification data. Preserve those as complete; only new
+-- report-based requests should enter the processing lifecycle.
+UPDATE plaid_financial_verifications
+SET status = 'complete'
+WHERE status IS NULL;
+
+ALTER TABLE plaid_financial_verifications
+  ALTER COLUMN status SET DEFAULT 'processing',
+  ALTER COLUMN status SET NOT NULL;
 
 ALTER TABLE plaid_financial_verifications
   DROP CONSTRAINT IF EXISTS plaid_financial_verifications_status_check;

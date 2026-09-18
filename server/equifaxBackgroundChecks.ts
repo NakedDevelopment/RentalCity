@@ -120,6 +120,19 @@ async function placeOrder(inputXml: string): Promise<any> {
   return parseIeiResponse(text)
 }
 
+/** Fetches an asynchronous IDS order by the reference ID returned by PlaceOrder. */
+async function getResults(referenceId: string): Promise<any> {
+  const { login, password } = getIdsCredentials()
+  const res = await fetch(`${IDS_BASE}/GetResults`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ Login: login, Password: password, referenceId }),
+  })
+  const text = await res.text()
+  if (!res.ok) throw new Error(`IDS results request failed (${res.status})`)
+  return parseIeiResponse(text)
+}
+
 /**
  * ASMX's plain-POST binding wraps a string-typed return value in an outer
  * element with the actual XML content HTML-entity-encoded inside it. Try a
@@ -151,19 +164,47 @@ function getRequestCode(response: any): IeiResponseCode {
   }
 }
 
+function getReferenceId(response: any): string | null {
+  const info = response?.requestinformation
+  const value =
+    info?.['@_referenceid'] ??
+    info?.['@_referenceId'] ??
+    info?.referenceid ??
+    info?.referenceId ??
+    response?.referenceid ??
+    response?.referenceId
+  return value == null || String(value).trim() === '' ? null : String(value)
+}
+
 // ─── NCIS-Alias (criminal) ────────────────────────────────────────────────────
 
-export type CriminalCheckResult = { status: 'complete' | 'pending' | 'failed'; pass: boolean | null; message: string }
+export type CriminalCheckResult = {
+  status: 'complete' | 'pending' | 'failed'
+  pass: boolean | null
+  message: string
+  referenceId: string | null
+}
 
 export async function runNcisAliasCheck(subject: BackgroundCheckSubject, quoteback: string): Promise<CriminalCheckResult> {
   const response = await placeOrder(buildNcisAliasRequest(subject, quoteback))
+  return criminalResultFromResponse(response)
+}
+
+export async function pollNcisAliasCheck(referenceId: string): Promise<CriminalCheckResult> {
+  const response = await getResults(referenceId)
+  return criminalResultFromResponse(response)
+}
+
+function criminalResultFromResponse(response: any): CriminalCheckResult {
   const { code, message } = getRequestCode(response)
+  const referenceId = getReferenceId(response)
 
-  if (code === '101') return { status: 'complete', pass: true, message } // No Records Found
-  if (code === '102') return { status: 'pending', pass: null, message } // offline/async jurisdiction
-  if (code !== '100') return { status: 'failed', pass: null, message: message || `Equifax error ${code}` }
+  if (code === '101') return { status: 'complete', pass: true, message, referenceId } // No Records Found
+  if (code === '102' && referenceId) return { status: 'pending', pass: null, message, referenceId } // offline/async jurisdiction
+  if (code === '102') return { status: 'failed', pass: null, message: 'IDS returned pending without a reference ID', referenceId: null }
+  if (code !== '100') return { status: 'failed', pass: null, message: message || `IDS error ${code}`, referenceId }
 
-  return { status: 'complete', pass: deriveCriminalPass(response), message }
+  return { status: 'complete', pass: deriveCriminalPass(response), message, referenceId }
 }
 
 /**
@@ -186,17 +227,33 @@ function deriveCriminalPass(response: any): boolean {
 
 // ─── AssuredTenant Alias (eviction) ──────────────────────────────────────────
 
-export type EvictionCheckResult = { status: 'complete' | 'pending' | 'failed'; pass: boolean | null; message: string }
+export type EvictionCheckResult = {
+  status: 'complete' | 'pending' | 'failed'
+  pass: boolean | null
+  message: string
+  referenceId: string | null
+}
 
 export async function runAssuredTenantCheck(subject: BackgroundCheckSubject, quoteback: string): Promise<EvictionCheckResult> {
   const response = await placeOrder(buildAssuredTenantRequest(subject, quoteback))
+  return evictionResultFromResponse(response)
+}
+
+export async function pollAssuredTenantCheck(referenceId: string): Promise<EvictionCheckResult> {
+  const response = await getResults(referenceId)
+  return evictionResultFromResponse(response)
+}
+
+function evictionResultFromResponse(response: any): EvictionCheckResult {
   const { code, message } = getRequestCode(response)
+  const referenceId = getReferenceId(response)
 
-  if (code === '101') return { status: 'complete', pass: true, message }
-  if (code === '102') return { status: 'pending', pass: null, message }
-  if (code !== '100') return { status: 'failed', pass: null, message: message || `Equifax error ${code}` }
+  if (code === '101') return { status: 'complete', pass: true, message, referenceId }
+  if (code === '102' && referenceId) return { status: 'pending', pass: null, message, referenceId }
+  if (code === '102') return { status: 'failed', pass: null, message: 'IDS returned pending without a reference ID', referenceId: null }
+  if (code !== '100') return { status: 'failed', pass: null, message: message || `IDS error ${code}`, referenceId }
 
-  return { status: 'complete', pass: deriveEvictionPass(response), message }
+  return { status: 'complete', pass: deriveEvictionPass(response), message, referenceId }
 }
 
 /**
