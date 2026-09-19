@@ -624,17 +624,20 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     }
     setApplicationIdByPropertyId(idByProp)
 
-    // Universal rental application window controls whether the tenant can apply to properties.
+    // The paid window must be active and its required wizard must be complete
+    // before later properties can use the simple one-click Apply flow.
     const nowIso = new Date().toISOString()
     const { data: universalData } = await supabase
       .from('universal_applications')
-      .select('id')
+      .select('id, wizard_completed_at')
       .eq('tenant_id', user.id)
       .eq('status', 'active')
       .gt('valid_until', nowIso)
       .limit(1)
 
-    setHasActiveUniversalApplication((universalData ?? []).length > 0)
+    setHasActiveUniversalApplication(
+      (universalData ?? []).some((row) => Boolean(row.wizard_completed_at)),
+    )
   }, [user, profileRole])
 
   const loadLandlordMatches = useCallback(async (propertyIds: string[]) => {
@@ -938,22 +941,27 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
 
     // If the tenant does not have an active universal application, send them to the application page
     if (hasActiveUniversalApplication === false) {
-      navigate('/applications/apply')
+      navigate(`/applications/apply?propertyId=${encodeURIComponent(match.id)}`)
       return
     }
 
-    const { error } = await supabase.from('applications').insert({
-      tenant_id: user.id,
-      property_id: match.id,
-      status: 'pending',
-    })
-    if (error && error.code !== '23505') {
-      setError(error.message)
+    const { data: session } = await supabase.auth.getSession()
+    const token = session.session?.access_token
+    if (!token) {
+      setError('Your session expired. Please sign in again.')
       return
     }
-    if (!error) {
-      trackMetaEvent('SubmitApplication', { content_name: 'Property Application' })
+    const response = await fetch('/api/applications/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ propertyId: match.id }),
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
+      setError((body as { error?: string }).error || 'Could not submit your application.')
+      return
     }
+    trackMetaEvent('SubmitApplication', { content_name: 'Property Application' })
     setAppliedIds((prev) => new Set(prev).add(match.id))
     setSubmissionModal({ propertyTitle: match.title })
   }

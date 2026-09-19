@@ -23,6 +23,7 @@ export function UniversalApplicationPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const propertyId = searchParams.get('propertyId')
   const [hasExistingApplication, setHasExistingApplication] = useState(false)
   const [existingValidUntil, setExistingValidUntil] = useState<string | null>(null)
   const [renewMode, setRenewMode] = useState(false)
@@ -98,7 +99,12 @@ export function UniversalApplicationPage() {
           content_name: 'Universal Application',
           content_type: 'product',
         })
-        if (active) navigate('/account/rental-application', { replace: true })
+        if (active) {
+          navigate(
+            `/account/rental-application${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ''}`,
+            { replace: true },
+          )
+        }
       } catch (err) {
         if (active) {
           setError(err instanceof Error ? err.message : 'Something went wrong confirming your payment.')
@@ -110,7 +116,7 @@ export function UniversalApplicationPage() {
     return () => {
       active = false
     }
-  }, [searchParams, navigate])
+  }, [searchParams, navigate, propertyId])
 
   async function handleCheckout() {
     setError(null)
@@ -131,7 +137,7 @@ export function UniversalApplicationPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ tenantId: user.id }),
+        body: JSON.stringify({ tenantId: user.id, propertyId }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -145,7 +151,10 @@ export function UniversalApplicationPage() {
 
       // Demo bypass (dev only): payment was skipped and access granted server-side.
       if (json.demo) {
-        navigate('/account/rental-application', { replace: true })
+        navigate(
+          `/account/rental-application${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ''}`,
+          { replace: true },
+        )
         return
       }
 
@@ -198,7 +207,7 @@ export function UniversalApplicationPage() {
 
             <div className="max-w-xl mx-auto space-y-4">
               <Link
-                to="/account/rental-application"
+                to={`/account/rental-application${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ''}`}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl btn-primary py-3 text-sm font-medium text-white"
               >
                 Continue to my application

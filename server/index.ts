@@ -1055,77 +1055,22 @@ const LANDLORD_TRIAL_DAYS = 183
  */
 async function activateUniversalApplicationPaid(
   admin: SupabaseClient,
-  params: { tenantId: string; paymentIntentId: string; amountCents: number; description: string },
+  params: { tenantId: string; paymentIntentId: string; amountCents: number; description: string; propertyId?: string | null },
 ): Promise<{ universalApplicationId: string | null; alreadyProcessed: boolean }> {
-  const { tenantId, paymentIntentId, amountCents, description } = params
-
-  async function currentActiveId(): Promise<string | null> {
-    const { data } = await admin
-      .from('universal_applications')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    return (data as { id?: string } | null)?.id ?? null
-  }
-
-  // Expire any currently-active window, then open a fresh 6-month one.
-  async function openWindow(): Promise<string | null> {
-    await admin
-      .from('universal_applications')
-      .update({ status: 'expired' })
-      .eq('tenant_id', tenantId)
-      .eq('status', 'active')
-
-    const validUntil = new Date()
-    validUntil.setMonth(validUntil.getMonth() + 6)
-
-    const { data: inserted, error: insertError } = await admin
-      .from('universal_applications')
-      .insert({ tenant_id: tenantId, status: 'active', valid_until: validUntil.toISOString() })
-      .select('id')
-      .maybeSingle()
-    if (insertError) throw new Error(insertError.message)
-    return (inserted as { id?: string } | null)?.id ?? null
-  }
-
-  // Payment already recorded => activation ran (or partially ran) before. Return
-  // the active window, repairing it if a prior attempt recorded the payment but
-  // failed to open the window, so a paid tenant is never left without access.
-  async function resolveAlreadyPaid(): Promise<{ universalApplicationId: string | null; alreadyProcessed: boolean }> {
-    const activeId = await currentActiveId()
-    return { universalApplicationId: activeId ?? (await openWindow()), alreadyProcessed: true }
-  }
-
-  const { data: existingPayment } = await admin
-    .from('payments')
-    .select('id')
-    .eq('stripe_payment_intent_id', paymentIntentId)
-    .maybeSingle()
-  if (existingPayment) {
-    return resolveAlreadyPaid()
-  }
-
-  const { error: paymentError } = await admin.from('payments').insert({
-    application_id: null,
-    stripe_payment_intent_id: paymentIntentId,
-    amount_cents: amountCents,
-    currency: 'usd',
-    status: 'succeeded',
-    payer_id: tenantId,
-    description,
+  const { tenantId, paymentIntentId, amountCents, description, propertyId = null } = params
+  const { data, error } = await admin.rpc('activate_universal_application_payment', {
+    p_tenant_id: tenantId,
+    p_payment_intent_id: paymentIntentId,
+    p_amount_cents: amountCents,
+    p_description: description,
+    p_property_id: propertyId,
   })
-  if (paymentError) {
-    // Unique violation => a concurrent confirm/webhook already recorded this payment.
-    if ((paymentError as { code?: string }).code === '23505') {
-      return resolveAlreadyPaid()
-    }
-    throw new Error(paymentError.message)
+  if (error) throw new Error(error.message)
+  const row = Array.isArray(data) ? data[0] : data
+  return {
+    universalApplicationId: row?.universal_application_id ?? null,
+    alreadyProcessed: Boolean(row?.already_processed),
   }
-
-  return { universalApplicationId: await openWindow(), alreadyProcessed: false }
 }
 
 /**
@@ -1142,9 +1087,13 @@ app.post('/api/stripe/universal-application/checkout', async (req, res) => {
   const user = await authUser(token)
   if (!user) return res.status(401).json({ error: 'Authentication required' })
 
-  const { tenantId } = req.body as { tenantId?: string }
+  const { tenantId, propertyId } = req.body as { tenantId?: string; propertyId?: string | null }
   if (!tenantId || tenantId !== user.id) {
     return res.status(400).json({ error: 'Invalid request: tenantId must match authenticated user' })
+  }
+  if (propertyId) {
+    const { data: property } = await admin.from('properties').select('id').eq('id', propertyId).maybeSingle()
+    if (!property) return res.status(400).json({ error: 'Invalid property' })
   }
 
   const nowIso = new Date().toISOString()
@@ -1167,6 +1116,7 @@ app.post('/api/stripe/universal-application/checkout', async (req, res) => {
         description: hasExisting
           ? 'Universal application renewal (demo bypass)'
           : 'Universal application activation (demo bypass)',
+        propertyId,
       })
       return res.json({ demo: true, ...result })
     } catch (err) {
@@ -1185,7 +1135,12 @@ app.post('/api/stripe/universal-application/checkout', async (req, res) => {
       payment_method_types: ['card'],
       customer_email: user.email ?? undefined,
       client_reference_id: tenantId,
-      metadata: { tenantId, kind: 'universal_application', hasExisting: String(hasExisting) },
+      metadata: {
+        tenantId,
+        kind: 'universal_application',
+        hasExisting: String(hasExisting),
+        propertyId: propertyId || '',
+      },
       line_items: [
         {
           quantity: 1,
@@ -1203,7 +1158,9 @@ app.post('/api/stripe/universal-application/checkout', async (req, res) => {
       ],
       ui_mode: 'embedded',
       allow_promotion_codes: true,
-      return_url: `${origin}/applications/apply?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      return_url: `${origin}/applications/apply?checkout=success&session_id={CHECKOUT_SESSION_ID}${
+        propertyId ? `&propertyId=${encodeURIComponent(propertyId)}` : ''
+      }`,
     })
     return res.json({ clientSecret: session.client_secret })
   } catch (err) {
@@ -1269,11 +1226,100 @@ app.post('/api/stripe/universal-application/confirm', async (req, res) => {
       paymentIntentId,
       amountCents: amountTotal,
       description: hasExisting ? 'Universal application renewal' : 'Universal application activation',
+      propertyId: session.metadata?.propertyId || null,
     })
     return res.json(result)
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Activation failed' })
   }
+})
+
+/**
+ * Finalize the paid rental-application wizard. Completion is server-validated:
+ * personal/contact data, lease review, Equifax consent, and Plaid income must
+ * all be present before the originating property application is created.
+ */
+app.post('/api/universal-application/complete', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const { data: applicationId, error } = await admin.rpc('complete_rental_application', {
+    p_tenant_id: user.id,
+  })
+  if (error) return res.status(400).json({ error: error.message })
+  return res.json({ ok: true, applicationId: applicationId ?? null })
+})
+
+app.post('/api/universal-application/triggering-property', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const propertyId = typeof req.body?.propertyId === 'string' ? req.body.propertyId : ''
+  if (!propertyId) return res.status(400).json({ error: 'Missing propertyId' })
+
+  const { data: property } = await admin
+    .from('properties')
+    .select('id')
+    .eq('id', propertyId)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (!property) return res.status(400).json({ error: 'The property is no longer available.' })
+
+  const { data: active } = await admin
+    .from('universal_applications')
+    .select('id, triggering_property_id')
+    .eq('tenant_id', user.id)
+    .eq('status', 'active')
+    .gt('valid_until', new Date().toISOString())
+    .is('wizard_completed_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!active) return res.status(400).json({ error: 'No incomplete paid application was found.' })
+
+  if (!active.triggering_property_id) {
+    const { data: claimed, error } = await admin
+      .from('universal_applications')
+      .update({ triggering_property_id: propertyId })
+      .eq('id', active.id)
+      .is('triggering_property_id', null)
+      .select('triggering_property_id')
+      .maybeSingle()
+    if (error) return res.status(500).json({ error: 'Could not save the selected property.' })
+    if (claimed?.triggering_property_id) {
+      return res.json({ propertyId: claimed.triggering_property_id })
+    }
+
+    // Another tab may have claimed the row between our read and conditional
+    // update. Always return the persisted winner, never the stale request value.
+    const { data: persisted, error: readError } = await admin
+      .from('universal_applications')
+      .select('triggering_property_id')
+      .eq('id', active.id)
+      .single()
+    if (readError || !persisted?.triggering_property_id) {
+      return res.status(409).json({ error: 'The selected property could not be confirmed. Please try again.' })
+    }
+    return res.json({ propertyId: persisted.triggering_property_id })
+  }
+  return res.json({ propertyId: active.triggering_property_id })
+})
+
+app.post('/api/applications/apply', async (req, res) => {
+  const user = await bearerUser(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+  const propertyId = typeof req.body?.propertyId === 'string' ? req.body.propertyId : ''
+  if (!propertyId) return res.status(400).json({ error: 'Missing propertyId' })
+  const { data: applicationId, error } = await admin.rpc('apply_to_property', {
+    p_tenant_id: user.id,
+    p_property_id: propertyId,
+  })
+  if (error) return res.status(400).json({ error: error.message })
+  return res.json({ applicationId })
 })
 
 /**
@@ -2111,6 +2157,7 @@ async function handleStripeWebhook(req: Request, res: Response) {
           paymentIntentId,
           amountCents: amountTotal,
           description: hasExisting ? 'Universal application renewal' : 'Universal application activation',
+          propertyId: session.metadata?.propertyId || null,
         })
       } catch (err) {
         console.error('Stripe webhook activation failed:', err)
