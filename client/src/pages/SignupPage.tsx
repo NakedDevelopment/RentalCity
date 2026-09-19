@@ -150,7 +150,7 @@ export function SignupPage() {
 
   if (step === 1) {
     return (
-      <div className="signup-shell flex min-h-[calc(100dvh-72px)] flex-1 items-center justify-center px-4 py-10 sm:py-16">
+      <div className="signup-shell flex min-h-[calc(100dvh-72px)] w-full flex-1 items-center justify-center px-4 py-10 sm:py-16">
         <main className="signup-enter w-full max-w-[500px]">
           <div className="mb-8 text-center">
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e1f4fb] text-[#1683ae] shadow-sm">
@@ -186,7 +186,7 @@ export function SignupPage() {
   }
 
   return (
-    <div className="signup-shell flex flex-1 items-center justify-center px-4 py-10 sm:py-14">
+    <div className="signup-shell flex w-full flex-1 items-center justify-center px-4 py-10 sm:py-14">
       <div className="signup-enter w-full max-w-[460px]">
         <div className="signup-card rounded-3xl border border-[#dce7f0] bg-white px-6 py-8 sm:px-9 sm:py-10">
           <button type="button" data-testid="button-change-role" onClick={() => setStep(1)} className="mb-6 flex items-center gap-2 text-sm font-medium text-[#627589] transition-colors hover:text-[#1683ae] focus:outline-none focus:ring-2 focus:ring-[#2a9dcc] focus:ring-offset-2">
