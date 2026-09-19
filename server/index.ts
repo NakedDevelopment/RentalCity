@@ -1202,6 +1202,7 @@ app.post('/api/stripe/universal-application/checkout', async (req, res) => {
         },
       ],
       ui_mode: 'embedded',
+      allow_promotion_codes: true,
       return_url: `${origin}/applications/apply?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     })
     return res.json({ clientSecret: session.client_secret })
@@ -1240,17 +1241,25 @@ app.post('/api/stripe/universal-application/confirm', async (req, res) => {
   if (session.metadata?.tenantId !== user.id) {
     return res.status(403).json({ error: 'Forbidden' })
   }
-  if (session.payment_status !== 'paid') {
+  // 'no_payment_required' occurs when a 100%-off promotion code brings the total
+  // to $0 — Stripe completes the session without creating a PaymentIntent.
+  if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
     return res.status(402).json({ error: 'Payment has not completed yet.' })
   }
 
   const amountTotal = session.amount_total
-  if (typeof amountTotal !== 'number' || !UNIVERSAL_APP_FEE_CENTS.includes(amountTotal)) {
+  const discounted = (session.total_details?.amount_discount ?? 0) > 0
+  if (
+    typeof amountTotal !== 'number' ||
+    (!UNIVERSAL_APP_FEE_CENTS.includes(amountTotal) &&
+      !(discounted && amountTotal >= 0 && amountTotal < Math.min(...UNIVERSAL_APP_FEE_CENTS)))
+  ) {
     return res.status(400).json({ error: 'Unexpected payment amount.' })
   }
 
   const paymentIntentId =
-    typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+    (typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id) ||
+    (amountTotal === 0 ? `promo_${session.id}` : null)
   if (!paymentIntentId) return res.status(400).json({ error: 'No payment found for this session' })
 
   const hasExisting = session.metadata?.hasExisting === 'true'
@@ -2079,7 +2088,8 @@ async function handleStripeWebhook(req: Request, res: Response) {
     const session = event.data.object as Stripe.Checkout.Session
     const kind = session.metadata?.kind
     const paymentIntentId =
-      typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+      (typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id) ||
+      (session.amount_total === 0 ? `promo_${session.id}` : null)
     const amountTotal = session.amount_total
 
     if (
@@ -2087,9 +2097,12 @@ async function handleStripeWebhook(req: Request, res: Response) {
       kind === 'universal_application' &&
       session.metadata?.tenantId &&
       paymentIntentId &&
-      session.payment_status === 'paid' &&
+      (session.payment_status === 'paid' || session.payment_status === 'no_payment_required') &&
       typeof amountTotal === 'number' &&
-      UNIVERSAL_APP_FEE_CENTS.includes(amountTotal)
+      (UNIVERSAL_APP_FEE_CENTS.includes(amountTotal) ||
+        ((session.total_details?.amount_discount ?? 0) > 0 &&
+          amountTotal >= 0 &&
+          amountTotal < Math.min(...UNIVERSAL_APP_FEE_CENTS)))
     ) {
       const hasExisting = session.metadata?.hasExisting === 'true'
       try {
