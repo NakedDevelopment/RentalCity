@@ -6,7 +6,7 @@ import { trackMetaEvent } from '../lib/metaPixel'
 type Role = 'tenant' | 'landlord'
 
 export function SignupPage() {
-  const [role, setRole] = useState<Role>('landlord')
+  const [role, setRole] = useState<Role | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -31,6 +31,10 @@ export function SignupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!role) {
+      setStep(1)
+      return
+    }
     setError(null)
     setEmailError(null)
     setPasswordError(null)
@@ -108,6 +112,7 @@ export function SignupPage() {
   }
 
   const canSubmit =
+    role &&
     email &&
     password &&
     confirmPassword &&
@@ -135,37 +140,67 @@ export function SignupPage() {
     )
   }
 
-  return (
-    <div className="flex flex-1 items-center justify-center px-4 py-12">
-      <div className="w-full max-w-[440px]">
-        <div className="rounded-2xl border border-gray-200 bg-white px-8 py-10 shadow-sm">
-          <h1 className="mb-2 text-center text-[2rem] font-medium text-gray-900">Sign Up</h1>
-          <p className="mb-8 text-center text-[0.95rem] text-gray-600">
-            {role === 'landlord'
-              ? 'Create your landlord account and start finding quality tenants!'
-              : 'Create your tenant account and get matched with your next home!'}
-          </p>
+  const [step, setStep] = useState<1 | 2>(1)
 
-          <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-1">
-            <button
-              type="button"
-              onClick={() => setRole('landlord')}
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                role === 'landlord' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              I&apos;m a landlord
+  function chooseRole(nextRole: Role) {
+    setRole(nextRole)
+    setStep(2)
+    setError(null)
+  }
+
+  if (step === 1) {
+    return (
+      <div className="signup-shell flex min-h-[calc(100dvh-72px)] flex-1 items-center justify-center px-4 py-10 sm:py-16">
+        <main className="signup-enter w-full max-w-[500px]">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e1f4fb] text-[#1683ae] shadow-sm">
+              <svg aria-hidden="true" className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" d="M3 20h18M5 20V8l7-4 7 4v12M9 20v-5h6v5M8 10h.01M12 10h.01M16 10h.01" />
+              </svg>
+            </div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-[#1683ae]">Welcome to Rental City</p>
+            <h1 className="text-[2rem] font-semibold tracking-[-.04em] text-[#17324d] sm:text-[2.35rem]">How will you use Rental City?</h1>
+            <p className="mx-auto mt-3 max-w-[380px] text-sm leading-6 text-[#627589]">Choose the path that best describes you. You can change this before creating your account.</p>
+          </div>
+
+          <div className="space-y-3">
+            <button type="button" data-testid="button-role-landlord" onClick={() => chooseRole('landlord')} className="signup-option group flex w-full items-center gap-4 rounded-2xl border border-[#dce7f0] bg-white p-5 text-left shadow-[0_4px_16px_rgba(35,74,105,.05)] focus:outline-none focus:ring-2 focus:ring-[#2a9dcc] focus:ring-offset-2 sm:p-6">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#eaf7fb] text-[#1683ae]">
+                <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" d="M3 20h18M5 20V8l7-4 7 4v12M9 20v-5h6v5M8 10h.01M12 10h.01M16 10h.01" /></svg>
+              </span>
+              <span className="min-w-0 flex-1"><span className="block text-base font-semibold text-[#17324d]">Landlord</span><span className="mt-1 block text-sm leading-5 text-[#627589]">I&apos;m listing a property and want to find tenants.</span></span>
+              <svg aria-hidden="true" className="h-5 w-5 shrink-0 text-[#9bb0c0] transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="m9 18 6-6-6-6" /></svg>
             </button>
-            <button
-              type="button"
-              onClick={() => setRole('tenant')}
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                role === 'tenant' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              I&apos;m a tenant
+            <button type="button" data-testid="button-role-tenant" onClick={() => chooseRole('tenant')} className="signup-option group flex w-full items-center gap-4 rounded-2xl border border-[#dce7f0] bg-white p-5 text-left shadow-[0_4px_16px_rgba(35,74,105,.05)] focus:outline-none focus:ring-2 focus:ring-[#2a9dcc] focus:ring-offset-2 sm:p-6">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#eef1ff] text-[#5369c9]">
+                <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+              </span>
+              <span className="min-w-0 flex-1"><span className="block text-base font-semibold text-[#17324d]">Tenant</span><span className="mt-1 block text-sm leading-5 text-[#627589]">I&apos;m looking for a place to rent.</span></span>
+              <svg aria-hidden="true" className="h-5 w-5 shrink-0 text-[#9bb0c0] transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="m9 18 6-6-6-6" /></svg>
             </button>
           </div>
+          <p className="mt-8 text-center text-sm text-[#627589]">Already have an account? <Link data-testid="link-signin-role" to="/login" className="font-semibold text-[#1683ae] hover:underline">Sign in</Link></p>
+        </main>
+      </div>
+    )
+  }
+
+  return (
+    <div className="signup-shell flex flex-1 items-center justify-center px-4 py-10 sm:py-14">
+      <div className="signup-enter w-full max-w-[460px]">
+        <div className="signup-card rounded-3xl border border-[#dce7f0] bg-white px-6 py-8 sm:px-9 sm:py-10">
+          <button type="button" data-testid="button-change-role" onClick={() => setStep(1)} className="mb-6 flex items-center gap-2 text-sm font-medium text-[#627589] transition-colors hover:text-[#1683ae] focus:outline-none focus:ring-2 focus:ring-[#2a9dcc] focus:ring-offset-2">
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 12H5m7 7-7-7 7-7" /></svg>
+            Change role
+          </button>
+          <div className="mb-7 rounded-xl border border-[#c9e8f3] bg-[#f0faff] px-4 py-3">
+            <p data-testid="text-selected-role" className="text-sm font-semibold text-[#176b8d]">Signing up as a {role === 'landlord' ? 'Landlord' : 'Tenant'}</p>
+            <p className="mt-1 text-xs text-[#627589]">{role === 'landlord' ? 'You are ready to find the right tenants.' : 'You are ready to find your next home.'}</p>
+          </div>
+          <h1 className="mb-2 text-[2rem] font-semibold tracking-[-.04em] text-[#17324d]">Create your account</h1>
+          <p className="mb-8 text-sm leading-6 text-[#627589]">
+            {role === 'landlord' ? 'Start listing your property and connect with quality tenants.' : 'Tell us a little about yourself and find a place that fits.'}
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>

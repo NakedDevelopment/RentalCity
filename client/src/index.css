@@ -55,3 +55,30 @@
 .gradient-primary:hover {
   background: linear-gradient(83.7338deg, #00AAEE 11.921%, #2D68E8 90.638%);
 }
+
+.signup-shell {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(0, 187, 255, .08), transparent 28rem),
+    linear-gradient(135deg, #f8fbfd 0%, #eef5fa 100%);
+}
+
+.signup-card {
+  box-shadow: 0 22px 60px rgba(35, 74, 105, .12), 0 2px 8px rgba(35, 74, 105, .05);
+}
+
+.signup-option {
+  transition: transform .2s ease, border-color .2s ease, background-color .2s ease, box-shadow .2s ease;
+}
+
+.signup-option:hover {
+  transform: translateY(-2px);
+}
+
+@keyframes signup-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.signup-enter {
+  animation: signup-enter .38s ease-out both;
+}
