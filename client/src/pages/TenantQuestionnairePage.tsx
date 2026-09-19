@@ -15,6 +15,24 @@ const RENTAL_BUDGET_TO_RENT: Record<TenantChoiceId, number> = {
   f: 2750,
 }
 
+function rentalBudgetChoiceFromRange(
+  minBudgetCents: number | null,
+  maxBudgetCents: number | null,
+): TenantChoiceId | null {
+  if (minBudgetCents == null || maxBudgetCents == null) return null
+
+  const midpointDollars = (minBudgetCents + maxBudgetCents) / 200
+  if (!Number.isFinite(midpointDollars) || midpointDollars < 0) return null
+
+  // Upper bounds are inclusive so an exact shared boundary selects the lower bucket.
+  if (midpointDollars <= 1200) return 'a'
+  if (midpointDollars <= 1450) return 'b'
+  if (midpointDollars <= 1700) return 'c'
+  if (midpointDollars <= 2000) return 'd'
+  if (midpointDollars <= 2500) return 'e'
+  return 'f'
+}
+
 export function TenantQuestionnairePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -30,11 +48,30 @@ export function TenantQuestionnairePage() {
     Promise.all([
       supabase.from('profiles').select('bio').eq('id', user.id).maybeSingle(),
       supabase.from('tenant_questionnaire').select('answers').eq('user_id', user.id).maybeSingle(),
-    ]).then(([{ data: profileData }, { data: questionnaireData }]) => {
+      supabase
+        .from('tenant_preferences')
+        .select('min_budget_cents, max_budget_cents')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+    ]).then(([{ data: profileData }, { data: questionnaireData }, { data: preferencesData }]) => {
       if (profileData?.bio?.trim()) setBio(profileData.bio.trim())
+      const raw =
+        questionnaireData?.answers && typeof questionnaireData.answers === 'object'
+          ? (questionnaireData.answers as Record<string, unknown>)
+          : {}
+      const budgetDefault = rentalBudgetChoiceFromRange(
+        preferencesData?.min_budget_cents ?? null,
+        preferencesData?.max_budget_cents ?? null,
+      )
+      setAnswers((prev) => ({
+        ...prev,
+        ...(budgetDefault && prev.rental_budget == null && raw.rental_budget == null
+          ? { rental_budget: budgetDefault }
+          : {}),
+        ...raw,
+      } as Record<TenantQuestionId, TenantChoiceId | null | undefined>))
+
       if (questionnaireData?.answers && typeof questionnaireData.answers === 'object') {
-        const raw = questionnaireData.answers as Record<string, unknown>
-        setAnswers((prev) => ({ ...prev, ...raw } as Record<TenantQuestionId, TenantChoiceId | null | undefined>))
         const savedIncome = raw.monthly_income
         if (savedIncome != null && typeof savedIncome === 'number') setMonthlyIncome(String(savedIncome))
         else if (typeof savedIncome === 'string' && savedIncome.trim()) setMonthlyIncome(savedIncome.trim())
