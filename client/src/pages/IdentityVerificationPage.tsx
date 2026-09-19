@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { usePlaidLink } from 'react-plaid-link'
 import { useAuth } from '../lib/useAuth'
 import {
@@ -293,15 +293,6 @@ export function IdentityVerificationPage() {
 
         {error && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
 
-        {/* Skip link — lets them get back to matches with a gated prompt */}
-        {!isSuccess && (
-          <p className="mt-6 text-center text-sm text-gray-500">
-            <Link to="/matches" className="underline hover:text-gray-700">
-              Skip for now
-            </Link>{' '}
-            — required to browse properties
-          </p>
-        )}
       </div>
     </div>
   )
