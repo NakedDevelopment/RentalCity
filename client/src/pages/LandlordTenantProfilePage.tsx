@@ -12,6 +12,7 @@ import { TenantRentScoreBreakdownDialog } from '../components/TenantRentScoreBre
 import { UniversalApplicationStatusFields } from '../components/UniversalApplicationStatusFields'
 import { TenantReviewEditDialog } from '../components/TenantReviewEditDialog'
 import { BankVerificationCard, type PlaidVerificationRow } from '../components/BankVerificationCard'
+import { RentScoreVerificationBadge } from '../components/RentScoreVerificationBadge'
 import {
   getCreditCheckInfo,
   requestCreditCheck as apiRequestCreditCheck,
@@ -1018,7 +1019,8 @@ export function LandlordTenantProfilePage() {
                     </div>
                     <div className="flex shrink-0 flex-col items-center rounded-lg border border-gray-100 bg-gray-50/80 px-5 py-3 sm:self-start">
                       <div className="flex items-center justify-center gap-1 text-xs text-gray-500">
-                        <span>Tenant Score</span>
+                        <span>Rent Score</span>
+                        <RentScoreVerificationBadge verified={!!tenantBankVerification?.income_verified} />
                         {tenant.tenantScore != null ? (
                           <button
                             type="button"
@@ -1553,7 +1555,8 @@ export function LandlordTenantProfilePage() {
 
                 <div className="min-w-[112px] rounded-xl border border-gray-200 bg-white px-4 py-3 text-center">
                   <div className="flex items-center justify-center gap-1 text-xs text-gray-500">
-                    <span>Tenant Score</span>
+                    <span>Rent Score</span>
+                    <RentScoreVerificationBadge verified={!!tenantBankVerification?.income_verified} />
                     {tenant.tenantScore != null ? (
                       <button
                         type="button"

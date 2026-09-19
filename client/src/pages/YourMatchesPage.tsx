@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { PawPrint, Car, WashingMachine, Dumbbell } from 'lucide-react'
+import { usePlaidLink } from 'react-plaid-link'
 import { formatBedrooms, formatCurrency } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
@@ -13,6 +14,13 @@ import {
   type MatchResult,
 } from '../lib/matchesApi'
 import { TenantRentScoreBreakdownDialog } from '../components/TenantRentScoreBreakdownDialog'
+import { RentScoreVerificationBadge } from '../components/RentScoreVerificationBadge'
+import {
+  createPlaidLinkToken,
+  exchangePlaidPublicToken,
+  getPlaidVerification,
+  type PlaidVerification,
+} from '../lib/plaidApi'
 import {
   computeTenantRentScoreFromDimensions,
   dimensionsFromTenantQuestionnaireRow,
@@ -369,6 +377,11 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [tenantQuestionnaireLoading, setTenantQuestionnaireLoading] = useState(false)
   const [rentScoreBreakdownOpen, setRentScoreBreakdownOpen] = useState(false)
   const rentScoreCardRef = useRef<HTMLDivElement>(null)
+  const [incomeVerification, setIncomeVerification] = useState<PlaidVerification | null>(null)
+  const [incomePromptOpen, setIncomePromptOpen] = useState(false)
+  const [incomePromptLoading, setIncomePromptLoading] = useState(false)
+  const [incomePromptError, setIncomePromptError] = useState<string | null>(null)
+  const [incomeLinkToken, setIncomeLinkToken] = useState<string | null>(null)
   const [matchByPropertyId, setMatchByPropertyId] = useState<Record<string, MatchResult>>({})
   const [matchByTenantId, setMatchByTenantId] = useState<Record<string, MatchResult>>({})
   const [matchLoading, setMatchLoading] = useState(false)
@@ -420,6 +433,111 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   useEffect(() => {
     loadTenantQuestionnaireScore()
   }, [loadTenantQuestionnaireScore])
+
+  const dismissIncomePrompt = useCallback(() => {
+    setIncomePromptOpen(false)
+    if (user) {
+      void supabase
+        .from('profiles')
+        .update({ income_verification_prompt_dismissed_at: new Date().toISOString() })
+        .eq('id', user.id)
+    }
+  }, [user])
+
+  const onIncomePlaidSuccess = useCallback(async (publicToken: string) => {
+    setIncomePromptLoading(true)
+    setIncomePromptError(null)
+    try {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+      if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+      const verification = await exchangePlaidPublicToken(accessToken, publicToken)
+      setIncomeVerification(verification)
+      if (verification.incomeVerified) dismissIncomePrompt()
+    } catch (err) {
+      setIncomePromptError(err instanceof Error ? err.message : 'Could not verify your income')
+    } finally {
+      setIncomePromptLoading(false)
+      setIncomeLinkToken(null)
+    }
+  }, [dismissIncomePrompt])
+
+  const { open: openIncomePlaid, ready: incomePlaidReady } = usePlaidLink({
+    token: incomeLinkToken,
+    onSuccess: (publicToken) => void onIncomePlaidSuccess(publicToken),
+    onExit: () => {
+      setIncomeLinkToken(null)
+      setIncomePromptLoading(false)
+    },
+  })
+
+  useEffect(() => {
+    if (incomeLinkToken && incomePlaidReady) openIncomePlaid()
+  }, [incomeLinkToken, incomePlaidReady, openIncomePlaid])
+
+  const startIncomeVerification = useCallback(async () => {
+    setIncomePromptError(null)
+    setIncomePromptLoading(true)
+    try {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+      if (!accessToken) throw new Error('Your session expired. Please sign in again.')
+      setIncomeLinkToken(await createPlaidLinkToken(accessToken))
+    } catch (err) {
+      setIncomePromptError(err instanceof Error ? err.message : 'Could not start income verification')
+      setIncomePromptLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (
+      !user ||
+      profileRole !== 'tenant' ||
+      !tenantSurveyCompletedAt ||
+      !identityVerifiedAt ||
+      roleLoading
+    ) return
+    let cancelled = false
+    Promise.all([
+      supabase.auth.getSession(),
+      supabase
+        .from('profiles')
+        .select('income_verification_prompt_dismissed_at')
+        .eq('id', user.id)
+        .maybeSingle(),
+    ]).then(([{ data }, { data: profileData }]) => {
+      const accessToken = data.session?.access_token
+      if (!accessToken) return
+      getPlaidVerification(accessToken)
+        .then((verification) => {
+          if (cancelled) return
+          setIncomeVerification(verification)
+          if (!verification?.incomeVerified && !profileData?.income_verification_prompt_dismissed_at) {
+            setIncomePromptOpen(true)
+          }
+        })
+        .catch(() => {})
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [user, profileRole, tenantSurveyCompletedAt, identityVerifiedAt, roleLoading])
+
+  useEffect(() => {
+    if (incomeVerification?.status !== 'processing') return
+    const interval = window.setInterval(async () => {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+      if (!accessToken) return
+      getPlaidVerification(accessToken)
+        .then((verification) => {
+          setIncomeVerification(verification)
+          if (verification?.incomeVerified) dismissIncomePrompt()
+        })
+        .catch(() => {})
+    }, 8000)
+    return () => window.clearInterval(interval)
+  }, [incomeVerification?.status, dismissIncomePrompt])
 
   // Refetch profile once when tenant lands on matches with survey incomplete (avoids stale state
   // after completing questionnaire so we don't flash the "Set your preferences" prompt)
@@ -1537,6 +1655,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
           <div ref={rentScoreCardRef} className="relative flex-shrink-0 bg-white rounded-xl border border-gray-200 p-4 min-w-[140px]">
             <div className="flex items-center gap-1.5 mb-2">
               <span className="text-sm font-medium text-gray-700">Rent Score</span>
+              <RentScoreVerificationBadge verified={!!incomeVerification?.incomeVerified} />
               {tenantOverallScore != null ? (
                 <button
                   type="button"
@@ -1979,6 +2098,54 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
           </div>
         </div>
       )}
+
+      {incomePromptOpen && profileRole === 'tenant' ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="income-verification-title">
+          <div className="relative flex min-h-[70vh] w-full max-w-3xl flex-col items-center justify-center rounded-3xl bg-white px-6 py-12 text-center shadow-2xl sm:px-12">
+            <button
+              type="button"
+              onClick={dismissIncomePrompt}
+              className="absolute right-5 top-5 rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              aria-label="Dismiss income verification"
+            >
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+              <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6v12m-3-9.5C9 7.12 10.34 6 12 6s3 1.12 3 2.5S13.66 11 12 11s-3 1.12-3 2.5S10.34 16 12 16s3-1.12 3-2.5M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+              </svg>
+            </div>
+            <RentScoreVerificationBadge verified={!!incomeVerification?.incomeVerified} />
+            <h2 id="income-verification-title" className="mt-5 text-3xl font-semibold tracking-tight text-gray-900">
+              Verify your Rent Score
+            </h2>
+            <p className="mt-4 max-w-xl text-base leading-7 text-gray-600">
+              Your Rent Score currently uses self-reported information. Connect your bank securely through Plaid to verify your income and add a Verified status to your score.
+            </p>
+            {incomeVerification?.status === 'processing' ? (
+              <p className="mt-6 rounded-lg bg-sky-50 px-4 py-3 text-sm font-medium text-sky-700">
+                Verification is processing. This can take a few minutes.
+              </p>
+            ) : null}
+            {incomePromptError ? <p className="mt-4 text-sm text-red-600">{incomePromptError}</p> : null}
+            <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => void startIncomeVerification()}
+                disabled={incomePromptLoading || incomeVerification?.status === 'processing'}
+                className="rounded-lg btn-primary px-6 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {incomePromptLoading ? 'Starting Plaid…' : incomeVerification?.status === 'processing' ? 'Verification processing' : 'Verify income with Plaid'}
+              </button>
+              <button type="button" onClick={dismissIncomePrompt} className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800">
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       </>
       ) : null}
     </div>
