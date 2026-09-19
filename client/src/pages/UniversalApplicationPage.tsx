@@ -35,17 +35,6 @@ export function UniversalApplicationPage() {
   const [starting, setStarting] = useState(false)
   const applicationFee = hasExistingApplication ? UPDATE_APPLICATION_FEE : NEW_APPLICATION_FEE
 
-  // Warn before closing/refreshing the tab while the Stripe modal is open.
-  useEffect(() => {
-    if (!checkoutOpen) return
-    function handleBeforeUnload(e: BeforeUnloadEvent) {
-      e.preventDefault()
-      e.returnValue = ''
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [checkoutOpen])
-
   useEffect(() => {
     async function loadHistory() {
       if (!user) {
