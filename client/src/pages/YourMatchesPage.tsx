@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { PawPrint, Car, WashingMachine, Dumbbell } from 'lucide-react'
 import { usePlaidLink } from 'react-plaid-link'
@@ -2107,7 +2108,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         </div>
       )}
 
-      {incomePromptOpen && profileRole === 'tenant' ? (
+      {incomePromptOpen && profileRole === 'tenant' ? createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="income-verification-title">
           <div className="relative flex min-h-[70vh] w-full max-w-3xl flex-col items-center justify-center rounded-3xl bg-white px-6 py-12 text-center shadow-2xl sm:px-12">
             <button
@@ -2120,13 +2121,13 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
               </svg>
             </button>
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
-              <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6v12m-3-9.5C9 7.12 10.34 6 12 6s3 1.12 3 2.5S13.66 11 12 11s-3 1.12-3 2.5S10.34 16 12 16s3-1.12 3-2.5M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
-              </svg>
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border-[4px] border-emerald-500 bg-white text-3xl font-semibold text-gray-800 shadow-sm">
+                {tenantOverallScore ?? '—'}
+              </div>
+              <RentScoreVerificationBadge verified={!!incomeVerification?.incomeVerified} />
             </div>
-            <RentScoreVerificationBadge verified={!!incomeVerification?.incomeVerified} />
-            <h2 id="income-verification-title" className="mt-5 text-3xl font-semibold tracking-tight text-gray-900">
+            <h2 id="income-verification-title" className="mt-6 text-3xl font-semibold tracking-tight text-gray-900">
               Verify your Rent Score
             </h2>
             <p className="mt-4 max-w-xl text-base leading-7 text-gray-600">
@@ -2152,7 +2153,8 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
       </>
       ) : null}
