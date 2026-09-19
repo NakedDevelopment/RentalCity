@@ -1,0 +1,38 @@
+Item 6+7 (Combined): Rental Application Redesign — Wizard with Auto-Fill (Final, Updated)
+
+Step 1 — Personal Information
+
+Auto-filled from onboarding: name, email, phone, DOB, address.
+"Does this look right?" with edit option.
+→ Next
+
+Step 2 — Emergency Contact
+
+New info, not collected during onboarding — tenant fills in fresh.
+→ Next
+
+Step 3 — Review
+
+Auto-filled for confirmation: bio, lease intent, move-in availability, budget range.
+Same "does this look right, edit if needed" pattern.
+→ Next
+
+Step 4 — Credit/Background Check Authorization (always present, not skippable)
+
+Fields: legal first name, last name, Social Security number.
+CTA: "Yes, I authorize" button.
+→ Next (or Finish, depending on condition below)
+
+Step 5 — Income Verification (conditional — only if not already completed)
+
+Skip if income was already verified earlier (Item 4 popup).
+If not, this is the true final step — must complete Plaid income verification here.
+
+Completion logic: Application marked "complete" only once all required steps for that tenant's path (4 or 5 steps) have valid data.
+
+New addition — Auto-apply to the triggering property
+The bug: If a tenant starts this application wizard by hitting "Apply" on a specific property, completing the full application currently only creates a general/universal application — it does not count as having applied to that original property. The tenant then has to go back to that property and hit "Apply" a second time.
+The fix: If the wizard was triggered from a specific property's "Apply" button, completing the wizard should automatically count as applying to that property — no second button press required.
+Unaffected case: Once the general application is on file, applying to additional properties afterward should remain the current simple single-button "Apply" action (no need to redo the wizard).
+
+On completion: Redirect to the Matches page, landing on Applied Matches, showing the property just applied to (which, per the fix above, should now correctly include the one that triggered the wizard).
