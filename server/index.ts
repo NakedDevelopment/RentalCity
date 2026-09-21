@@ -2895,7 +2895,7 @@ app.post('/api/plaid/identity-verification/create', async (req, res) => {
         .update(profile.identity_verification_session_id as string)
         .digest('hex')
         .slice(0, 24)
-      clientUserId = `${user.id}:idv:${retryKey}`
+      clientUserId = `${user.id}:${retryKey}`
     }
 
     let session = await createIdentityVerificationSession(client, clientUserId)
@@ -2907,7 +2907,7 @@ app.post('/api/plaid/identity-verification/create', async (req, res) => {
         .update(session.sessionId)
         .digest('hex')
         .slice(0, 24)
-      clientUserId = `${user.id}:idv:${retryKey}`
+      clientUserId = `${user.id}:${retryKey}`
       session = await createIdentityVerificationSession(client, clientUserId)
     }
 
