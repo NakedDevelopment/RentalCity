@@ -31,6 +31,7 @@ import {
   computeFinancialSummary,
   verifyPlaidWebhook,
   createIdentityVerificationSession,
+  retryIdentityVerificationSession,
   getIdentityVerificationSession,
 } from './plaid'
 import {
@@ -59,7 +60,7 @@ import {
   type AnchorTab,
 } from './docusign'
 import { loadEquifaxAgreementDocument, loadPlaidConsentDocument } from './documents'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
 import {
   sendReportEmail,
@@ -2885,34 +2886,22 @@ app.post('/api/plaid/identity-verification/create', async (req, res) => {
       .maybeSingle()
 
     const terminalStatuses = new Set(['failed', 'expired', 'canceled'])
-    let clientUserId = user.id
+    const shouldRetry =
+      Boolean(profile?.identity_verification_session_id) &&
+      terminalStatuses.has(profile?.identity_verification_status as string)
 
-    if (
-      profile?.identity_verification_session_id &&
-      terminalStatuses.has(profile.identity_verification_status as string)
-    ) {
-      const retryKey = createHash('sha256')
-        .update(profile.identity_verification_session_id as string)
-        .digest('hex')
-        .slice(0, 24)
-      clientUserId = `${user.id}:${retryKey}`
-    }
+    let session = shouldRetry
+      ? await retryIdentityVerificationSession(client, user.id)
+      : await createIdentityVerificationSession(client, user.id)
 
-    let session = await createIdentityVerificationSession(client, clientUserId)
-
-    // A recreated local profile may recover an external session that already
-    // failed. In that case, immediately create a fresh, deterministic retry.
-    if (!profile?.identity_verification_session_id && terminalStatuses.has(session.status)) {
-      const retryKey = createHash('sha256')
-        .update(session.sessionId)
-        .digest('hex')
-        .slice(0, 24)
-      clientUserId = `${user.id}:${retryKey}`
-      session = await createIdentityVerificationSession(client, clientUserId)
+    // A recreated local profile can idempotently recover an external session
+    // that already failed. Convert it to an official Plaid retry immediately.
+    if (!shouldRetry && terminalStatuses.has(session.status)) {
+      session = await retryIdentityVerificationSession(client, user.id)
     }
 
     // Generate Link with the exact same client_user_id as the IDV session.
-    const linkToken = await createIdvLinkToken(client, clientUserId)
+    const linkToken = await createIdvLinkToken(client, user.id)
 
     // Persist the session id + initial status so we can query it later
     await admin

@@ -5,6 +5,7 @@ import {
   Products,
   CountryCode,
   IncomeVerificationSourceType,
+  Strategy,
 } from 'plaid'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto'
@@ -226,6 +227,35 @@ export async function createIdentityVerificationSession(
     // gave_consent must be true — the tenant has accepted our T&C which include
     // the Plaid IDV consent language before reaching this step.
     gave_consent: true,
+  })
+  return {
+    sessionId: resp.data.id,
+    clientUserId: resp.data.client_user_id ?? clientUserId,
+    status: resp.data.status,
+    shareableUrl: resp.data.shareable_url ?? null,
+  }
+}
+
+/**
+ * Creates a new attempt for a user whose previous Identity Verification
+ * reached a terminal state. Plaid's infer strategy resumes at the failed step
+ * when possible and otherwise restarts the verification.
+ */
+export async function retryIdentityVerificationSession(
+  client: PlaidApi,
+  clientUserId: string,
+): Promise<IdentityVerificationResult> {
+  const templateId = process.env.PLAID_IDENTITY_TEMPLATE_ID
+  if (!templateId) {
+    throw new Error(
+      'Identity Verification is not configured. Set PLAID_IDENTITY_TEMPLATE_ID.',
+    )
+  }
+  const resp = await client.identityVerificationRetry({
+    template_id: templateId,
+    client_user_id: clientUserId,
+    strategy: Strategy.Infer,
+    is_shareable: true,
   })
   return {
     sessionId: resp.data.id,
