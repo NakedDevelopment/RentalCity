@@ -132,12 +132,15 @@ export function IdentityVerificationPage() {
       const token = await getAccessToken()
       if (!token) throw new Error('Please sign in again.')
 
+      let lt: string
       if (createNew) {
         const result = await createPlaidIdentityVerification(token)
         setStatus(result.status)
+        lt = result.linkToken ?? (await createPlaidIdvLinkToken(token))
+      } else {
+        lt = await createPlaidIdvLinkToken(token)
       }
 
-      const lt = await createPlaidIdvLinkToken(token)
       setLinkToken(lt)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start identity verification')

@@ -59,7 +59,7 @@ import {
   type AnchorTab,
 } from './docusign'
 import { loadEquifaxAgreementDocument, loadPlaidConsentDocument } from './documents'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
 import {
   sendReportEmail,
@@ -2878,7 +2878,41 @@ app.post('/api/plaid/identity-verification/create', async (req, res) => {
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
 
   try {
-    const session = await createIdentityVerificationSession(client, user.id)
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('identity_verification_session_id, identity_verification_status')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const terminalStatuses = new Set(['failed', 'expired', 'canceled'])
+    let clientUserId = user.id
+
+    if (
+      profile?.identity_verification_session_id &&
+      terminalStatuses.has(profile.identity_verification_status as string)
+    ) {
+      const retryKey = createHash('sha256')
+        .update(profile.identity_verification_session_id as string)
+        .digest('hex')
+        .slice(0, 24)
+      clientUserId = `${user.id}:idv:${retryKey}`
+    }
+
+    let session = await createIdentityVerificationSession(client, clientUserId)
+
+    // A recreated local profile may recover an external session that already
+    // failed. In that case, immediately create a fresh, deterministic retry.
+    if (!profile?.identity_verification_session_id && terminalStatuses.has(session.status)) {
+      const retryKey = createHash('sha256')
+        .update(session.sessionId)
+        .digest('hex')
+        .slice(0, 24)
+      clientUserId = `${user.id}:idv:${retryKey}`
+      session = await createIdentityVerificationSession(client, clientUserId)
+    }
+
+    // Generate Link with the exact same client_user_id as the IDV session.
+    const linkToken = await createIdvLinkToken(client, clientUserId)
 
     // Persist the session id + initial status so we can query it later
     await admin
@@ -2893,6 +2927,7 @@ app.post('/api/plaid/identity-verification/create', async (req, res) => {
       sessionId: session.sessionId,
       status: session.status,
       shareableUrl: session.shareableUrl,
+      linkToken,
     })
   } catch (err) {
     const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message
@@ -2906,8 +2941,25 @@ app.post('/api/plaid/idv-link-token/create', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
   const client = getPlaidClient()
   if (!client) return plaidUnavailable(res)
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
   try {
-    const lt = await createIdvLinkToken(client, user.id)
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('identity_verification_session_id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    let clientUserId = user.id
+    if (profile?.identity_verification_session_id) {
+      const session = await getIdentityVerificationSession(
+        client,
+        profile.identity_verification_session_id as string,
+      )
+      clientUserId = session.clientUserId ?? user.id
+    }
+
+    const lt = await createIdvLinkToken(client, clientUserId)
     return res.json({ linkToken: lt })
   } catch (err) {
     const msg = (err as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message

@@ -170,13 +170,13 @@ export async function createLinkToken(client: PlaidApi, admin: SupabaseClient, u
  * opening a separate browser window. Plaid picks up any existing pending session
  * for this user+template automatically.
  */
-export async function createIdvLinkToken(client: PlaidApi, userId: string): Promise<string> {
+export async function createIdvLinkToken(client: PlaidApi, clientUserId: string): Promise<string> {
   const templateId = process.env.PLAID_IDENTITY_TEMPLATE_ID
   if (!templateId) {
     throw new Error('Identity Verification is not configured. Set PLAID_IDENTITY_TEMPLATE_ID.')
   }
   const resp = await client.linkTokenCreate({
-    user: { client_user_id: userId },
+    user: { client_user_id: clientUserId },
     client_name: 'Rental City',
     products: [Products.IdentityVerification],
     identity_verification: {
@@ -191,6 +191,7 @@ export async function createIdvLinkToken(client: PlaidApi, userId: string): Prom
 
 export type IdentityVerificationResult = {
   sessionId: string
+  clientUserId: string | null
   status: string
   shareableUrl: string | null
 }
@@ -206,7 +207,7 @@ export type IdentityVerificationResult = {
  */
 export async function createIdentityVerificationSession(
   client: PlaidApi,
-  userId: string,
+  clientUserId: string,
 ): Promise<IdentityVerificationResult> {
   const templateId = process.env.PLAID_IDENTITY_TEMPLATE_ID
   if (!templateId) {
@@ -216,7 +217,7 @@ export async function createIdentityVerificationSession(
   }
   const resp = await client.identityVerificationCreate({
     template_id: templateId,
-    client_user_id: userId,
+    client_user_id: clientUserId,
     // Plaid retains IDV sessions outside our database. If a local profile is
     // deleted/recreated or a create request is retried, recover the existing
     // user+template session instead of failing with IDENTITY_VERIFICATION_ALREADY_EXISTS.
@@ -228,6 +229,7 @@ export async function createIdentityVerificationSession(
   })
   return {
     sessionId: resp.data.id,
+    clientUserId: resp.data.client_user_id ?? clientUserId,
     status: resp.data.status,
     shareableUrl: resp.data.shareable_url ?? null,
   }
@@ -245,6 +247,7 @@ export async function getIdentityVerificationSession(
   })
   return {
     sessionId: resp.data.id,
+    clientUserId: resp.data.client_user_id ?? null,
     status: resp.data.status,
     shareableUrl: resp.data.shareable_url ?? null,
   }

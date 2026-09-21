@@ -29,6 +29,7 @@ export type PlaidIdentityVerificationResult = {
   sessionId: string
   status: PlaidIdentityVerificationStatus
   shareableUrl: string | null
+  linkToken?: string
 }
 
 async function parseError(res: Response, fallback: string): Promise<never> {
