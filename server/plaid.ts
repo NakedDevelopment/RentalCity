@@ -217,6 +217,10 @@ export async function createIdentityVerificationSession(
   const resp = await client.identityVerificationCreate({
     template_id: templateId,
     client_user_id: userId,
+    // Plaid retains IDV sessions outside our database. If a local profile is
+    // deleted/recreated or a create request is retried, recover the existing
+    // user+template session instead of failing with IDENTITY_VERIFICATION_ALREADY_EXISTS.
+    is_idempotent: true,
     is_shareable: true,
     // gave_consent must be true — the tenant has accepted our T&C which include
     // the Plaid IDV consent language before reaching this step.
