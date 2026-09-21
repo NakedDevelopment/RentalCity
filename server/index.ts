@@ -2561,7 +2561,8 @@ app.get('/api/admin/directory', async (req, res) => {
 
 function plaidUnavailable(res: express.Response) {
   return res.status(503).json({
-    error: 'Bank verification is not configured. Add PLAID_CLIENT_ID and PLAID_SECRET to enable it.',
+    error:
+      'Plaid verification is not configured. Check PLAID_CLIENT_ID, PLAID_SECRET, and PLAID_ENV.',
   })
 }
 
