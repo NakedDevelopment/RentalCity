@@ -1417,7 +1417,7 @@ app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
 
   const application = await loadLandlordApplication(admin, user.id, applicationId)
   if (!application) return res.status(403).json({ error: 'You do not have access to this application.' })
-  if (application.unlocked_at) return res.status(409).json({ error: 'This profile is already unlocked.' })
+  if (application.unlocked_at) return res.json({ alreadyUnlocked: true, unlocked: true })
   if (application.status !== 'pending') {
     return res.status(409).json({ error: 'This application is no longer pending.' })
   }

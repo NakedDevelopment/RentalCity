@@ -195,13 +195,14 @@ export function LandlordTenantProfilePage() {
     status === 'declined' || (matchDecisionContext && loadedApplicationStatus === 'rejected')
   const hasUnlockedProfileAccess = useMemo(
     () =>
+      pendingUnlockedAt != null ||
       landlordTenantApplications.some(
         (r) =>
           r.status === 'approved' ||
           r.status === 'rejected' ||
           (r.status === 'pending' && r.unlocked_at != null),
       ),
-    [landlordTenantApplications],
+    [landlordTenantApplications, pendingUnlockedAt],
   )
   const canDecidePending =
     matchDecisionContext &&
@@ -917,20 +918,24 @@ export function LandlordTenantProfilePage() {
         const err = await res.json().catch(() => ({}))
         throw new Error((err as { error?: string }).error || 'Could not start checkout. Please try again.')
       }
-      const json = (await res.json()) as { clientSecret?: string; demo?: boolean; waived?: boolean }
-
-      // Invite-waived: landlord brought this tenant via invite link — no payment needed.
-      if (json.waived) {
-        setPendingUnlockedAt(new Date().toISOString())
-        setUnlockPayModalOpen(false)
-        const qs = pendingApplicationId ? `?application=${encodeURIComponent(pendingApplicationId)}` : ''
-        navigate(`/matches/tenant/${id}${qs}`, { replace: true, state: location.state })
-        return
+      const json = (await res.json()) as {
+        clientSecret?: string
+        demo?: boolean
+        waived?: boolean
+        alreadyUnlocked?: boolean
       }
 
-      // Demo bypass (dev only): profile unlocked server-side, no payment.
-      if (json.demo) {
+      // Existing, invite-waived, and demo entitlements are already fulfilled
+      // server-side and should unlock the page without opening Stripe.
+      if (json.alreadyUnlocked || json.waived || json.demo) {
         setPendingUnlockedAt(new Date().toISOString())
+        setLandlordTenantApplications((rows) =>
+          rows.map((row) =>
+            row.id === pendingApplicationId
+              ? { ...row, unlocked_at: row.unlocked_at ?? new Date().toISOString() }
+              : row,
+          ),
+        )
         setUnlockPayModalOpen(false)
         const qs = pendingApplicationId ? `?application=${encodeURIComponent(pendingApplicationId)}` : ''
         navigate(`/matches/tenant/${id}${qs}`, { replace: true, state: location.state })
