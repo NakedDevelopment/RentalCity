@@ -20,6 +20,18 @@ export type EquifaxSubscriberDetails = {
   address: string
 }
 
+export type EquifaxAgreementInput = {
+  businessName: string
+  phone: string
+  address: {
+    street: string
+    unit: string
+    city: string
+    state: string
+    zip: string
+  }
+}
+
 async function parseError(res: Response, fallback: string): Promise<never> {
   const err = await res.json().catch(() => ({}))
   throw new Error((err as { error?: string }).error || fallback)
@@ -35,7 +47,7 @@ export async function getDocusignStatus(accessToken: string): Promise<DocusignSt
 
 export async function createEquifaxAgreementSigningSession(
   accessToken: string,
-  details: EquifaxSubscriberDetails,
+  details: EquifaxAgreementInput,
 ): Promise<{ envelopeId: string; signingUrl: string }> {
   const res = await fetch('/api/docusign/equifax-agreement/create', {
     method: 'POST',

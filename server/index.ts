@@ -61,6 +61,8 @@ import {
   type AnchorTab,
 } from './docusign'
 import { loadEquifaxAgreementDocument, loadPlaidConsentDocument } from './documents'
+import { normalizeEquifaxSubscriberDetails, type EquifaxSubscriberInput } from './equifaxSubscriber'
+import { docusignReturnOrigin } from './docusignReturnOrigin'
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
 import {
@@ -1790,6 +1792,16 @@ function lifecycleAppUrl(req?: Request): string {
         (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
       : ''
   return origin || 'http://localhost:5000'
+}
+
+function docusignReturnUrl(req: Request, type: 'equifax' | 'plaid'): string {
+  const origin = docusignReturnOrigin(
+    req.get('origin'),
+    req.get('sec-fetch-site'),
+    lifecycleAppUrl(req),
+    process.env.NODE_ENV === 'production',
+  )
+  return `${origin}/docusign/return?type=${type}`
 }
 
 /**
@@ -4149,15 +4161,11 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
 
-  const input = req.body as { businessName?: unknown; phone?: unknown; address?: unknown } | null
-  const businessName = typeof input?.businessName === 'string' ? input.businessName.trim() : ''
-  const businessPhone = typeof input?.phone === 'string' ? input.phone.trim() : ''
-  const businessAddress = typeof input?.address === 'string' ? input.address.trim().replace(/\s+/g, ' ') : ''
-  if (!businessName || businessName.length > 60 || !/^[+()\d\s.-]{10,25}$/.test(businessPhone) ||
-      businessPhone.replace(/\D/g, '').length < 10 || businessAddress.length < 10 || businessAddress.length > 85 ||
-      !/^.{3,},\s*[^,]+,\s*[A-Za-z]{2},?\s+\d{5}(?:-\d{4})?$/.test(businessAddress)) {
-    return res.status(400).json({ error: 'Enter a business name, a valid business phone, and the full business mailing address (street, city, state, ZIP).' })
+  const details = normalizeEquifaxSubscriberDetails(req.body as EquifaxSubscriberInput | null)
+  if (!details) {
+    return res.status(400).json({ error: 'Enter a business name, a 10-digit business phone, and a complete business mailing address (street, city, state, ZIP).' })
   }
+  const { businessName, businessPhone, businessAddress } = details
 
   const { data: profile, error: profileError } = await admin
     .from('profiles')
@@ -4177,9 +4185,21 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
   const detailsChanged = p?.business_name !== businessName ||
     priorDetails?.business_phone !== businessPhone || priorDetails?.business_address !== businessAddress
 
-  const returnUrl = `${lifecycleAppUrl(req)}/docusign/return?type=equifax`
-
   try {
+    const returnUrl = docusignReturnUrl(req, 'equifax')
+    // The earlier return URL could point at localhost even after DocuSign had
+    // finished signing. Reconcile that envelope rather than replacing it.
+    if (p?.docusign_envelope_id && p.docusign_envelope_status === 'sent' && p.equifax_agreement_version === 2) {
+      try {
+        const live = await getEnvelopeStatus(p.docusign_envelope_id)
+        if (live.status === 'completed') {
+          await processDocusignCompletion(admin, user.id, user.email, 'equifax')
+          return res.status(409).json({ error: 'Your updated Equifax agreement is already signed. Refreshing your agreement status.' })
+        }
+      } catch (err) {
+        if (!isHttpNotFound(err)) throw err
+      }
+    }
     const createEnvelope = async () => {
       const { base64, fileExtension } = loadEquifaxAgreementDocument()
       // Positions are on the fixed 20-page Equifax DOCX converted to letter-size
@@ -4245,6 +4265,10 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
         try {
           const live = await getEnvelopeStatus(envelopeId)
           if (live.status === 'completed') {
+            if (p.equifax_agreement_version === 2) {
+              await processDocusignCompletion(admin, user.id, user.email, 'equifax')
+              return res.status(409).json({ error: 'Your updated Equifax agreement is already signed. Refreshing your agreement status.' })
+            }
             const oldPdf = await downloadCompletedDocument(envelopeId)
             const { error: legacyUploadError } = await admin.storage.from('landlord-agreements')
               .upload(`${user.id}/equifax-broker-subscriber-agreement.pdf`, oldPdf, { contentType: 'application/pdf', upsert: false })
@@ -4299,9 +4323,8 @@ app.post('/api/docusign/plaid-consent/create', async (req, res) => {
   const landlordName = p?.display_name || 'Landlord'
   const businessName = p?.business_name || landlordName
 
-  const returnUrl = `${lifecycleAppUrl(req)}/docusign/return?type=plaid`
-
   try {
+    const returnUrl = docusignReturnUrl(req, 'plaid')
     const createEnvelope = async () => {
       const { base64, fileExtension } = loadPlaidConsentDocument({ name: landlordName, businessName })
       const tabs: AnchorTab[] = [

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   createEquifaxAgreementSigningSession,
   createPlaidConsentSigningSession,
+  getDocusignStatus,
   type DocusignStatus,
-  type EquifaxSubscriberDetails,
+  type EquifaxAgreementInput,
 } from '../lib/docusignApi'
+import { EquifaxSubscriberForm } from './EquifaxSubscriberForm'
 
 type AgreementKind = 'equifax' | 'plaid'
 
@@ -79,15 +81,7 @@ export function LandlordAgreementsModal({
   const [signingType, setSigningType] = useState<AgreementKind | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showEquifaxForm, setShowEquifaxForm] = useState(false)
-  const [businessDetails, setBusinessDetails] = useState<EquifaxSubscriberDetails>({
-    businessName: '', phone: '', address: '',
-  })
-
-  useEffect(() => {
-    if (open && !showEquifaxForm) {
-      setBusinessDetails(status.equifaxSubscriberDetails ?? { businessName: '', phone: '', address: '' })
-    }
-  }, [open, status.equifaxSubscriberDetails, showEquifaxForm])
+  const [checkingSigning, setCheckingSigning] = useState(false)
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -96,17 +90,17 @@ export function LandlordAgreementsModal({
       if (data?.source !== 'docusign-return') return
       setSigningUrl(null)
       setSigningType(null)
-       if (data.completed) {
-         window.dispatchEvent(new Event('rental-city-docusign-completed'))
-         onCompleted()
-       }
+      if (data.completed) {
+        window.dispatchEvent(new Event('rental-city-docusign-completed'))
+        onCompleted()
+      }
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
   }, [onCompleted])
 
   const startSigning = useCallback(
-    async (kind: AgreementKind, details?: EquifaxSubscriberDetails) => {
+    async (kind: AgreementKind, details?: EquifaxAgreementInput) => {
       setError(null)
       setSigningType(kind)
       try {
@@ -117,12 +111,44 @@ export function LandlordAgreementsModal({
         setSigningUrl(result.signingUrl)
         setShowEquifaxForm(false)
       } catch (err) {
+        if (kind === 'equifax') {
+          try {
+            const latest = await getDocusignStatus(accessToken)
+            if (latest.equifaxSigned) {
+              window.dispatchEvent(new Event('rental-city-docusign-completed'))
+              onCompleted()
+              setSigningType(null)
+              return
+            }
+          } catch { /* Keep the original signing error visible. */ }
+        }
         setError(err instanceof Error ? err.message : 'Could not start signing session')
         setSigningType(null)
       }
     },
-    [accessToken],
+    [accessToken, onCompleted],
   )
+
+  const checkSigningStatus = async () => {
+    setCheckingSigning(true)
+    setError(null)
+    try {
+      const latest = await getDocusignStatus(accessToken)
+      const completed = signingType === 'equifax' ? latest.equifaxSigned : latest.plaidSigned
+      if (completed) {
+        setSigningUrl(null)
+        setSigningType(null)
+        window.dispatchEvent(new Event('rental-city-docusign-completed'))
+        onCompleted()
+      } else {
+        setError('DocuSign has not confirmed signing yet. If you just signed, wait a moment and check again.')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not check the signing status')
+    } finally {
+      setCheckingSigning(false)
+    }
+  }
 
   if (!open) return null
 
@@ -151,12 +177,21 @@ export function LandlordAgreementsModal({
         </div>
 
         {signingUrl ? (
-          <div className="p-2 sm:p-3">
+          <div className="space-y-3 p-2 sm:p-3">
             <iframe
               title="Sign agreement"
               src={signingUrl}
               className="h-[70vh] w-full rounded-lg border border-gray-200"
             />
+            <div className="flex flex-wrap items-center gap-3 px-2 pb-2">
+              <button type="button" disabled={checkingSigning} onClick={() => void checkSigningStatus()}
+                className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                {checkingSigning ? 'Checking…' : "I've finished signing — check status"}
+              </button>
+              <button type="button" onClick={() => { setSigningUrl(null); setSigningType(null); setError(null) }}
+                className="text-sm text-gray-600 underline">Back to agreements</button>
+            </div>
+            {error && <p role="alert" className="px-2 text-sm text-red-600">{error}</p>}
           </div>
         ) : (
           <div className="space-y-4 px-5 py-5">
@@ -169,40 +204,12 @@ export function LandlordAgreementsModal({
             </p>
 
             {showEquifaxForm ? (
-              <form
-                className="space-y-3 rounded-lg border border-gray-200 p-4"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void startSigning('equifax', businessDetails)
-                }}
-              >
-                <h3 className="text-sm font-semibold text-gray-900">Updated Equifax agreement — subscriber details</h3>
-                <p className="text-xs text-gray-600">Confirm the business information that will appear on your agreement. Do not use a rental property address unless it is also your business mailing address.</p>
-                {([
-                  ['businessName', 'Business / subscriber name', 'Your legal business name'],
-                  ['phone', 'Business phone', '(555) 555-5555'],
-                  ['address', 'Full business mailing address', 'Street address, city, state, ZIP'],
-                ] as const).map(([field, label, placeholder]) => (
-                  <label key={field} className="block text-sm font-medium text-gray-700">
-                    {label}
-                    <input
-                      required
-                      type={field === 'phone' ? 'tel' : 'text'}
-                      value={businessDetails[field]}
-                      onChange={(event) => setBusinessDetails((current) => ({ ...current, [field]: event.target.value }))}
-                      placeholder={placeholder}
-                      maxLength={field === 'address' ? 85 : field === 'phone' ? 25 : 60}
-                      className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
-                    />
-                  </label>
-                ))}
-                <div className="flex items-center gap-3">
-                  <button type="submit" disabled={signingType === 'equifax'} className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                    {signingType === 'equifax' ? 'Opening…' : 'Continue to sign'}
-                  </button>
-                  <button type="button" onClick={() => setShowEquifaxForm(false)} className="text-sm text-gray-600 underline">Back</button>
-                </div>
-              </form>
+              <EquifaxSubscriberForm
+                initial={status.equifaxSubscriberDetails ?? { businessName: '', phone: '', address: '' }}
+                submitting={signingType === 'equifax'}
+                onSubmit={(details) => void startSigning('equifax', details)}
+                onBack={() => setShowEquifaxForm(false)}
+              />
             ) : <AgreementRow
               title="Equifax Broker Subscriber Agreement"
               description={
