@@ -23,11 +23,17 @@ declare module 'docusign-esign' {
   }
 
   export interface TabBase {
-    anchorString: string
+    anchorString?: string
     anchorUnits?: string
     anchorXOffset?: string
     anchorYOffset?: string
     anchorIgnoreIfNotPresent?: string
+    documentId?: string
+    pageNumber?: string
+    xPosition?: string
+    yPosition?: string
+    scaleValue?: string
+    required?: string
   }
 
   export type SignHere = TabBase
@@ -36,13 +42,18 @@ declare module 'docusign-esign' {
   export interface Text extends TabBase {
     value: string
     locked?: string
+    width?: string
+    height?: string
+    fontSize?: string
   }
+  export type DateSigned = TabBase
 
   export interface SignerTabs {
     signHereTabs?: SignHere[]
     initialHereTabs?: InitialHere[]
     textTabs?: Text[]
     checkboxTabs?: Checkbox[]
+    dateSignedTabs?: DateSigned[]
   }
 
   export interface Signer {
@@ -92,6 +103,7 @@ declare module 'docusign-esign' {
       opts: { recipientViewRequest: RecipientViewRequest },
     ): Promise<ViewUrl>
     getEnvelope(accountId: string, envelopeId: string): Promise<EnvelopeInfo>
+    update(accountId: string, envelopeId: string, opts: { envelope: { status: string; voidedReason: string } }): Promise<EnvelopeInfo>
     getDocument(
       accountId: string,
       envelopeId: string,

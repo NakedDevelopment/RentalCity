@@ -16,6 +16,7 @@ import type {
   InitialHere as DsInitialHere,
   Text as DsText,
   Checkbox as DsCheckbox,
+  DateSigned as DsDateSigned,
   Signer as DsSigner,
   EnvelopeDefinition as DsEnvelopeDefinition,
   RecipientViewRequest as DsRecipientViewRequest,
@@ -137,14 +138,22 @@ async function getEnvelopesApi(): Promise<{ api: DsEnvelopesApi; accountId: stri
 // ─── Envelope creation (embedded signing) ────────────────────────────────────
 
 export type AnchorTab = {
-  anchorString: string
-  type: 'sign' | 'initial' | 'text' | 'checkbox'
+  anchorString?: string
+  type: 'sign' | 'initial' | 'text' | 'checkbox' | 'dateSigned'
   /** Pre-filled value for type 'text'. Omit for a blank field the signer fills in themselves. */
   value?: string
   /** type 'text' only — false leaves the field editable by the signer instead of pre-filled/locked. Defaults to true. */
   locked?: boolean
   xOffset?: string
   yOffset?: string
+  pageNumber?: string
+  xPosition?: string
+  yPosition?: string
+  scaleValue?: string
+  width?: string
+  height?: string
+  fontSize?: string
+  required?: boolean
 }
 
 export type EmbeddedSigner = {
@@ -170,22 +179,26 @@ function buildTabs(tabs: AnchorTab[]) {
   const initialHereTabs: DsInitialHere[] = []
   const textTabs: DsText[] = []
   const checkboxTabs: DsCheckbox[] = []
+  const dateSignedTabs: DsDateSigned[] = []
 
   for (const t of tabs) {
-    const base = {
-      anchorString: t.anchorString,
-      anchorUnits: 'pixels',
-      anchorXOffset: t.xOffset ?? '0',
-      anchorYOffset: t.yOffset ?? '0',
-      anchorIgnoreIfNotPresent: 'true',
-    }
-    if (t.type === 'sign') signHereTabs.push(base as DsSignHere)
-    else if (t.type === 'initial') initialHereTabs.push(base as DsInitialHere)
+    const base = t.pageNumber
+      ? { documentId: '1', pageNumber: t.pageNumber, xPosition: t.xPosition, yPosition: t.yPosition, required: t.required === false ? 'false' : 'true' }
+      : { anchorString: t.anchorString, anchorUnits: 'pixels', anchorXOffset: t.xOffset ?? '0', anchorYOffset: t.yOffset ?? '0', anchorIgnoreIfNotPresent: 'false', required: t.required === false ? 'false' : 'true' }
+    if (t.type === 'sign') signHereTabs.push({ ...base, scaleValue: t.scaleValue ?? '1' } as DsSignHere)
+    else if (t.type === 'initial') initialHereTabs.push({ ...base, scaleValue: t.scaleValue ?? '0.5' } as DsInitialHere)
     else if (t.type === 'checkbox') checkboxTabs.push(base as DsCheckbox)
-    else textTabs.push({ ...base, value: t.value ?? '', locked: t.locked === false ? 'false' : 'true' } as DsText)
+    else if (t.type === 'dateSigned') dateSignedTabs.push(base as DsDateSigned)
+    else textTabs.push({ ...base, value: t.value ?? '', locked: t.locked === false ? 'false' : 'true', width: t.width, height: t.height, fontSize: t.fontSize } as DsText)
   }
 
-  return { signHereTabs, initialHereTabs, textTabs, checkboxTabs }
+  return { signHereTabs, initialHereTabs, textTabs, checkboxTabs, dateSignedTabs }
+}
+
+/** Replace an incomplete agreement with the updated version; never void a completed one. */
+export async function voidEnvelope(envelopeId: string): Promise<void> {
+  const { api, accountId } = await getEnvelopesApi()
+  await api.update(accountId, envelopeId, { envelope: { status: 'voided', voidedReason: 'Replaced with updated Equifax agreement' } })
 }
 
 /** Creates and sends an envelope configured for embedded signing, returns the envelope id. */

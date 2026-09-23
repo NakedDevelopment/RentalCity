@@ -3,6 +3,7 @@ import {
   createEquifaxAgreementSigningSession,
   createPlaidConsentSigningSession,
   type DocusignStatus,
+  type EquifaxSubscriberDetails,
 } from '../lib/docusignApi'
 
 type AgreementKind = 'equifax' | 'plaid'
@@ -77,6 +78,16 @@ export function LandlordAgreementsModal({
   const [signingUrl, setSigningUrl] = useState<string | null>(null)
   const [signingType, setSigningType] = useState<AgreementKind | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showEquifaxForm, setShowEquifaxForm] = useState(false)
+  const [businessDetails, setBusinessDetails] = useState<EquifaxSubscriberDetails>({
+    businessName: '', phone: '', address: '',
+  })
+
+  useEffect(() => {
+    if (open && !showEquifaxForm) {
+      setBusinessDetails(status.equifaxSubscriberDetails ?? { businessName: '', phone: '', address: '' })
+    }
+  }, [open, status.equifaxSubscriberDetails, showEquifaxForm])
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -95,15 +106,16 @@ export function LandlordAgreementsModal({
   }, [onCompleted])
 
   const startSigning = useCallback(
-    async (kind: AgreementKind) => {
+    async (kind: AgreementKind, details?: EquifaxSubscriberDetails) => {
       setError(null)
       setSigningType(kind)
       try {
         const result =
           kind === 'equifax'
-            ? await createEquifaxAgreementSigningSession(accessToken)
+            ? await createEquifaxAgreementSigningSession(accessToken, details!)
             : await createPlaidConsentSigningSession(accessToken)
         setSigningUrl(result.signingUrl)
+        setShowEquifaxForm(false)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not start signing session')
         setSigningType(null)
@@ -156,18 +168,53 @@ export function LandlordAgreementsModal({
                   : 'Before you can view tenant financial data, credit reports, or background checks, you need to sign two required agreements.'}
             </p>
 
-            <AgreementRow
+            {showEquifaxForm ? (
+              <form
+                className="space-y-3 rounded-lg border border-gray-200 p-4"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void startSigning('equifax', businessDetails)
+                }}
+              >
+                <h3 className="text-sm font-semibold text-gray-900">Updated Equifax agreement — subscriber details</h3>
+                <p className="text-xs text-gray-600">Confirm the business information that will appear on your agreement. Do not use a rental property address unless it is also your business mailing address.</p>
+                {([
+                  ['businessName', 'Business / subscriber name', 'Your legal business name'],
+                  ['phone', 'Business phone', '(555) 555-5555'],
+                  ['address', 'Full business mailing address', 'Street address, city, state, ZIP'],
+                ] as const).map(([field, label, placeholder]) => (
+                  <label key={field} className="block text-sm font-medium text-gray-700">
+                    {label}
+                    <input
+                      required
+                      type={field === 'phone' ? 'tel' : 'text'}
+                      value={businessDetails[field]}
+                      onChange={(event) => setBusinessDetails((current) => ({ ...current, [field]: event.target.value }))}
+                      placeholder={placeholder}
+                      maxLength={field === 'address' ? 85 : field === 'phone' ? 25 : 60}
+                      className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+                ))}
+                <div className="flex items-center gap-3">
+                  <button type="submit" disabled={signingType === 'equifax'} className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                    {signingType === 'equifax' ? 'Opening…' : 'Continue to sign'}
+                  </button>
+                  <button type="button" onClick={() => setShowEquifaxForm(false)} className="text-sm text-gray-600 underline">Back</button>
+                </div>
+              </form>
+            ) : <AgreementRow
               title="Equifax Broker Subscriber Agreement"
               description={
                 status.equifaxNeedsResign
-                  ? 'The agreement terms were updated since you last signed. Please sign the updated agreement to keep credit-check access.'
+                  ? 'Updated Equifax agreement required. Sign the corrected version, then wait for Equifax to approve it before running new checks.'
                   : "Required to run credit checks. After signing, Equifax reviews and approves access (about 24 hours)."
               }
               done={status.equifaxSigned}
               pendingApproval={status.equifaxSigned && !status.equifaxApproved}
-              onSign={() => void startSigning('equifax')}
+              onSign={() => { setError(null); setShowEquifaxForm(true) }}
               signing={signingType === 'equifax'}
-            />
+            />}
 
             <AgreementRow
               title="Plaid End Client Consent"

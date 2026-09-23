@@ -1211,7 +1211,7 @@ export function LandlordTenantProfilePage() {
                 <BankVerificationCard
                   verification={tenantBankVerification}
                   unlocked={hasUnlockedProfileAccess}
-                  docusignVerified={!docusignStatus || docusignStatus.agreementsSigned}
+                  docusignVerified={!docusignStatus || docusignStatus.plaidSigned}
                   onSignAgreements={() => setDocusignModalOpen(true)}
                 />
 

@@ -11,6 +11,13 @@ export type DocusignStatus = {
   plaidSigned: boolean
   agreementsSigned: boolean
   fullyVerified: boolean
+  equifaxSubscriberDetails: EquifaxSubscriberDetails
+}
+
+export type EquifaxSubscriberDetails = {
+  businessName: string
+  phone: string
+  address: string
 }
 
 async function parseError(res: Response, fallback: string): Promise<never> {
@@ -28,10 +35,12 @@ export async function getDocusignStatus(accessToken: string): Promise<DocusignSt
 
 export async function createEquifaxAgreementSigningSession(
   accessToken: string,
+  details: EquifaxSubscriberDetails,
 ): Promise<{ envelopeId: string; signingUrl: string }> {
   const res = await fetch('/api/docusign/equifax-agreement/create', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(details),
   })
   if (!res.ok) await parseError(res, 'Could not start the Equifax agreement signing session')
   return (await res.json()) as { envelopeId: string; signingUrl: string }

@@ -350,6 +350,8 @@ export function AdminUserDetailPage() {
                     <p className="text-sm font-medium text-green-700">Approved</p>
                     <p className="text-xs text-gray-500">Since {formatDate(row.equifax_approved_at)}</p>
                   </>
+                ) : row.docusign_envelope_status === 'needs_resign' ? (
+                  <p className="text-sm font-medium text-amber-700">Updated Equifax agreement required</p>
                 ) : row.equifax_pending_since ? (
                   <>
                     <p className="text-sm font-medium text-amber-700">Pending approval</p>
@@ -362,7 +364,8 @@ export function AdminUserDetailPage() {
                   <p>
                     Equifax agreement:{' '}
                     <span className={row.docusign_envelope_status === 'completed' ? 'font-medium text-green-700' : 'font-medium text-amber-700'}>
-                      {row.docusign_envelope_status === 'completed' ? 'Signed' : 'Not signed'}
+                      {row.docusign_envelope_status === 'completed' ? 'Updated agreement signed' :
+                        row.docusign_envelope_status === 'needs_resign' ? 'Updated signature required' : 'Not signed'}
                     </span>
                   </p>
                   <p>

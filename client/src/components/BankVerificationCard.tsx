@@ -92,7 +92,7 @@ export function BankVerificationCard({
 }: {
   verification: PlaidVerificationRow | null
   unlocked?: boolean
-  /** False when the landlord hasn't signed the required Plaid/Equifax agreements yet. */
+  /** False when the landlord hasn't signed the Plaid consent yet. */
   docusignVerified?: boolean
   onSignAgreements?: () => void
 }) {
@@ -107,7 +107,7 @@ export function BankVerificationCard({
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="mb-1 text-base font-semibold tracking-tight text-gray-900">Bank verification</h2>
         <p className="mt-3 text-sm text-gray-500">
-          Sign the required agreements to view this tenant's bank verification data.
+          Sign the Plaid consent to view this tenant's bank verification data.
         </p>
         {onSignAgreements && (
           <button type="button" onClick={onSignAgreements} className="mt-2 text-sm font-medium text-gray-900 underline">

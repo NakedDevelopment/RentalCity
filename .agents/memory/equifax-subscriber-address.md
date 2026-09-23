@@ -14,3 +14,9 @@ Landlords who already signed the flawed Equifax template must sign a corrected v
 **Why:** The user confirmed that Equifax needs to recognize an updated signed agreement from the existing handful of signers, not just from new landlords.
 
 **How to apply:** Make the re-sign requirement visible to affected existing landlords without overwriting prior signed copies. Decide the screening-access policy during re-sign separately from access to unrelated features.
+
+Store confirmed subscriber contact details outside broadly readable landlord profiles. Only the server should read them for the agreement and return them to the authenticated landlord.
+
+**Why:** Related users can read landlord profile rows; a business mailing address submitted for a legal agreement should not become part of that broader profile view.
+
+**How to apply:** When adding agreement-specific contact fields, use a server-only store rather than putting them on `profiles`. Apply the corrected-agreement approval gate to Equifax credit/background access, not to unrelated Plaid bank verification.

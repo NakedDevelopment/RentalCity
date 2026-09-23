@@ -57,6 +57,7 @@ import {
   createEmbeddedSigningUrl,
   getEnvelopeStatus,
   downloadCompletedDocument,
+  voidEnvelope,
   type AnchorTab,
 } from './docusign'
 import { loadEquifaxAgreementDocument, loadPlaidConsentDocument } from './documents'
@@ -2502,7 +2503,7 @@ app.get('/api/admin/directory', async (req, res) => {
 
   const { data: profiles, error: pErr } = await admin
     .from('profiles')
-    .select('id, role, display_name, is_suspended, created_at, phone, avatar_url, equifax_approved_at, equifax_pending_since, docusign_envelope_status, plaid_agreement_signed_at')
+    .select('id, role, display_name, is_suspended, created_at, phone, avatar_url, equifax_approved_at, equifax_approved_version, equifax_agreement_version, equifax_pending_since, docusign_envelope_status, plaid_agreement_signed_at')
     .in('id', ids)
 
   if (pErr) {
@@ -2538,9 +2539,11 @@ app.get('/api/admin/directory', async (req, res) => {
       created_at: (p?.created_at as string | undefined) ?? u.created_at,
       avatar_url: (p?.avatar_url as string | null | undefined) ?? null,
       last_sign_in_at: u.last_sign_in_at ?? null,
-      equifax_approved_at: (p?.equifax_approved_at as string | null | undefined) ?? null,
+      equifax_approved_at: p?.equifax_approved_version === 2 && p?.equifax_agreement_version === 2 &&
+        p?.docusign_envelope_status === 'completed' ? ((p?.equifax_approved_at as string | null | undefined) ?? null) : null,
       equifax_pending_since: (p?.equifax_pending_since as string | null | undefined) ?? null,
-      docusign_envelope_status: (p?.docusign_envelope_status as string | null | undefined) ?? null,
+      docusign_envelope_status: p?.docusign_envelope_status === 'completed' && p?.equifax_agreement_version !== 2
+        ? 'needs_resign' : ((p?.docusign_envelope_status as string | null | undefined) ?? null),
       plaid_agreement_signed_at: (p?.plaid_agreement_signed_at as string | null | undefined) ?? null,
       equifax_credentials: c
         ? {
@@ -3342,13 +3345,15 @@ app.get('/api/equifax/landlord/status', async (req, res) => {
 
   const { data } = await admin
     .from('profiles')
-    .select('equifax_approved_at, equifax_pending_since')
+    .select('equifax_approved_at, equifax_approved_version, equifax_pending_since, equifax_agreement_version, docusign_envelope_status')
     .eq('id', user.id)
     .maybeSingle()
-  const p = data as { equifax_approved_at?: string | null; equifax_pending_since?: string | null } | null
+  const p = data as { equifax_approved_at?: string | null; equifax_approved_version?: number | null; equifax_pending_since?: string | null; equifax_agreement_version?: number | null; docusign_envelope_status?: string | null } | null
+  const approved = !!p?.equifax_approved_at && p?.equifax_approved_version === 2 &&
+    p?.equifax_agreement_version === 2 && p?.docusign_envelope_status === 'completed'
   return res.json({
-    approved: !!p?.equifax_approved_at,
-    pending: !p?.equifax_approved_at && !!p?.equifax_pending_since,
+    approved,
+    pending: !approved && (Boolean(p?.equifax_pending_since) || p?.docusign_envelope_status === 'completed'),
   })
 })
 
@@ -3361,11 +3366,11 @@ app.post('/api/equifax/landlord/request-approval', async (req, res) => {
 
   const { data: profile } = await admin
     .from('profiles')
-    .select('equifax_approved_at, display_name')
+    .select('equifax_approved_at, equifax_approved_version, display_name')
     .eq('id', user.id)
     .maybeSingle()
-  const p = profile as { equifax_approved_at?: string | null; display_name?: string | null } | null
-  if (p?.equifax_approved_at) return res.json({ ok: true, alreadyApproved: true })
+  const p = profile as { equifax_approved_at?: string | null; equifax_approved_version?: number | null; display_name?: string | null } | null
+  if (p?.equifax_approved_at && p.equifax_approved_version === 2) return res.json({ ok: true, alreadyApproved: true })
 
   await admin
     .from('profiles')
@@ -3391,18 +3396,21 @@ app.post('/api/equifax/landlord/request-approval', async (req, res) => {
 async function getLandlordScreeningAccess(admin: SupabaseClient, landlordId: string) {
   const { data } = await admin
     .from('profiles')
-    .select('equifax_approved_at, docusign_envelope_status, plaid_agreement_signed_at')
+    .select('equifax_approved_at, equifax_approved_version, equifax_agreement_version, docusign_envelope_status, plaid_agreement_signed_at')
     .eq('id', landlordId)
     .maybeSingle()
   const profile = data as {
     equifax_approved_at?: string | null
+    equifax_approved_version?: number | null
+    equifax_agreement_version?: number | null
     docusign_envelope_status?: string | null
     plaid_agreement_signed_at?: string | null
   } | null
   return {
-    approved: !!profile?.equifax_approved_at,
+    approved: !!profile?.equifax_approved_at && profile?.equifax_approved_version === 2,
     agreementsSigned:
       profile?.docusign_envelope_status === 'completed' &&
+      profile?.equifax_agreement_version === 2 &&
       !!profile?.plaid_agreement_signed_at,
   }
 }
@@ -3996,6 +4004,9 @@ function isHttpNotFound(error: unknown): boolean {
 type LandlordProfileRow = {
   display_name?: string | null
   business_name?: string | null
+  phone?: string | null
+  equifax_agreement_version?: number | null
+  equifax_approved_version?: number | null
   equifax_approved_at?: string | null
   docusign_envelope_id?: string | null
   docusign_envelope_status?: string | null
@@ -4017,7 +4028,7 @@ async function processDocusignCompletion(
 ): Promise<void> {
   const { data: profile } = await admin
     .from('profiles')
-    .select('docusign_envelope_id, docusign_envelope_status, plaid_agreement_envelope_id')
+    .select('docusign_envelope_id, docusign_envelope_status, equifax_agreement_version, plaid_agreement_envelope_id')
     .eq('id', userId)
     .maybeSingle()
   const p = profile as LandlordProfileRow | null
@@ -4038,16 +4049,18 @@ async function processDocusignCompletion(
   const pdf = await downloadCompletedDocument(envelopeId)
   const { error: uploadErr } = await admin.storage
     .from('landlord-agreements')
-    .upload(`${userId}/equifax-broker-subscriber-agreement.pdf`, pdf, { contentType: 'application/pdf', upsert: true })
-  if (uploadErr) console.error('Failed to store executed Equifax agreement:', uploadErr.message)
+    .upload(`${userId}/equifax/${envelopeId}.pdf`, pdf, { contentType: 'application/pdf', upsert: false })
+  if (uploadErr && uploadErr.message?.toLowerCase().includes('already exists') !== true) {
+    throw new Error(`Failed to store executed Equifax agreement: ${uploadErr.message}`)
+  }
 
   if (!alreadyProcessed) {
     const equifaxInbox = process.env.EQUIFAX_AGREEMENT_INBOX || ''
     if (equifaxInbox) {
       await sendReportEmail({
         to: equifaxInbox,
-        subject: `Executed Broker Subscriber Agreement — ${userEmail ?? userId}`,
-        html: `<p>Attached is the executed Equifax Broker Subscriber Agreement for a Rental City landlord subscriber.</p>`,
+        subject: `Updated Equifax Broker Subscriber Agreement — ${userEmail ?? userId}`,
+        html: `<p>Attached is the corrected, executed Equifax Broker Subscriber Agreement for a Rental City landlord subscriber. Please review this updated agreement before approving access.</p>`,
         attachments: [{ filename: 'equifax-broker-subscriber-agreement.pdf', contentBase64: pdf.toString('base64') }],
       })
     } else {
@@ -4055,10 +4068,11 @@ async function processDocusignCompletion(
     }
   }
 
-  await admin.from('profiles').update({
+  const { error: completedError } = await admin.from('profiles').update({
     docusign_envelope_status: 'completed',
     equifax_pending_since: new Date().toISOString(),
   }).eq('id', userId)
+  if (completedError) throw completedError
 }
 
 app.get('/api/docusign/status', async (req, res) => {
@@ -4069,7 +4083,7 @@ app.get('/api/docusign/status', async (req, res) => {
 
   const { data } = await admin
     .from('profiles')
-    .select('equifax_approved_at, docusign_envelope_id, docusign_envelope_status, plaid_agreement_envelope_id, plaid_agreement_signed_at')
+    .select('equifax_approved_at, equifax_approved_version, equifax_agreement_version, business_name, phone, docusign_envelope_id, docusign_envelope_status, plaid_agreement_envelope_id, plaid_agreement_signed_at')
     .eq('id', user.id)
     .maybeSingle()
   let p = data as LandlordProfileRow | null
@@ -4081,7 +4095,8 @@ app.get('/api/docusign/status', async (req, res) => {
     if (
       p?.docusign_envelope_id &&
       p.docusign_envelope_status !== 'completed' &&
-      p.docusign_envelope_status !== 'needs_resign'
+      p.docusign_envelope_status !== 'needs_resign' &&
+      p.equifax_agreement_version === 2
     ) {
       const live = await getEnvelopeStatus(p.docusign_envelope_id)
       if (live.status === 'completed') await processDocusignCompletion(admin, user.id, user.email, 'equifax')
@@ -4097,22 +4112,31 @@ app.get('/api/docusign/status', async (req, res) => {
   if (p?.docusign_envelope_id || p?.plaid_agreement_envelope_id) {
     const { data: refreshed } = await admin
       .from('profiles')
-      .select('equifax_approved_at, docusign_envelope_id, docusign_envelope_status, plaid_agreement_envelope_id, plaid_agreement_signed_at')
+      .select('equifax_approved_at, equifax_approved_version, equifax_agreement_version, business_name, phone, docusign_envelope_id, docusign_envelope_status, plaid_agreement_envelope_id, plaid_agreement_signed_at')
       .eq('id', user.id)
       .maybeSingle()
     p = (refreshed as LandlordProfileRow | null) ?? p
   }
 
-  const equifaxSigned = p?.docusign_envelope_status === 'completed'
-  const equifaxApproved = !!p?.equifax_approved_at
+  const equifaxSigned = p?.docusign_envelope_status === 'completed' && p.equifax_agreement_version === 2
+  const equifaxApproved = equifaxSigned && !!p?.equifax_approved_at && p.equifax_approved_version === 2
   const plaidSigned = !!p?.plaid_agreement_signed_at
   const agreementsSigned = equifaxSigned && plaidSigned
+  const { data: subscriberDetails, error: subscriberDetailsError } = await admin.from('equifax_subscriber_details')
+    .select('business_phone, business_address').eq('landlord_id', user.id).maybeSingle()
+  if (subscriberDetailsError) return res.status(500).json({ error: 'Could not load subscriber details.' })
 
   return res.json({
     equifaxSigned,
     equifaxApproved,
     equifaxPendingSince: equifaxSigned && !equifaxApproved,
-    equifaxNeedsResign: p?.docusign_envelope_status === 'needs_resign',
+    equifaxNeedsResign: p?.docusign_envelope_status === 'needs_resign' ||
+      (p?.docusign_envelope_status === 'completed' && p.equifax_agreement_version !== 2),
+    equifaxSubscriberDetails: {
+      businessName: p?.business_name ?? '',
+      phone: subscriberDetails?.business_phone ?? p?.phone ?? '',
+      address: subscriberDetails?.business_address ?? '',
+    },
     plaidSigned,
     agreementsSigned,
     fullyVerified: equifaxApproved && plaidSigned,
@@ -4125,54 +4149,86 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
 
-  const { data: profile } = await admin
+  const input = req.body as { businessName?: unknown; phone?: unknown; address?: unknown } | null
+  const businessName = typeof input?.businessName === 'string' ? input.businessName.trim() : ''
+  const businessPhone = typeof input?.phone === 'string' ? input.phone.trim() : ''
+  const businessAddress = typeof input?.address === 'string' ? input.address.trim().replace(/\s+/g, ' ') : ''
+  if (!businessName || businessName.length > 60 || !/^[+()\d\s.-]{10,25}$/.test(businessPhone) ||
+      businessPhone.replace(/\D/g, '').length < 10 || businessAddress.length < 10 || businessAddress.length > 85 ||
+      !/^.{3,},\s*[^,]+,\s*[A-Za-z]{2}\s+\d{5}(?:-\d{4})?$/.test(businessAddress)) {
+    return res.status(400).json({ error: 'Enter a business name, a valid business phone, and the full business mailing address (street, city, state, ZIP).' })
+  }
+
+  const { data: profile, error: profileError } = await admin
     .from('profiles')
-    .select('display_name, business_name, docusign_envelope_id, docusign_envelope_status')
+    .select('display_name, business_name, docusign_envelope_id, docusign_envelope_status, equifax_agreement_version')
     .eq('id', user.id)
     .maybeSingle()
+  if (profileError) return res.status(500).json({ error: 'Could not load your profile.' })
   const p = profile as LandlordProfileRow | null
-  const landlordName = p?.display_name || 'Landlord'
-  const businessName = p?.business_name || landlordName
+  const landlordName = p?.display_name?.trim()
+  if (!landlordName || !user.email) return res.status(400).json({ error: 'Add your full name and email to your account before signing.' })
+  if (p?.docusign_envelope_status === 'completed' && p.equifax_agreement_version === 2) {
+    return res.status(409).json({ error: 'Your updated Equifax agreement is already signed.' })
+  }
+  const { data: priorDetails, error: priorDetailsError } = await admin.from('equifax_subscriber_details')
+    .select('business_phone, business_address').eq('landlord_id', user.id).maybeSingle()
+  if (priorDetailsError) return res.status(500).json({ error: 'Could not load subscriber details.' })
+  const detailsChanged = p?.business_name !== businessName ||
+    priorDetails?.business_phone !== businessPhone || priorDetails?.business_address !== businessAddress
 
   const returnUrl = `${lifecycleAppUrl(req)}/docusign/return?type=equifax`
 
   try {
     const createEnvelope = async () => {
       const { base64, fileExtension } = loadEquifaxAgreementDocument()
+      // Positions are on the fixed 20-page Equifax DOCX converted to letter-size
+      // PDF by DocuSign. The two executed samples have identical page geometry.
+      // Initials are required in the actual blanks, not over the question text.
       const tabs: AnchorTab[] = [
-        // California retail-seller certification (page 1): Rental City landlords never
-        // issue credit to consumers in person, so this is always "No" — Equifax rejected
-        // a prior envelope for leaving it blank.
-        { anchorString: '______No', type: 'initial' as const },
-        // Vermont Fair Credit Reporting certification (page 2): Rental City only orders
-        // Vermont reports with prior consumer consent, so this is always "Yes".
-        { anchorString: '______ Yes', type: 'initial' as const },
-        { anchorString: 'SUBSCRIBER:', type: 'text' as const, value: businessName, xOffset: '10' },
-        // No business-address field exists in profiles yet — left unlocked so the
-        // landlord fills in their own address during signing rather than left blank.
-        { anchorString: 'ADDRESS:', type: 'text' as const, locked: false, xOffset: '10' },
-        { anchorString: 'Signed by:', type: 'sign' as const, xOffset: '10' },
-        { anchorString: 'Printed Name', type: 'text' as const, value: landlordName, xOffset: '75' },
-        { anchorString: 'Title:', type: 'text' as const, locked: false, xOffset: '10' },
-        { anchorString: 'Date:', type: 'text' as const, value: new Date().toISOString().slice(0, 10), xOffset: '10' },
-        // Exhibit B service selections: Rental City only orders core credit reports
-        // (ACROFILE) and the FICO 8 score, per the owner's confirmed selection.
-        { anchorString: '______ ACROFILE', type: 'initial' as const },
-        { anchorString: 'Classic v8', type: 'initial' as const },
+        { pageNumber: '1', xPosition: '84', yPosition: '581', type: 'initial' },
+        { pageNumber: '2', xPosition: '259', yPosition: '74', type: 'initial' },
+        { pageNumber: '6', xPosition: '170', yPosition: '193', type: 'text', value: businessName, width: '380', height: '15', fontSize: 'Size9' },
+        { pageNumber: '6', xPosition: '170', yPosition: '209', type: 'text', value: businessAddress, width: '390', height: '18', fontSize: 'Size8' },
+        { pageNumber: '6', xPosition: '170', yPosition: '230', scaleValue: '0.6', type: 'sign' },
+        { pageNumber: '6', xPosition: '170', yPosition: '260', type: 'text', value: landlordName, width: '380', height: '15', fontSize: 'Size9' },
+        { pageNumber: '6', xPosition: '170', yPosition: '276', type: 'text', locked: false, width: '260', height: '15', fontSize: 'Size9' },
+        { pageNumber: '6', xPosition: '170', yPosition: '291', type: 'dateSigned' },
+        { pageNumber: '6', xPosition: '56', yPosition: '321', type: 'text', value: `Business phone: ${businessPhone}`, width: '450', height: '18', fontSize: 'Size9' },
+        { pageNumber: '9', xPosition: '51', yPosition: '198', type: 'initial' },
+        { pageNumber: '9', xPosition: '51', yPosition: '354', type: 'initial' },
       ]
       const createdEnvelopeId = await createEmbeddedEnvelope({
         documentBase64: base64,
         documentName: 'Equifax Broker Subscriber Agreement.docx',
         fileExtension,
-        emailSubject: 'Rental City — Equifax Broker Subscriber Agreement',
+        emailSubject: p?.docusign_envelope_id
+          ? 'Updated Equifax agreement required — Rental City'
+          : 'Rental City — Equifax Broker Subscriber Agreement',
         signer: { name: landlordName, email: user.email ?? '', clientUserId: user.id },
         tabs,
         returnUrl,
       })
-      await admin.from('profiles').update({
+      const { error: detailsError } = await admin.from('equifax_subscriber_details').upsert({
+        landlord_id: user.id,
+        business_phone: businessPhone,
+        business_address: businessAddress,
+        updated_at: new Date().toISOString(),
+      })
+      if (detailsError) {
+        await voidEnvelope(createdEnvelopeId)
+        throw detailsError
+      }
+      const { error: savedEnvelopeError } = await admin.from('profiles').update({
         docusign_envelope_id: createdEnvelopeId,
         docusign_envelope_status: 'sent',
+        equifax_agreement_version: 2,
+        business_name: businessName,
       }).eq('id', user.id)
+      if (savedEnvelopeError) {
+        await voidEnvelope(createdEnvelopeId)
+        throw savedEnvelopeError
+      }
       return createdEnvelopeId
     }
 
@@ -4181,8 +4237,25 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
       !envelopeId ||
       p?.docusign_envelope_status === 'declined' ||
       p?.docusign_envelope_status === 'voided' ||
-      p?.docusign_envelope_status === 'needs_resign'
+      p?.docusign_envelope_status === 'needs_resign' ||
+      p?.equifax_agreement_version !== 2 ||
+      (p?.docusign_envelope_status === 'sent' && detailsChanged)
     ) {
+      if (envelopeId && p?.docusign_envelope_status === 'sent') {
+        try {
+          const live = await getEnvelopeStatus(envelopeId)
+          if (live.status === 'completed') {
+            const oldPdf = await downloadCompletedDocument(envelopeId)
+            const { error: legacyUploadError } = await admin.storage.from('landlord-agreements')
+              .upload(`${user.id}/equifax-broker-subscriber-agreement.pdf`, oldPdf, { contentType: 'application/pdf', upsert: false })
+            if (legacyUploadError && !legacyUploadError.message?.toLowerCase().includes('already exists')) throw legacyUploadError
+          } else if (live.status !== 'voided' && live.status !== 'declined') {
+            await voidEnvelope(envelopeId)
+          }
+        } catch (err) {
+          if (!isHttpNotFound(err)) throw err
+        }
+      }
       envelopeId = await createEnvelope()
     }
 
@@ -4506,16 +4579,17 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
   if (approve) {
     const { data: profile } = await admin
       .from('profiles')
-      .select('docusign_envelope_status, plaid_agreement_signed_at, equifax_approved_at')
+      .select('docusign_envelope_status, equifax_agreement_version, plaid_agreement_signed_at, equifax_approved_at')
       .eq('id', userId)
       .maybeSingle()
     const agreementProfile = profile as {
       docusign_envelope_status?: string | null
+      equifax_agreement_version?: number | null
       plaid_agreement_signed_at?: string | null
       equifax_approved_at?: string | null
     } | null
-    if (agreementProfile?.docusign_envelope_status !== 'completed') {
-      return res.status(400).json({ error: 'This landlord has not completed the Equifax Broker Subscriber Agreement.' })
+    if (agreementProfile?.docusign_envelope_status !== 'completed' || agreementProfile.equifax_agreement_version !== 2) {
+      return res.status(400).json({ error: 'This landlord has not completed the updated Equifax Broker Subscriber Agreement.' })
     }
     if (!agreementProfile?.plaid_agreement_signed_at) {
       return res.status(400).json({ error: 'This landlord has not completed the Plaid End Client Consent.' })
@@ -4544,7 +4618,7 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
 
     // Only set the approval timestamp on first approval — re-submitting to
     // edit credentials for an already-approved landlord shouldn't reset it.
-    const update: Record<string, string | null> = { equifax_pending_since: null }
+    const update: Record<string, string | number | null> = { equifax_pending_since: null, equifax_approved_version: 2 }
     if (!agreementProfile?.equifax_approved_at) {
       update.equifax_approved_at = new Date().toISOString()
     }
@@ -4553,7 +4627,7 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
     return res.json({ ok: true })
   }
 
-  const { error: upErr } = await admin.from('profiles').update({ equifax_approved_at: null }).eq('id', userId)
+  const { error: upErr } = await admin.from('profiles').update({ equifax_approved_at: null, equifax_approved_version: null }).eq('id', userId)
   if (upErr) return res.status(500).json({ error: upErr.message })
   return res.json({ ok: true })
 })
