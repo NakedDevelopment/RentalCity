@@ -4155,7 +4155,7 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
   const businessAddress = typeof input?.address === 'string' ? input.address.trim().replace(/\s+/g, ' ') : ''
   if (!businessName || businessName.length > 60 || !/^[+()\d\s.-]{10,25}$/.test(businessPhone) ||
       businessPhone.replace(/\D/g, '').length < 10 || businessAddress.length < 10 || businessAddress.length > 85 ||
-      !/^.{3,},\s*[^,]+,\s*[A-Za-z]{2}\s+\d{5}(?:-\d{4})?$/.test(businessAddress)) {
+      !/^.{3,},\s*[^,]+,\s*[A-Za-z]{2},?\s+\d{5}(?:-\d{4})?$/.test(businessAddress)) {
     return res.status(400).json({ error: 'Enter a business name, a valid business phone, and the full business mailing address (street, city, state, ZIP).' })
   }
 
