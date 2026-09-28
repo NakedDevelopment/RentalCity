@@ -23,7 +23,9 @@ export function UniversalApplicationPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const propertyId = searchParams.get('propertyId')
+  // Older published-property links used "property" rather than "propertyId".
+  // Either spelling identifies a listing, not an invite or a fee waiver.
+  const propertyId = searchParams.get('propertyId') ?? searchParams.get('property')
   const [hasExistingApplication, setHasExistingApplication] = useState(false)
   const [existingValidUntil, setExistingValidUntil] = useState<string | null>(null)
   const [renewMode, setRenewMode] = useState(false)

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import { clearPendingLandlordInviteToken, getPendingLandlordInviteToken } from './pendingLandlordInvite'
+import { clearPendingLandlordInviteToken, getPendingLandlordInviteToken, setPendingInvitedProperty } from './pendingLandlordInvite'
 
 /**
  * When a tenant signs in with a pending invite token in sessionStorage, redeem it once.
@@ -33,13 +33,16 @@ export function useRedeemPendingLandlordInvite(
         attempted.current = false
         return
       }
-      const row = data as { ok?: boolean; error?: string } | null
+      const row = data as { ok?: boolean; error?: string; property_id?: string | null } | null
       if (!row?.ok) {
-        if (row?.error === 'tenants_only') clearPendingLandlordInviteToken()
+        if (row?.error === 'tenants_only' || row?.error === 'invalid_token' || row?.error === 'active_invite') {
+          clearPendingLandlordInviteToken()
+        }
         attempted.current = false
         return
       }
       clearPendingLandlordInviteToken()
+      if (row.property_id) setPendingInvitedProperty(user.id, row.property_id)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('rental-city-invite-redeemed'))
       }

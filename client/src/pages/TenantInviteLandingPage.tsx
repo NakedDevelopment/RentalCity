@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
-import { clearPendingLandlordInviteToken, setPendingLandlordInviteToken } from '../lib/pendingLandlordInvite'
+import { clearPendingLandlordInviteToken, getPendingLandlordInviteToken, setPendingLandlordInviteToken } from '../lib/pendingLandlordInvite'
 
 type Preview = { ok: true; landlord_name: string } | { ok: false }
 
@@ -23,13 +23,13 @@ export function TenantInviteLandingPage() {
       setLoading(false)
       return
     }
-    setPendingLandlordInviteToken(token)
     let cancelled = false
     ;(async () => {
       const { data, error } = await supabase.rpc('preview_landlord_invite', { invite_token: token })
       if (cancelled) return
       setLoading(false)
       if (error || !data || !(data as { ok?: boolean }).ok) {
+        if (!error && getPendingLandlordInviteToken() === token) clearPendingLandlordInviteToken()
         setPreview({ ok: false })
         return
       }
@@ -48,12 +48,14 @@ export function TenantInviteLandingPage() {
     try {
       const { data, error } = await supabase.rpc('redeem_landlord_invite', { invite_token: token })
       if (error) throw error
-      const row = data as { ok?: boolean; error?: string }
+      const row = data as { ok?: boolean; error?: string; property_id?: string | null }
       if (!row?.ok) {
         if (row?.error === 'tenants_only') {
           setRedeemError('This invite is for renter accounts. Switch to a tenant profile or create a tenant account.')
         } else if (row?.error === 'invalid_token') {
           setRedeemError('This invite link is not valid.')
+        } else if (row?.error === 'active_invite') {
+          setRedeemError('You are already in another host’s 14-day invitation period. You can use this link after that period ends.')
         } else {
           setRedeemError('Could not apply this invite.')
         }
@@ -61,7 +63,7 @@ export function TenantInviteLandingPage() {
       }
       clearPendingLandlordInviteToken()
       window.dispatchEvent(new CustomEvent('rental-city-invite-redeemed'))
-      navigate('/matches', { replace: true })
+      navigate(row.property_id ? `/property/${row.property_id}` : '/matches', { replace: true })
     } catch {
       setRedeemError('Something went wrong. Try again.')
     } finally {
@@ -105,7 +107,7 @@ export function TenantInviteLandingPage() {
       <h1 className="text-2xl font-medium text-gray-900">You&apos;re invited to apply</h1>
       <p className="mt-4 text-sm leading-7 text-gray-600">
         <span className="font-medium text-gray-900">{preview.landlord_name}</span> invited you on Rental City. For{' '}
-        <span className="font-medium">10 days</span> after you accept, you&apos;ll only see and apply to their listings.
+        <span className="font-medium">14 days</span> after you accept, you&apos;ll only see and apply to their listings.
         Then you can use the full marketplace.
       </p>
 
@@ -132,12 +134,14 @@ export function TenantInviteLandingPage() {
           <>
             <Link
               to="/signup"
+              onClick={() => setPendingLandlordInviteToken(token)}
               className="inline-flex items-center justify-center rounded-lg btn-primary px-5 py-3 text-sm font-medium text-white"
             >
               Create account
             </Link>
             <Link
               to="/login"
+              onClick={() => setPendingLandlordInviteToken(token)}
               className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               Log in

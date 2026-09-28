@@ -1426,7 +1426,7 @@ app.post('/api/stripe/landlord/profile-unlock/checkout', async (req, res) => {
   }
 
   // Fee waiver: if the tenant redeemed this landlord's invite link (at any point —
-  // not bounded by the 10-day restriction window), unlock for free immediately.
+  // not bounded by the 14-day restriction window), unlock for free immediately.
   const { data: inviteRecord } = await admin
     .from('tenant_invite_restrictions')
     .select('tenant_id')

@@ -4,6 +4,7 @@ import { LayoutGrid, User, Mail, Settings as SettingsIcon, Building2, Bell, Calc
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { useRedeemPendingLandlordInvite } from '../lib/useRedeemPendingLandlordInvite'
+import { clearPendingInvitedProperty, getPendingInvitedProperty } from '../lib/pendingLandlordInvite'
 import { useTenantInviteRestriction } from '../lib/useTenantInviteRestriction'
 import { supabase } from '../lib/supabase'
 import { TenantInviteBanner } from './TenantInviteBanner'
@@ -53,6 +54,7 @@ export function TenantLayout() {
   const navigate = useNavigate()
   const { role: profileRole, displayName, landlordSurveyCompletedAt, loading: roleLoading } = useProfileRole(user)
   const [inviteBannerKey, setInviteBannerKey] = useState(0)
+  const [invitedPropertyId, setInvitedPropertyId] = useState<string | null>(null)
   const [landlordAgreementStatus, setLandlordAgreementStatus] = useState<DocusignStatus | null>(null)
   const [landlordAgreementToken, setLandlordAgreementToken] = useState<string | null>(null)
   const [hasLandlordProperties, setHasLandlordProperties] = useState(false)
@@ -62,12 +64,17 @@ export function TenantLayout() {
   const inviteRestriction = useTenantInviteRestriction(user, profileRole, inviteBannerKey)
 
   useEffect(() => {
+    setInvitedPropertyId(user ? getPendingInvitedProperty(user.id) : null)
+  }, [user?.id])
+
+  useEffect(() => {
     function onRedeemed() {
       setInviteBannerKey((k) => k + 1)
+      setInvitedPropertyId(user ? getPendingInvitedProperty(user.id) : null)
     }
     window.addEventListener('rental-city-invite-redeemed', onRedeemed)
     return () => window.removeEventListener('rental-city-invite-redeemed', onRedeemed)
-  }, [])
+  }, [user?.id])
 
   // Existing landlords with properties should be reminded at login, but can
   // defer the modal. The banner remains until both agreements are signed.
@@ -297,6 +304,16 @@ export function TenantLayout() {
           </nav>
 
           <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 pb-10 sm:px-6 lg:px-8">
+            {profileRole === 'tenant' && invitedPropertyId ? (
+              <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                Your invitation is active.{' '}
+                <Link to={`/property/${invitedPropertyId}`}
+                  onClick={() => { clearPendingInvitedProperty(); setInvitedPropertyId(null) }}
+                  className="font-semibold underline">
+                  View the property you were invited to
+                </Link>
+              </div>
+            ) : null}
             {profileRole === 'tenant' && inviteRestriction.active ? (
               <TenantInviteBanner restriction={inviteRestriction} />
             ) : null}

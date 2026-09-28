@@ -20,6 +20,7 @@ export function LandlordInviteTenantsCard() {
       .from('landlord_invite_links')
       .select('id, token, created_at')
       .eq('landlord_id', user.id)
+      .is('property_id', null)
       .order('created_at', { ascending: false })
       .limit(20)
     setLoading(false)
@@ -75,7 +76,7 @@ export function LandlordInviteTenantsCard() {
         your link, their profile unlocks for free.
       </p>
       <p className="mt-1 text-sm leading-6 text-gray-500">
-        For the first 10 days after they accept, they&apos;ll only see your active listings. Then they get full access
+        For the first 14 days after they accept, they&apos;ll only see your active listings. Then they get full access
         to Rental City.
       </p>
 

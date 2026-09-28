@@ -4,6 +4,7 @@ import { centsToMoneyInput, formatCurrency, moneyInputToCents } from '../lib/pro
 import { useAuth } from '../lib/useAuth'
 import { safeInternalPath } from '../lib/safeInternalPath'
 import { supabase } from '../lib/supabase'
+import { PropertyInviteLink } from '../components/PropertyInviteLink'
 
 type ListingStatus = 'Active' | 'Draft' | 'Inactive' | 'Leased'
 
@@ -495,6 +496,7 @@ export function LandlordPropertyDetailsPage() {
 
       <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
+          <PropertyInviteLink propertyId={property.id} />
           <InfoPanel title="Basic Information">
             <div className="space-y-4">
               <div>

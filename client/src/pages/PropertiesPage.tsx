@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { formatBathrooms, formatBedrooms, formatCurrency } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import { PropertyInviteLink } from '../components/PropertyInviteLink'
 
 type PropertyStatus = 'Active' | 'Draft' | 'Inactive' | 'Leased'
 
@@ -46,13 +47,13 @@ export function PropertiesPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const [properties, setProperties] = useState<PropertyCard[]>([])
-  const [addAnotherOpen, setAddAnotherOpen] = useState(false)
+  const [justPublishedId, setJustPublishedId] = useState<string | null>(null)
   const [propertyCountRange, setPropertyCountRange] = useState<string | null>(null)
 
   useEffect(() => {
     const state = location.state as { justPublishedId?: string } | null
     if (state?.justPublishedId) {
-      setAddAnotherOpen(true)
+      setJustPublishedId(state.justPublishedId)
       navigate(location.pathname, { replace: true, state: null })
     }
   }, [location.state, location.pathname, navigate])
@@ -372,9 +373,9 @@ export function PropertiesPage() {
 
       </div>
 
-      {addAnotherOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8">
-          <div className="w-full max-w-[420px] rounded-2xl bg-white p-8 text-center shadow-xl">
+      {justPublishedId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 px-4 py-8">
+          <div className="max-h-full w-full max-w-[500px] overflow-y-auto rounded-2xl bg-white p-8 text-center shadow-xl">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
               <svg className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -387,11 +388,12 @@ export function PropertiesPage() {
                 ? `You mentioned you manage ${COUNT_RANGE_LABELS[propertyCountRange]} — let's get every one of them in front of quality tenants. Would you like to upload another property now?`
                 : 'The more properties you list, the more quality tenants we can match you with. Would you like to upload another property now?'}
             </p>
+            <div className="mt-5"><PropertyInviteLink propertyId={justPublishedId} /></div>
 
             <button
               type="button"
               onClick={() => {
-                setAddAnotherOpen(false)
+                setJustPublishedId(null)
                 navigate('/onboarding/property/basic-info')
               }}
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg btn-primary px-6 py-3.5 text-base font-semibold text-white"
@@ -403,7 +405,7 @@ export function PropertiesPage() {
             </button>
             <button
               type="button"
-              onClick={() => setAddAnotherOpen(false)}
+              onClick={() => setJustPublishedId(null)}
               className="mt-3 inline-flex w-full items-center justify-center rounded-lg border border-gray-200 bg-white px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               No thanks, I&apos;ll do that later
