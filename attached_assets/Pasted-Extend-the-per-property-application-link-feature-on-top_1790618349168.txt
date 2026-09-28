@@ -1,0 +1,31 @@
+Extend the per-property application link feature on top of the existing `landlord_invite_links` system.
+
+## What exists today
+- DB table `landlord_invite_links` has columns: `id` (uuid PK), `landlord_id` (uuid FK), `token` (uuid, auto-generated), `created_at`.
+- `LandlordInviteTenantsCard.tsx` lets landlords generate generic (landlord-level) invite links at `/invite/<token>`.
+- `TenantInviteLandingPage.tsx` handles `/invite/:token` — resolves the token and redeems it.
+- `RentalApplicationPage.tsx` already reads `?propertyId=<uuid>` from the URL and sets `triggering_property_id` on the universal application.
+- `useRedeemPendingLandlordInvite.ts` calls `supabase.rpc('redeem_landlord_invite', { invite_token: token })`.
+
+## Changes required
+
+### 1. DB migration
+Add a nullable `property_id uuid REFERENCES properties(id) ON DELETE SET NULL` column to `landlord_invite_links`. Create a migration file in `supabase/migrations/` following the existing naming convention.
+
+### 2. Server or RPC — surface `property_id` on redemption
+The `redeem_landlord_invite` Postgres function (or equivalent server route) should return the `property_id` alongside the existing result so the client can use it.
+
+### 3. `TenantInviteLandingPage.tsx`
+After resolving/redeeming the invite token, if the returned row has a non-null `property_id`, store it (e.g. in sessionStorage alongside the pending invite token, or pass it directly in the redirect URL) and append `?propertyId=<id>` when navigating the tenant into `/apply` or `/application`.
+
+### 4. `LandlordInviteTenantsCard.tsx` — optional property selector
+Add an optional property dropdown (fetched from `properties` where `landlord_id = user.id` and `status = 'active'`) before the "Create invite link" button. When a property is selected, pass `property_id` in the insert payload. Display the property address/title next to each link row so landlords can distinguish them. Links created without a property selected remain generic (null `property_id`) and behave as today.
+
+### 5. Landlord property detail page (if one exists)
+If there is a per-property detail/edit page for landlords, add a small "Share application link" section there that pre-selects the current property and calls the same create-link flow.
+
+## Constraints
+- Do NOT change the `/invite/:token` URL shape — existing links must keep working.
+- Do NOT expose `property_id` to tenants before they redeem the token (keep RLS as-is on the table).
+- Read `replit.md`, `PRODUCT.md`, and `.agents/memory/*.md` before touching RLS or Supabase auth areas.
+- Verify the `redeem_landlord_invite` RPC signature in the live DB before modifying call sites.
