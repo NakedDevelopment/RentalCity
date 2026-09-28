@@ -142,8 +142,35 @@ export function LandlordPropertyDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [shareLink, setShareLink] = useState<{ propertyId: string; url: string } | null>(null)
+  const [shareStatus, setShareStatus] = useState<string | null>(null)
 
   const landlordId = user?.id
+  const shareUrl = shareLink?.propertyId === property?.id && property.id === id ? shareLink.url : null
+  const handleShareLinkChange = useCallback((url: string | null) => {
+    setShareLink(url ? { propertyId: id, url } : null)
+    setShareStatus(null)
+  }, [id])
+
+  async function shareProperty() {
+    if (!shareUrl) return
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: property?.title || 'Rental City property', url: shareUrl })
+        return
+      } catch (shareError) {
+        if (shareError instanceof DOMException && shareError.name === 'AbortError') return
+        // Some browsers expose Web Share but block it inside embedded previews.
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setShareStatus('Property link copied')
+    } catch {
+      setShareStatus('Could not share automatically. Copy the link below instead.')
+      document.getElementById('property-share-link')?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
 
   const hydrateFromRecord = useCallback((normalized: PropertyRecord) => {
     setProperty(normalized)
@@ -458,7 +485,15 @@ export function LandlordPropertyDetailsPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void shareProperty()}
+              disabled={!shareUrl}
+              className="inline-flex min-w-[142px] items-center justify-center rounded-lg border border-blue-200 bg-white px-5 py-3 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Share Property
+            </button>
             {isEditMode ? (
               <>
                 <button
@@ -490,13 +525,14 @@ export function LandlordPropertyDetailsPage() {
                 Edit Property
               </Link>
             )}
+            {shareStatus ? <p role="status" className="w-full text-sm text-gray-700">{shareStatus}</p> : null}
           </div>
         </div>
       </div>
 
       <div className="mt-7 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
-          <PropertyInviteLink propertyId={property.id} />
+          <PropertyInviteLink propertyId={property.id} onLinkChange={handleShareLinkChange} />
           <InfoPanel title="Basic Information">
             <div className="space-y-4">
               <div>

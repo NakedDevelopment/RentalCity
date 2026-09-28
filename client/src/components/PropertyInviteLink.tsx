@@ -3,7 +3,13 @@ import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 
 /** The same saved invite is shown after publishing and on subsequent visits. */
-export function PropertyInviteLink({ propertyId }: { propertyId: string | null }) {
+export function PropertyInviteLink({
+  propertyId,
+  onLinkChange,
+}: {
+  propertyId: string | null
+  onLinkChange?: (url: string | null) => void
+}) {
   const { user } = useAuth()
   const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -15,6 +21,7 @@ export function PropertyInviteLink({ propertyId }: { propertyId: string | null }
     setToken(null)
     setError(null)
     setCopied(false)
+    onLinkChange?.(null)
     if (!user || !propertyId) {
       setError('Property link is unavailable.')
       setLoading(false)
@@ -34,9 +41,10 @@ export function PropertyInviteLink({ propertyId }: { propertyId: string | null }
           return
         }
         setToken(data.token)
+        onLinkChange?.(`${window.location.origin}/invite/${data.token}`)
       })
     return () => { cancelled = true }
-  }, [user?.id, propertyId])
+  }, [user?.id, propertyId, onLinkChange])
 
   const url = token && typeof window !== 'undefined' ? `${window.location.origin}/invite/${token}` : ''
   const copy = async () => {
@@ -51,7 +59,7 @@ export function PropertyInviteLink({ propertyId }: { propertyId: string | null }
   }
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-5 text-left">
+    <section id="property-share-link" className="rounded-2xl border border-gray-200 bg-white p-5 text-left">
       <h2 className="text-lg font-medium text-gray-900">Share this property</h2>
       <p className="mt-2 text-sm leading-6 text-gray-600">
         Invite tenants with this link. For 14 days after accepting, they can see and apply to all your active listings, not just this property.
