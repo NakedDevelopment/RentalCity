@@ -146,7 +146,7 @@ export function LandlordPropertyDetailsPage() {
   const [shareStatus, setShareStatus] = useState<string | null>(null)
 
   const landlordId = user?.id
-  const shareUrl = shareLink?.propertyId === property?.id && property.id === id ? shareLink.url : null
+  const shareUrl = property && property.id === id && shareLink?.propertyId === property.id ? shareLink.url : null
   const handleShareLinkChange = useCallback((url: string | null) => {
     setShareLink(url ? { propertyId: id, url } : null)
     setShareStatus(null)
