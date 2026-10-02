@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import { propertyInviteUrl } from '../../../shared/publicAppUrl'
 
 type InviteRow = { id: string; token: string; created_at: string }
 
@@ -53,8 +54,7 @@ export function LandlordInviteTenantsCard() {
   }
 
   function inviteUrl(token: string) {
-    if (typeof window === 'undefined') return ''
-    return `${window.location.origin}/invite/${token}`
+    return propertyInviteUrl(token, import.meta.env.VITE_APP_URL)
   }
 
   async function copyUrl(token: string) {

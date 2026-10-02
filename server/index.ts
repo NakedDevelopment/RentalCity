@@ -63,6 +63,7 @@ import {
 import { loadEquifaxAgreementDocument, loadPlaidConsentDocument } from './documents'
 import { normalizeEquifaxSubscriberDetails, type EquifaxSubscriberInput } from './equifaxSubscriber'
 import { docusignReturnOrigin } from './docusignReturnOrigin'
+import { publicAppUrl } from '../shared/publicAppUrl'
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
 import {
@@ -1783,22 +1784,15 @@ app.post('/api/stripe/landlord/membership/confirm', async (req, res) => {
 // considered "all uploaded".
 const PROPERTY_RANGE_MINIMUMS: Record<string, number> = { '1': 1, '2-5': 2, '6-10': 6, '10+': 10 }
 
-function lifecycleAppUrl(req?: Request): string {
-  const configured = process.env.APP_URL?.replace(/\/+$/, '')
-  if (configured) return configured
-  const origin =
-    process.env.NODE_ENV !== 'production'
-      ? (req?.headers.origin as string | undefined) ||
-        (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : '')
-      : ''
-  return origin || 'http://localhost:5000'
+function lifecycleAppUrl(): string {
+  return publicAppUrl(process.env.APP_URL)
 }
 
 function docusignReturnUrl(req: Request, type: 'equifax' | 'plaid'): string {
   const origin = docusignReturnOrigin(
     req.get('origin'),
     req.get('sec-fetch-site'),
-    lifecycleAppUrl(req),
+    lifecycleAppUrl(),
     process.env.NODE_ENV === 'production',
   )
   return `${origin}/docusign/return?type=${type}`
@@ -1888,7 +1882,7 @@ app.post('/api/emails/landlord/property-published', async (req, res) => {
   const needed = (range && PROPERTY_RANGE_MINIMUMS[range]) || 1
   const kind: LandlordLifecycleKind = publishedCount >= needed ? 'all_uploaded' : 'partial_upload'
 
-  const sent = await sendLandlordLifecycleEmail(admin, user.id, kind, lifecycleAppUrl(req))
+  const sent = await sendLandlordLifecycleEmail(admin, user.id, kind, lifecycleAppUrl())
   return res.json({ sent: sent ? kind : null })
 })
 
@@ -2666,7 +2660,7 @@ app.post('/api/plaid/exchange', async (req, res) => {
     // Income) was already initiated inside the same Link session via
     // createLinkToken's income_verification config, and completes on its own
     // timeline via /api/plaid/bank-income/webhook.
-    const webhookUrl = `${lifecycleAppUrl(req)}/api/plaid/assets/webhook`
+    const webhookUrl = `${lifecycleAppUrl()}/api/plaid/assets/webhook`
     const { assetReportId, assetReportToken } = await createAssetReport(client, accessToken, webhookUrl)
 
     const { error: itemErr } = await admin.from('plaid_items').upsert(
@@ -2775,7 +2769,7 @@ app.post('/api/plaid/refresh', async (req, res) => {
     // fetchable once its own PRODUCT_READY webhook fires. Bank Income isn't
     // force-refreshed here (that endpoint is deprecated in favor of Link
     // Update Mode); the existing report is re-read as-is.
-    const webhookUrl = `${lifecycleAppUrl(req)}/api/plaid/assets/webhook`
+    const webhookUrl = `${lifecycleAppUrl()}/api/plaid/assets/webhook`
     const { assetReportId, assetReportToken } = await refreshAssetReport(
       client,
       item.asset_report_token as string,

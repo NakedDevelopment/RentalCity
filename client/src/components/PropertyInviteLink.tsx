@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import { propertyInviteUrl } from '../../../shared/publicAppUrl'
 
 /** The same saved invite is shown after publishing and on subsequent visits. */
 export function PropertyInviteLink({
@@ -41,12 +42,12 @@ export function PropertyInviteLink({
           return
         }
         setToken(data.token)
-        onLinkChange?.(`${window.location.origin}/invite/${data.token}`)
+        onLinkChange?.(propertyInviteUrl(data.token, import.meta.env.VITE_APP_URL))
       })
     return () => { cancelled = true }
   }, [user?.id, propertyId, onLinkChange])
 
-  const url = token && typeof window !== 'undefined' ? `${window.location.origin}/invite/${token}` : ''
+  const url = token ? propertyInviteUrl(token, import.meta.env.VITE_APP_URL) : ''
   const copy = async () => {
     if (!url) return
     try {

@@ -51,3 +51,6 @@ build = ["npm", "run", "build"]
 
 [userenv.shared]
 PLAID_ENV = "production"
+
+[userenv.production]
+APP_URL = "https://app.gorentalcity.com"
