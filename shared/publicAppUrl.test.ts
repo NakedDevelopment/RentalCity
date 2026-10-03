@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { publicAppUrl, propertyInviteUrl, DEFAULT_PUBLIC_APP_URL } from './publicAppUrl'
+import { publicAppUrl, propertyInviteUrl, passwordRecoveryUrl, DEFAULT_PUBLIC_APP_URL } from './publicAppUrl'
 import { buildLandlordLifecycleEmail } from '../server/email'
 
 test('unconfigured public links use the customer-facing site, never localhost', () => {
@@ -12,6 +12,12 @@ test('unconfigured public links use the customer-facing site, never localhost', 
 test('a public configured origin is normalized', () => {
   assert.equal(publicAppUrl(' https://app.gorentalcity.com/ '), DEFAULT_PUBLIC_APP_URL)
   assert.equal(publicAppUrl('https://public.example.com/'), 'https://public.example.com')
+})
+
+test('password recovery uses the live reset page, not the requesting browser origin', () => {
+  assert.equal(passwordRecoveryUrl(), `${DEFAULT_PUBLIC_APP_URL}/reset-password`)
+  assert.equal(passwordRecoveryUrl('https://public.example.com/'), 'https://public.example.com/reset-password')
+  assert.throws(() => passwordRecoveryUrl('http://localhost:5000'), /public HTTPS origin/)
 })
 
 test('unsafe or malformed configured URLs fail explicitly', () => {

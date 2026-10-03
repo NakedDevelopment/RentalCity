@@ -30,3 +30,7 @@ export function publicAppUrl(configured?: string): string {
 export function propertyInviteUrl(token: string, configured?: string): string {
   return `${publicAppUrl(configured)}/invite/${encodeURIComponent(token)}`
 }
+
+export function passwordRecoveryUrl(configured?: string): string {
+  return `${publicAppUrl(configured)}/reset-password`
+}

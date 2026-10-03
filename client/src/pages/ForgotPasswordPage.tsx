@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { passwordRecoveryUrl } from '../../../shared/publicAppUrl'
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -14,7 +15,7 @@ export function ForgotPasswordPage() {
     setError(null)
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: passwordRecoveryUrl(import.meta.env.VITE_APP_URL),
     })
 
     setLoading(false)

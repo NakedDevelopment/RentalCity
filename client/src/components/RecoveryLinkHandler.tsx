@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { supabase, recoverySession } from '../lib/supabase'
 
 /**
  * Safety net for Supabase password-recovery links that land anywhere other
@@ -29,7 +29,8 @@ export function RecoveryLinkHandler() {
       return
     }
 
-    // Case 2: the SDK already consumed the token and fired PASSWORD_RECOVERY.
+    // Case 2: recovery fires after this handler attaches.
+    let cancelled = false
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
@@ -37,7 +38,16 @@ export function RecoveryLinkHandler() {
         navigate('/reset-password', { replace: true, state: { recovery: true } })
       }
     })
-    return () => subscription.unsubscribe()
+    // Case 3: the SDK validated recovery before React's loading gate mounted.
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled && recoverySession.isRecovery(data.session)) {
+        navigate('/reset-password', { replace: true, state: { recovery: true } })
+      }
+    })
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, [location.pathname, navigate])
 
   return null

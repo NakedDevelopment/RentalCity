@@ -1,22 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { Link, useNavigate } from 'react-router-dom'
+import { supabase, recoverySession } from '../lib/supabase'
 
 const RECOVERY_TIMEOUT_MS = 10000
-
-// Supabase's recovery-link redirect carries `type=recovery` plus an actual
-// token (`access_token` for the implicit flow, `code` for PKCE) in the URL
-// hash/query. Requiring the token itself (not just the guessable `type=
-// recovery` string) is what distinguishes a real "came from the reset email"
-// visit from a plain logged-in session landing on this page directly.
-function looksLikeRecoveryLink(): boolean {
-  const hash = window.location.hash.replace(/^#/, '')
-  const hashParams = new URLSearchParams(hash)
-  const searchParams = new URLSearchParams(window.location.search)
-  const isRecoveryType = hashParams.get('type') === 'recovery' || searchParams.get('type') === 'recovery'
-  const hasToken = Boolean(hashParams.get('access_token') || searchParams.get('code'))
-  return isRecoveryType && hasToken
-}
 
 function ToggleButton({
   visible,
@@ -50,10 +36,6 @@ function ToggleButton({
 
 export function ResetPasswordPage() {
   const navigate = useNavigate()
-  const location = useLocation()
-  // Set by RecoveryLinkHandler when it forwards a recovery login whose URL
-  // token was already consumed by the Supabase SDK on another route.
-  const forwardedRecovery = Boolean((location.state as { recovery?: boolean } | null)?.recovery)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -65,7 +47,6 @@ export function ResetPasswordPage() {
 
   useEffect(() => {
     let cancelled = false
-    const cameFromRecoveryRedirect = looksLikeRecoveryLink() || forwardedRecovery
 
     const markReady = () => {
       if (cancelled) return
@@ -78,22 +59,16 @@ export function ResetPasswordPage() {
     // already consumed on another route before we could inspect it.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') markReady()
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) markReady()
     })
 
-    // Covers the case where the PASSWORD_RECOVERY event already fired (URL
-    // token parsed) before this listener was attached. Safe to trust
-    // getSession() here only because the recovery redirect (URL token or the
-    // RecoveryLinkHandler forward) already confirmed this page load came
-    // from a reset email — a plain logged-in session must not unlock this
-    // form, since it would let anyone at an unlocked device change the
-    // password without knowing the current one.
-    if (cameFromRecoveryRedirect) {
-      supabase.auth.getSession().then(({ data }) => {
-        if (!cancelled && data.session) markReady()
-      })
-    }
+    // The SDK can consume the fragment and emit recovery while App is still
+    // loading. Only its early validated event (not a normal login or a
+    // guessable URL/router marker) can authorize that already-loaded session.
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled && recoverySession.isRecovery(data.session)) markReady()
+    })
 
     const timeout = setTimeout(() => {
       if (!cancelled) {
