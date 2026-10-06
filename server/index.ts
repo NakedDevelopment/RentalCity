@@ -62,6 +62,7 @@ import {
 } from './docusign'
 import { loadEquifaxAgreementDocument, loadEquifaxApplicationDocument, loadPlaidConsentDocument } from './documents'
 import { equifaxApplicationTabs } from './equifaxApplicationTabs'
+import { equifaxAgreementTabs } from './equifaxAgreementTabs'
 import { EQUIFAX_APPLICATION_VERSION, hasEquifaxCreditAccess, hasSignedCurrentEquifaxApplication } from '../shared/equifaxAccess'
 import { normalizeEquifaxSubscriberDetails, type EquifaxSubscriberInput } from './equifaxSubscriber'
 import { docusignReturnOrigin } from './docusignReturnOrigin'
@@ -4212,19 +4213,7 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
       // Positions are on the fixed 20-page Equifax DOCX converted to letter-size
       // PDF by DocuSign. The two executed samples have identical page geometry.
       // Initials are required in the actual blanks, not over the question text.
-      const tabs: AnchorTab[] = [
-        { pageNumber: '1', xPosition: '84', yPosition: '581', type: 'initial' },
-        { pageNumber: '2', xPosition: '259', yPosition: '74', type: 'initial' },
-        { pageNumber: '6', xPosition: '170', yPosition: '193', type: 'text', value: businessName, width: '380', height: '15', fontSize: 'Size9' },
-        { pageNumber: '6', xPosition: '170', yPosition: '209', type: 'text', value: businessAddress, width: '390', height: '18', fontSize: 'Size8' },
-        { pageNumber: '6', xPosition: '170', yPosition: '230', scaleValue: '0.6', type: 'sign' },
-        { pageNumber: '6', xPosition: '170', yPosition: '260', type: 'text', value: landlordName, width: '380', height: '15', fontSize: 'Size9' },
-        { pageNumber: '6', xPosition: '170', yPosition: '276', type: 'text', locked: false, width: '260', height: '15', fontSize: 'Size9' },
-        { pageNumber: '6', xPosition: '170', yPosition: '291', type: 'dateSigned' },
-        { pageNumber: '6', xPosition: '56', yPosition: '321', type: 'text', value: `Business phone: ${businessPhone}`, width: '450', height: '18', fontSize: 'Size9' },
-        { pageNumber: '9', xPosition: '51', yPosition: '198', type: 'initial' },
-        { pageNumber: '9', xPosition: '51', yPosition: '354', type: 'initial' },
-      ]
+      const tabs = equifaxAgreementTabs({ businessName, businessAddress, businessPhone, landlordName })
       const createdEnvelopeId = await createEmbeddedEnvelope({
         documentBase64: base64,
         documentName: 'Equifax Broker Subscriber Agreement.docx',
