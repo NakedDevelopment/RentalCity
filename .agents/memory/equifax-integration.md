@@ -5,6 +5,14 @@ description: Architecture and decisions for the Equifax OneView credit check flo
 
 # Equifax credit check integration
 
+## Credit-access application process
+
+Treat Equifax OneView credit access as an application, not a promise of access. The landlord first signs the agreement package in one DocuSign session, then completes business verification through an email link sent by Equifax. Access is enabled only after verification is confirmed.
+
+**Why:** The user specified a two-step application process and wants a second, two-page document included behind the existing “Sign Agreement” action.
+
+**How to apply:** Keep signing, business verification, and credit-access approval distinct. Do not promise automatic approval or a fixed turnaround, and do not represent Equifax's verification email as sent without evidence. Confirm approval handoff and existing-signer scope before changing those behaviors.
+
 ## Product: Equifax OneView Consumer Credit
 - Sandbox base: `https://api.sandbox.equifax.com`
 - UAT/Test base: `https://api.uat.equifax.com`
