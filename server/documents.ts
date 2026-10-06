@@ -9,6 +9,10 @@ const EQUIFAX_AGREEMENT_PATH = path.join(
   process.cwd(),
   'attached_assets/RENTAL_CITY_INC_-_Broker_Subcriber_Agreement_(Execution_7.10._1784841668421.docx',
 )
+const EQUIFAX_APPLICATION_PATH = path.join(
+  process.cwd(),
+  'attached_assets/Application_for_Service_2025_-_Email_Offline_Version_(1)_(1)_1791297760824.pdf',
+)
 
 export type LandlordSignerInfo = {
   name: string
@@ -32,6 +36,17 @@ export function loadEquifaxAgreementDocument(): { base64: string; fileExtension:
     throw new Error('Equifax agreement template changed; review signature placement before sending.')
   }
   return { base64: buf.toString('base64'), fileExtension: 'docx' }
+}
+
+export function loadEquifaxApplicationDocument(): { base64: string; fileExtension: 'pdf' } {
+  const buf = fs.readFileSync(EQUIFAX_APPLICATION_PATH)
+  // The fillable PDF has fixed coordinates. Do not silently send revised pages
+  // with the old field placements.
+  const expectedSha256 = '176eaf5f0e05b231b4d4cff8d3136e6dc96068740a7c9edfa87ce5ac792d80bc'
+  if (createHash('sha256').update(buf).digest('hex') !== expectedSha256) {
+    throw new Error('Equifax application PDF changed; review all DocuSign fields before sending.')
+  }
+  return { base64: buf.toString('base64'), fileExtension: 'pdf' }
 }
 
 function escapeHtml(s: string): string {

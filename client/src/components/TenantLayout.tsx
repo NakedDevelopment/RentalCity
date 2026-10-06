@@ -265,7 +265,7 @@ export function TenantLayout() {
               className="flex flex-col gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"
             >
               <p>
-                <span className="font-semibold">Action required:</span> Sign your agreements to run credit checks or background checks on tenants.
+                <span className="font-semibold">Action required:</span> Sign the updated Equifax application package and any remaining required agreements. Existing approved access stays active while you re-sign.
               </p>
               <button
                 type="button"

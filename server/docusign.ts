@@ -17,6 +17,7 @@ import type {
   Text as DsText,
   Checkbox as DsCheckbox,
   DateSigned as DsDateSigned,
+  RadioGroup as DsRadioGroup,
   Signer as DsSigner,
   EnvelopeDefinition as DsEnvelopeDefinition,
   RecipientViewRequest as DsRecipientViewRequest,
@@ -154,6 +155,19 @@ export type AnchorTab = {
   height?: string
   fontSize?: string
   required?: boolean
+  /** Defaults to the first document; the Equifax service application is document 2. */
+  documentId?: string
+  tabLabel?: string
+  conditionalParentLabel?: string
+  conditionalParentValue?: string
+}
+
+export type RadioChoice = {
+  groupName: string
+  pageNumber: string
+  yes: { x: string; y: string }
+  no: { x: string; y: string }
+  documentId?: string
 }
 
 export type EmbeddedSigner = {
@@ -170,11 +184,17 @@ export type CreateEmbeddedEnvelopeArgs = {
   emailSubject: string
   signer: EmbeddedSigner
   tabs: AnchorTab[]
+  radioChoices?: RadioChoice[]
+  additionalDocument?: {
+    documentBase64: string
+    documentName: string
+    fileExtension: 'pdf'
+  }
   /** Where DocuSign redirects the browser after the signing ceremony completes. */
   returnUrl: string
 }
 
-function buildTabs(tabs: AnchorTab[]) {
+function buildTabs(tabs: AnchorTab[], choices: RadioChoice[] = []) {
   const signHereTabs: DsSignHere[] = []
   const initialHereTabs: DsInitialHere[] = []
   const textTabs: DsText[] = []
@@ -183,8 +203,13 @@ function buildTabs(tabs: AnchorTab[]) {
 
   for (const t of tabs) {
     const base = t.pageNumber
-      ? { documentId: '1', pageNumber: t.pageNumber, xPosition: t.xPosition, yPosition: t.yPosition, required: t.required === false ? 'false' : 'true' }
-      : { anchorString: t.anchorString, anchorUnits: 'pixels', anchorXOffset: t.xOffset ?? '0', anchorYOffset: t.yOffset ?? '0', anchorIgnoreIfNotPresent: 'false', required: t.required === false ? 'false' : 'true' }
+      ? { documentId: t.documentId ?? '1', pageNumber: t.pageNumber, xPosition: t.xPosition, yPosition: t.yPosition, required: t.required === false ? 'false' : 'true' }
+      : { documentId: t.documentId ?? '1', anchorString: t.anchorString, anchorUnits: 'pixels', anchorXOffset: t.xOffset ?? '0', anchorYOffset: t.yOffset ?? '0', anchorIgnoreIfNotPresent: 'false', required: t.required === false ? 'false' : 'true' }
+    Object.assign(base, {
+      tabLabel: t.tabLabel,
+      conditionalParentLabel: t.conditionalParentLabel,
+      conditionalParentValue: t.conditionalParentValue,
+    })
     if (t.type === 'sign') signHereTabs.push({ ...base, scaleValue: t.scaleValue ?? '1' } as DsSignHere)
     else if (t.type === 'initial') initialHereTabs.push({ ...base, scaleValue: t.scaleValue ?? '0.5' } as DsInitialHere)
     else if (t.type === 'checkbox') checkboxTabs.push(base as DsCheckbox)
@@ -192,7 +217,15 @@ function buildTabs(tabs: AnchorTab[]) {
     else textTabs.push({ ...base, value: t.value ?? '', locked: t.locked === false ? 'false' : 'true', width: t.width, height: t.height, fontSize: t.fontSize } as DsText)
   }
 
-  return { signHereTabs, initialHereTabs, textTabs, checkboxTabs, dateSignedTabs }
+  const radioGroupTabs: DsRadioGroup[] = choices.map((choice) => ({
+    documentId: choice.documentId ?? '1',
+    groupName: choice.groupName,
+    radios: [
+      { documentId: choice.documentId ?? '1', pageNumber: choice.pageNumber, xPosition: choice.yes.x, yPosition: choice.yes.y, value: 'yes', required: 'true' },
+      { documentId: choice.documentId ?? '1', pageNumber: choice.pageNumber, xPosition: choice.no.x, yPosition: choice.no.y, value: 'no', required: 'true' },
+    ],
+  }))
+  return { signHereTabs, initialHereTabs, textTabs, checkboxTabs, dateSignedTabs, radioGroupTabs }
 }
 
 /** Replace an incomplete agreement with the updated version; never void a completed one. */
@@ -201,15 +234,25 @@ export async function voidEnvelope(envelopeId: string): Promise<void> {
   await api.update(accountId, envelopeId, { envelope: { status: 'voided', voidedReason: 'Replaced with updated Equifax agreement' } })
 }
 
-/** Creates and sends an envelope configured for embedded signing, returns the envelope id. */
-export async function createEmbeddedEnvelope(args: CreateEmbeddedEnvelopeArgs): Promise<string> {
-  const { api, accountId } = await getEnvelopesApi()
-
+/** Pure payload builder, also used for validating an unsent draft in DocuSign. */
+export function buildEmbeddedEnvelopeDefinition(args: CreateEmbeddedEnvelopeArgs): DsEnvelopeDefinition {
   const document: DsDocument = {
     documentBase64: args.documentBase64,
     name: args.documentName,
     fileExtension: args.fileExtension,
     documentId: '1',
+  }
+  const documents: DsDocument[] = [document]
+  if (args.additionalDocument) {
+    documents.push({
+      documentBase64: args.additionalDocument.documentBase64,
+      name: args.additionalDocument.documentName,
+      fileExtension: args.additionalDocument.fileExtension,
+      documentId: '2',
+      // We place controlled, required recipient tabs ourselves. Do not also
+      // convert the PDF's AcroForm widgets into a second overlapping set.
+      transformPdfFields: 'false',
+    })
   }
 
   const signer: DsSigner = {
@@ -221,17 +264,22 @@ export async function createEmbeddedEnvelope(args: CreateEmbeddedEnvelopeArgs): 
     // landlord in the embedded ceremony. Explicitly disable DocuSign recipient
     // ID lookup so an account-level SMS/phone-auth default is not inherited.
     requireIdLookup: 'false',
-    tabs: buildTabs(args.tabs),
+    tabs: buildTabs(args.tabs, args.radioChoices),
   }
 
-  const envelopeDefinition: DsEnvelopeDefinition = {
+  return {
     emailSubject: args.emailSubject,
-    documents: [document],
+    documents,
     recipients: { signers: [signer] },
     status: 'sent',
   }
 
-  const results = await api.createEnvelope(accountId, { envelopeDefinition })
+}
+
+/** Creates and sends an envelope configured for embedded signing, returns the envelope id. */
+export async function createEmbeddedEnvelope(args: CreateEmbeddedEnvelopeArgs): Promise<string> {
+  const { api, accountId } = await getEnvelopesApi()
+  const results = await api.createEnvelope(accountId, { envelopeDefinition: buildEmbeddedEnvelopeDefinition(args) })
   if (!results.envelopeId) throw new Error('DocuSign did not return an envelopeId')
   return results.envelopeId
 }

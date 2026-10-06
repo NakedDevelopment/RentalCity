@@ -20,6 +20,7 @@ declare module 'docusign-esign' {
     name: string
     fileExtension: string
     documentId: string
+    transformPdfFields?: string
   }
 
   export interface TabBase {
@@ -34,6 +35,9 @@ declare module 'docusign-esign' {
     yPosition?: string
     scaleValue?: string
     required?: string
+    tabLabel?: string
+    conditionalParentLabel?: string
+    conditionalParentValue?: string
   }
 
   export type SignHere = TabBase
@@ -47,6 +51,15 @@ declare module 'docusign-esign' {
     fontSize?: string
   }
   export type DateSigned = TabBase
+  export interface Radio extends TabBase {
+    value: string
+    selected?: string
+  }
+  export interface RadioGroup {
+    documentId: string
+    groupName: string
+    radios: Radio[]
+  }
 
   export interface SignerTabs {
     signHereTabs?: SignHere[]
@@ -54,6 +67,7 @@ declare module 'docusign-esign' {
     textTabs?: Text[]
     checkboxTabs?: Checkbox[]
     dateSignedTabs?: DateSigned[]
+    radioGroupTabs?: RadioGroup[]
   }
 
   export interface Signer {

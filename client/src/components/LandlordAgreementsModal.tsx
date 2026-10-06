@@ -39,7 +39,9 @@ function AgreementRow({
         <p className="text-sm font-medium text-gray-900">{title}</p>
         <p className="mt-1 text-sm text-gray-600">{description}</p>
         {pendingApproval && (
-          <p className="mt-2 text-xs font-medium text-amber-700">Signed — pending Equifax's approval (~24h)</p>
+          <p className="mt-2 text-xs font-medium text-amber-700">
+            Step 1 complete. Watch for Equifax’s email to verify your business. Credit access remains off until verification is confirmed and your application is approved.
+          </p>
         )}
       </div>
       {done ? (
@@ -53,7 +55,7 @@ function AgreementRow({
           disabled={signing}
           className="shrink-0 rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {signing ? 'Opening…' : 'Sign'}
+          {signing ? 'Opening…' : 'Sign Agreement'}
         </button>
       )}
     </div>
@@ -197,10 +199,12 @@ export function LandlordAgreementsModal({
           <div className="space-y-4 px-5 py-5">
             <p className="text-sm text-gray-600">
               {status.equifaxNeedsResign
-                ? 'Equifax agreement terms have been updated — click to sign the updated agreement.'
+                ? status.equifaxApproved
+                  ? 'The Equifax application package has changed. Please sign the expanded package. Your existing credit access remains active while you re-sign.'
+                  : 'The Equifax application package has changed. Please sign the expanded package to continue your application.'
                 : onboarding
-                  ? 'Before you add your first property, please sign the two agreements required to access tenant screening information.'
-                  : 'Before you can view tenant financial data, credit reports, or background checks, you need to sign two required agreements.'}
+                  ? 'Before you add your first property, sign the Equifax application package and Plaid consent. Signing applies for credit access; it does not grant access.'
+                  : 'Apply for credit access by signing the Equifax application package and required Plaid consent. Signing does not grant credit access.'}
             </p>
 
             {showEquifaxForm ? (
@@ -211,11 +215,11 @@ export function LandlordAgreementsModal({
                 onBack={() => setShowEquifaxForm(false)}
               />
             ) : <AgreementRow
-              title="Equifax Broker Subscriber Agreement"
+              title="Equifax credit access application"
               description={
                 status.equifaxNeedsResign
-                  ? 'Updated Equifax agreement required. Sign the corrected version, then wait for Equifax to approve it before running new checks.'
-                  : "Required to run credit checks. After signing, Equifax reviews and approves access (about 24 hours)."
+                  ? 'Step 1: Sign the subscriber agreement and complete the Equifax application in one DocuSign session. Step 2: Follow the business-verification link Equifax sends by email.'
+                  : 'Step 1: Sign the subscriber agreement and complete the Equifax application in one DocuSign session. Step 2: Verify your business using Equifax’s email link. Access is enabled only after approval.'
               }
               done={status.equifaxSigned}
               pendingApproval={status.equifaxSigned && !status.equifaxApproved}
@@ -235,7 +239,7 @@ export function LandlordAgreementsModal({
 
             {required ? (
               <p className="text-center text-sm text-gray-500">
-                Both agreements must be signed before you can continue to your first property.
+                The Equifax application package and Plaid consent must be signed before you can continue to your first property. Credit access still requires business verification and approval.
               </p>
             ) : (
               <p className="text-center text-sm text-gray-500">

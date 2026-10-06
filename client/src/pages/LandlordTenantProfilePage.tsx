@@ -1237,13 +1237,13 @@ export function LandlordTenantProfilePage() {
                       landlordEquifaxPending ? (
                         <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
                           <p className="text-sm text-amber-800">
-                            Your Equifax access request is pending approval. We'll notify you when you're approved to run credit checks.
+                            Your Equifax application is signed. Complete business verification through the email link Equifax sends you. Credit checks will be available only after verification is confirmed and access is approved.
                           </p>
                         </div>
                       ) : (
                         <div className="space-y-3">
                           <p className="text-sm text-gray-600">
-                            Get approved to run Equifax credit checks on tenants you're considering.
+                            Apply for Equifax credit access to run checks on tenants you're considering. Signing the application does not guarantee approval.
                           </p>
                           <button
                             type="button"
@@ -1334,7 +1334,7 @@ export function LandlordTenantProfilePage() {
                       landlordEquifaxPending ? (
                         <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
                           <p className="text-sm text-amber-800">
-                            Your Equifax access request is pending approval. We'll notify you when you're approved to run background checks.
+                            Your Equifax application is signed. Complete business verification through Equifax’s email link; screening remains unavailable until verification is confirmed and access is approved.
                           </p>
                         </div>
                       ) : (

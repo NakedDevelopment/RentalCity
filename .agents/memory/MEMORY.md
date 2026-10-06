@@ -1,4 +1,5 @@
-- [Equifax credit check integration](equifax-integration.md) — OneView credit API, SSN encrypted at rest (AES-256-GCM), landlord gated by equifax_approved_at; DocuSign pending.
+- [Equifax credit check integration](equifax-integration.md) — OneView environment routing and encryption-key rotation constraints.
+- [Equifax application policy](equifax-application-policy.md) — all signers complete one package; existing approvals retain access; staff confirm Equifax business verification.
 - [Equifax subscriber address](equifax-subscriber-address.md) — collect the landlord's business/mailing address for the agreement; never infer it from a rental property.
 - [Equifax direct-read access](equifax-direct-read-access.md) — inspect live RLS policies after schema renames; API gates alone cannot protect browser-readable screening data.
 - [DocuSign return origins](docusign-return-origins.md) — embedded signing callbacks must use the initiating browser's public origin, not a localhost-prone background link fallback.

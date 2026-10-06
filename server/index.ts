@@ -60,7 +60,9 @@ import {
   voidEnvelope,
   type AnchorTab,
 } from './docusign'
-import { loadEquifaxAgreementDocument, loadPlaidConsentDocument } from './documents'
+import { loadEquifaxAgreementDocument, loadEquifaxApplicationDocument, loadPlaidConsentDocument } from './documents'
+import { equifaxApplicationTabs } from './equifaxApplicationTabs'
+import { EQUIFAX_APPLICATION_VERSION, hasEquifaxCreditAccess, hasSignedCurrentEquifaxApplication } from '../shared/equifaxAccess'
 import { normalizeEquifaxSubscriberDetails, type EquifaxSubscriberInput } from './equifaxSubscriber'
 import { docusignReturnOrigin } from './docusignReturnOrigin'
 import { publicAppUrl } from '../shared/publicAppUrl'
@@ -2545,10 +2547,9 @@ app.get('/api/admin/directory', async (req, res) => {
       created_at: (p?.created_at as string | undefined) ?? u.created_at,
       avatar_url: (p?.avatar_url as string | null | undefined) ?? null,
       last_sign_in_at: u.last_sign_in_at ?? null,
-      equifax_approved_at: p?.equifax_approved_version === 2 && p?.equifax_agreement_version === 2 &&
-        p?.docusign_envelope_status === 'completed' ? ((p?.equifax_approved_at as string | null | undefined) ?? null) : null,
+      equifax_approved_at: hasEquifaxCreditAccess(p ?? null) ? ((p?.equifax_approved_at as string | null | undefined) ?? null) : null,
       equifax_pending_since: (p?.equifax_pending_since as string | null | undefined) ?? null,
-      docusign_envelope_status: p?.docusign_envelope_status === 'completed' && p?.equifax_agreement_version !== 2
+      docusign_envelope_status: p?.docusign_envelope_status === 'completed' && p?.equifax_agreement_version !== EQUIFAX_APPLICATION_VERSION
         ? 'needs_resign' : ((p?.docusign_envelope_status as string | null | undefined) ?? null),
       plaid_agreement_signed_at: (p?.plaid_agreement_signed_at as string | null | undefined) ?? null,
       equifax_credentials: c
@@ -3355,8 +3356,7 @@ app.get('/api/equifax/landlord/status', async (req, res) => {
     .eq('id', user.id)
     .maybeSingle()
   const p = data as { equifax_approved_at?: string | null; equifax_approved_version?: number | null; equifax_pending_since?: string | null; equifax_agreement_version?: number | null; docusign_envelope_status?: string | null } | null
-  const approved = !!p?.equifax_approved_at && p?.equifax_approved_version === 2 &&
-    p?.equifax_agreement_version === 2 && p?.docusign_envelope_status === 'completed'
+  const approved = hasEquifaxCreditAccess(p)
   return res.json({
     approved,
     pending: !approved && (Boolean(p?.equifax_pending_since) || p?.docusign_envelope_status === 'completed'),
@@ -3372,11 +3372,14 @@ app.post('/api/equifax/landlord/request-approval', async (req, res) => {
 
   const { data: profile } = await admin
     .from('profiles')
-    .select('equifax_approved_at, equifax_approved_version, display_name')
+    .select('equifax_approved_at, equifax_approved_version, equifax_agreement_version, docusign_envelope_status, display_name')
     .eq('id', user.id)
     .maybeSingle()
-  const p = profile as { equifax_approved_at?: string | null; equifax_approved_version?: number | null; display_name?: string | null } | null
-  if (p?.equifax_approved_at && p.equifax_approved_version === 2) return res.json({ ok: true, alreadyApproved: true })
+  const p = profile as { equifax_approved_at?: string | null; equifax_approved_version?: number | null; equifax_agreement_version?: number | null; docusign_envelope_status?: string | null; display_name?: string | null } | null
+  if (hasEquifaxCreditAccess(p)) return res.json({ ok: true, alreadyApproved: true })
+  if (!hasSignedCurrentEquifaxApplication(p)) {
+    return res.status(400).json({ error: 'Sign the Equifax agreement and application before requesting credit access.' })
+  }
 
   await admin
     .from('profiles')
@@ -3391,8 +3394,8 @@ app.post('/api/equifax/landlord/request-approval', async (req, res) => {
     const landlordEmail = authUser?.user?.email || ''
     await sendReportEmail({
       to: supportInbox,
-      subject: `Equifax Access Request — ${landlordName}`,
-      html: `<p><strong>${landlordName}</strong> (${landlordEmail}) has requested Equifax credit-check access on Rental City.</p>
+      subject: `Equifax business verification pending — ${landlordName}`,
+      html: `<p><strong>${landlordName}</strong> (${landlordEmail}) signed the Equifax application. Do not approve credit access until Equifax business verification is confirmed.</p>
              <p><a href="${lifecycleAppUrl()}/admin/users/${user.id}">View landlord profile in admin →</a></p>`,
     })
   }
@@ -3413,10 +3416,10 @@ async function getLandlordScreeningAccess(admin: SupabaseClient, landlordId: str
     plaid_agreement_signed_at?: string | null
   } | null
   return {
-    approved: !!profile?.equifax_approved_at && profile?.equifax_approved_version === 2,
+    approved: hasEquifaxCreditAccess(profile),
     agreementsSigned:
-      profile?.docusign_envelope_status === 'completed' &&
-      profile?.equifax_agreement_version === 2 &&
+      (hasSignedCurrentEquifaxApplication(profile) ||
+        (profile?.equifax_approved_version === 2 && hasEquifaxCreditAccess(profile))) &&
       !!profile?.plaid_agreement_signed_at,
   }
 }
@@ -4063,14 +4066,20 @@ async function processDocusignCompletion(
   if (!alreadyProcessed) {
     const equifaxInbox = process.env.EQUIFAX_AGREEMENT_INBOX || ''
     if (equifaxInbox) {
-      await sendReportEmail({
+      const isNewApplication = p?.equifax_agreement_version === EQUIFAX_APPLICATION_VERSION
+      const delivered = await sendReportEmail({
         to: equifaxInbox,
-        subject: `Updated Equifax Broker Subscriber Agreement — ${userEmail ?? userId}`,
-        html: `<p>Attached is the corrected, executed Equifax Broker Subscriber Agreement for a Rental City landlord subscriber. Please review this updated agreement before approving access.</p>`,
-        attachments: [{ filename: 'equifax-broker-subscriber-agreement.pdf', contentBase64: pdf.toString('base64') }],
+        subject: `${isNewApplication ? 'Equifax application and subscriber agreement' : 'Updated Equifax Broker Subscriber Agreement'} — ${userEmail ?? userId}`,
+        html: isNewApplication
+          ? `<p>Attached is the signed subscriber agreement and completed application for service. Please send the landlord your business-verification email link. Rental City will not enable new credit access until verification is confirmed.</p>`
+          : `<p>Attached is the executed Broker Subscriber Agreement. Please review it before approving access.</p>`,
+        attachments: [{ filename: isNewApplication ? 'equifax-subscriber-application.pdf' : 'equifax-broker-subscriber-agreement.pdf', contentBase64: pdf.toString('base64') }],
       })
+      if (!delivered) {
+        throw new Error('Signed Equifax documents are stored, but forwarding failed. Retry confirmation before proceeding with business verification.')
+      }
     } else {
-      console.warn('EQUIFAX_AGREEMENT_INBOX not configured — executed agreement stored but not emailed to Equifax')
+      throw new Error('Equifax submission inbox is not configured. Signed documents are stored, but have not been submitted.')
     }
   }
 
@@ -4102,7 +4111,7 @@ app.get('/api/docusign/status', async (req, res) => {
       p?.docusign_envelope_id &&
       p.docusign_envelope_status !== 'completed' &&
       p.docusign_envelope_status !== 'needs_resign' &&
-      p.equifax_agreement_version === 2
+      p.equifax_agreement_version === EQUIFAX_APPLICATION_VERSION
     ) {
       const live = await getEnvelopeStatus(p.docusign_envelope_id)
       if (live.status === 'completed') await processDocusignCompletion(admin, user.id, user.email, 'equifax')
@@ -4124,8 +4133,8 @@ app.get('/api/docusign/status', async (req, res) => {
     p = (refreshed as LandlordProfileRow | null) ?? p
   }
 
-  const equifaxSigned = p?.docusign_envelope_status === 'completed' && p.equifax_agreement_version === 2
-  const equifaxApproved = equifaxSigned && !!p?.equifax_approved_at && p.equifax_approved_version === 2
+  const equifaxSigned = hasSignedCurrentEquifaxApplication(p)
+  const equifaxApproved = hasEquifaxCreditAccess(p)
   const plaidSigned = !!p?.plaid_agreement_signed_at
   const agreementsSigned = equifaxSigned && plaidSigned
   const { data: subscriberDetails, error: subscriberDetailsError } = await admin.from('equifax_subscriber_details')
@@ -4137,7 +4146,7 @@ app.get('/api/docusign/status', async (req, res) => {
     equifaxApproved,
     equifaxPendingSince: equifaxSigned && !equifaxApproved,
     equifaxNeedsResign: p?.docusign_envelope_status === 'needs_resign' ||
-      (p?.docusign_envelope_status === 'completed' && p.equifax_agreement_version !== 2),
+      (p?.docusign_envelope_status === 'completed' && p.equifax_agreement_version !== EQUIFAX_APPLICATION_VERSION),
     equifaxSubscriberDetails: {
       businessName: p?.business_name ?? '',
       phone: subscriberDetails?.business_phone ?? p?.phone ?? '',
@@ -4170,8 +4179,8 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
   const p = profile as LandlordProfileRow | null
   const landlordName = p?.display_name?.trim()
   if (!landlordName || !user.email) return res.status(400).json({ error: 'Add your full name and email to your account before signing.' })
-  if (p?.docusign_envelope_status === 'completed' && p.equifax_agreement_version === 2) {
-    return res.status(409).json({ error: 'Your updated Equifax agreement is already signed.' })
+  if (hasSignedCurrentEquifaxApplication(p)) {
+    return res.status(409).json({ error: 'Your Equifax application and subscriber agreement are already signed.' })
   }
   const { data: priorDetails, error: priorDetailsError } = await admin.from('equifax_subscriber_details')
     .select('business_phone, business_address').eq('landlord_id', user.id).maybeSingle()
@@ -4183,12 +4192,12 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
     const returnUrl = docusignReturnUrl(req, 'equifax')
     // The earlier return URL could point at localhost even after DocuSign had
     // finished signing. Reconcile that envelope rather than replacing it.
-    if (p?.docusign_envelope_id && p.docusign_envelope_status === 'sent' && p.equifax_agreement_version === 2) {
+    if (p?.docusign_envelope_id && p.docusign_envelope_status === 'sent' && p.equifax_agreement_version === EQUIFAX_APPLICATION_VERSION) {
       try {
         const live = await getEnvelopeStatus(p.docusign_envelope_id)
         if (live.status === 'completed') {
           await processDocusignCompletion(admin, user.id, user.email, 'equifax')
-          return res.status(409).json({ error: 'Your updated Equifax agreement is already signed. Refreshing your agreement status.' })
+          return res.status(409).json({ error: 'Your Equifax application is already signed. Refreshing your agreement status.' })
         }
       } catch (err) {
         if (!isHttpNotFound(err)) throw err
@@ -4196,6 +4205,10 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
     }
     const createEnvelope = async () => {
       const { base64, fileExtension } = loadEquifaxAgreementDocument()
+      const application = loadEquifaxApplicationDocument()
+      const applicationFields = equifaxApplicationTabs({
+        businessName, businessPhone, landlordName, landlordEmail: user.email ?? '',
+      })
       // Positions are on the fixed 20-page Equifax DOCX converted to letter-size
       // PDF by DocuSign. The two executed samples have identical page geometry.
       // Initials are required in the actual blanks, not over the question text.
@@ -4216,11 +4229,15 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
         documentBase64: base64,
         documentName: 'Equifax Broker Subscriber Agreement.docx',
         fileExtension,
-        emailSubject: p?.docusign_envelope_id
-          ? 'Updated Equifax agreement required — Rental City'
-          : 'Rental City — Equifax Broker Subscriber Agreement',
+        emailSubject: 'Rental City — Equifax credit access application and subscriber agreement',
         signer: { name: landlordName, email: user.email ?? '', clientUserId: user.id },
-        tabs,
+        tabs: [...tabs, ...applicationFields.tabs],
+        radioChoices: applicationFields.radioChoices,
+        additionalDocument: {
+          documentBase64: application.base64,
+          documentName: 'Equifax Application for Service.pdf',
+          fileExtension: application.fileExtension,
+        },
         returnUrl,
       })
       const { error: detailsError } = await admin.from('equifax_subscriber_details').upsert({
@@ -4236,7 +4253,7 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
       const { error: savedEnvelopeError } = await admin.from('profiles').update({
         docusign_envelope_id: createdEnvelopeId,
         docusign_envelope_status: 'sent',
-        equifax_agreement_version: 2,
+        equifax_agreement_version: EQUIFAX_APPLICATION_VERSION,
         business_name: businessName,
       }).eq('id', user.id)
       if (savedEnvelopeError) {
@@ -4252,16 +4269,16 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
       p?.docusign_envelope_status === 'declined' ||
       p?.docusign_envelope_status === 'voided' ||
       p?.docusign_envelope_status === 'needs_resign' ||
-      p?.equifax_agreement_version !== 2 ||
+      p?.equifax_agreement_version !== EQUIFAX_APPLICATION_VERSION ||
       (p?.docusign_envelope_status === 'sent' && detailsChanged)
     ) {
       if (envelopeId && p?.docusign_envelope_status === 'sent') {
         try {
           const live = await getEnvelopeStatus(envelopeId)
           if (live.status === 'completed') {
-            if (p.equifax_agreement_version === 2) {
+            if (p.equifax_agreement_version === EQUIFAX_APPLICATION_VERSION) {
               await processDocusignCompletion(admin, user.id, user.email, 'equifax')
-              return res.status(409).json({ error: 'Your updated Equifax agreement is already signed. Refreshing your agreement status.' })
+              return res.status(409).json({ error: 'Your Equifax application is already signed. Refreshing your agreement status.' })
             }
             const oldPdf = await downloadCompletedDocument(envelopeId)
             const { error: legacyUploadError } = await admin.storage.from('landlord-agreements')
@@ -4587,6 +4604,7 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
   const { userId } = req.params
   const body = req.body as {
     approve?: boolean
+    businessVerified?: boolean
     memberNumber?: string
     securityCode?: string
     customerCode?: string
@@ -4596,7 +4614,7 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
   if (approve) {
     const { data: profile } = await admin
       .from('profiles')
-      .select('docusign_envelope_status, equifax_agreement_version, plaid_agreement_signed_at, equifax_approved_at')
+      .select('docusign_envelope_status, equifax_agreement_version, plaid_agreement_signed_at, equifax_approved_at, equifax_approved_version')
       .eq('id', userId)
       .maybeSingle()
     const agreementProfile = profile as {
@@ -4604,12 +4622,17 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
       equifax_agreement_version?: number | null
       plaid_agreement_signed_at?: string | null
       equifax_approved_at?: string | null
+      equifax_approved_version?: number | null
     } | null
-    if (agreementProfile?.docusign_envelope_status !== 'completed' || agreementProfile.equifax_agreement_version !== 2) {
-      return res.status(400).json({ error: 'This landlord has not completed the updated Equifax Broker Subscriber Agreement.' })
+    const existingAccess = hasEquifaxCreditAccess(agreementProfile ?? null)
+    if (!existingAccess && !hasSignedCurrentEquifaxApplication(agreementProfile ?? null)) {
+      return res.status(400).json({ error: 'This landlord has not signed the Equifax agreement and application for service.' })
     }
     if (!agreementProfile?.plaid_agreement_signed_at) {
       return res.status(400).json({ error: 'This landlord has not completed the Plaid End Client Consent.' })
+    }
+    if (!existingAccess && body?.businessVerified !== true) {
+      return res.status(400).json({ error: 'Confirm Equifax has verified the landlord’s business before approving credit access.' })
     }
 
     const memberNumber = (body?.memberNumber ?? '').trim()
@@ -4635,7 +4658,11 @@ app.patch('/api/admin/equifax/approve/:userId', async (req, res) => {
 
     // Only set the approval timestamp on first approval — re-submitting to
     // edit credentials for an already-approved landlord shouldn't reset it.
-    const update: Record<string, string | number | null> = { equifax_pending_since: null, equifax_approved_version: 2 }
+    const update: Record<string, string | number | null> = {
+      equifax_pending_since: null,
+      equifax_approved_version: existingAccess && agreementProfile?.equifax_approved_version === 2
+        ? 2 : EQUIFAX_APPLICATION_VERSION,
+    }
     if (!agreementProfile?.equifax_approved_at) {
       update.equifax_approved_at = new Date().toISOString()
     }

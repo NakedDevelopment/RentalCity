@@ -149,12 +149,14 @@ export function AdminUserDetailPage() {
   }
 
   const [showCredsForm, setShowCredsForm] = useState(false)
+  const [businessVerified, setBusinessVerified] = useState(false)
   const [memberNumber, setMemberNumber] = useState('')
   const [securityCode, setSecurityCode] = useState('')
   const [customerCode, setCustomerCode] = useState('')
 
   function resetCredsForm() {
     setShowCredsForm(false)
+    setBusinessVerified(false)
     setMemberNumber('')
     setSecurityCode('')
     setCustomerCode('')
@@ -170,7 +172,7 @@ export function AdminUserDetailPage() {
       const res = await fetch(`/api/admin/equifax/approve/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ approve, ...credentials }),
+        body: JSON.stringify({ approve, businessVerified: approve && (businessVerified || !!row.equifax_approved_at), ...credentials }),
       })
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string }
@@ -349,12 +351,15 @@ export function AdminUserDetailPage() {
                   <>
                     <p className="text-sm font-medium text-green-700">Approved</p>
                     <p className="text-xs text-gray-500">Since {formatDate(row.equifax_approved_at)}</p>
+                    {row.docusign_envelope_status === 'needs_resign' && (
+                      <p className="text-xs text-amber-700">Expanded Equifax application needs signing; existing access remains active.</p>
+                    )}
                   </>
                 ) : row.docusign_envelope_status === 'needs_resign' ? (
                   <p className="text-sm font-medium text-amber-700">Updated Equifax agreement required</p>
                 ) : row.equifax_pending_since ? (
                   <>
-                    <p className="text-sm font-medium text-amber-700">Pending approval</p>
+                    <p className="text-sm font-medium text-amber-700">Application pending business verification</p>
                     <p className="text-xs text-gray-500">Requested {formatDate(row.equifax_pending_since)}</p>
                   </>
                 ) : (
@@ -364,8 +369,8 @@ export function AdminUserDetailPage() {
                   <p>
                     Equifax agreement:{' '}
                     <span className={row.docusign_envelope_status === 'completed' ? 'font-medium text-green-700' : 'font-medium text-amber-700'}>
-                      {row.docusign_envelope_status === 'completed' ? 'Updated agreement signed' :
-                        row.docusign_envelope_status === 'needs_resign' ? 'Updated signature required' : 'Not signed'}
+                      {row.docusign_envelope_status === 'completed' ? 'Agreement and application signed' :
+                        row.docusign_envelope_status === 'needs_resign' ? 'Expanded application signature required' : 'Not signed'}
                     </span>
                   </p>
                   <p>
@@ -427,6 +432,13 @@ export function AdminUserDetailPage() {
 
             {showCredsForm ? (
               <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+                {!row.equifax_approved_at && (
+                  <label className="flex items-start gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={businessVerified}
+                      onChange={(event) => setBusinessVerified(event.target.checked)} className="mt-1" />
+                    I have confirmed that Equifax’s email-based business verification is complete for this landlord.
+                  </label>
+                )}
                 <p className={admin.muted}>
                   Enter the member number, security code, and customer code Equifax sent for this landlord.
                 </p>
@@ -467,7 +479,7 @@ export function AdminUserDetailPage() {
                 </div>
                 <button
                   type="button"
-                  disabled={busy || !memberNumber.trim() || !securityCode.trim() || !customerCode.trim()}
+                  disabled={busy || (!row.equifax_approved_at && !businessVerified) || !memberNumber.trim() || !securityCode.trim() || !customerCode.trim()}
                   onClick={submitCredsForm}
                   className={admin.btnSuccess}
                 >
