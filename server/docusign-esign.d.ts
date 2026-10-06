@@ -49,6 +49,7 @@ declare module 'docusign-esign' {
     width?: string
     height?: string
     fontSize?: string
+    disableAutoSize?: string
   }
   export type DateSigned = TabBase
   export interface Radio extends TabBase {

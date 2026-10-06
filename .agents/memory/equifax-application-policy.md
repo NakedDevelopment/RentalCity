@@ -29,4 +29,23 @@ Derive positional signing tabs from native PDF widget rectangles, accounting for
 
 **Why:** Visually estimated positions crossed printed labels and missed fields; the application has different heights on its two pages.
 
-**How to apply:** Inspect the source PDF's form geometry whenever the template changes, then confirm conditional fields and signature layout in DocuSign before treating the signing flow as verified.
+**How to apply:** Inspect the source PDF's form geometry whenever the template changes. Clear and flatten native form widgets in the prepared copy before overlaying controlled DocuSign tabs; preserve the original uploaded template.
+
+Review the executed PDF, not only the signing UI.
+
+**Why:** Native dropdown “Select” appearances remained underneath submitted answers in the executed PDF even when they were not obvious in the signing view. Conversely, DocuSign's temporary “Signature Applied” tooltip covered the name while signing, but was absent from the correctly rendered executed PDF.
+
+**How to apply:** Confirm conditional enforcement in the browser, then inspect the downloaded executed pages for overlapping defaults, overflowing values, and readable signatures.
+
+Optional PDF-tool installation failures still require a workspace-diff review.
+
+**Why:** A failed Python PDF-tool install initialized unrelated Python scaffolding and added system dependencies before failing. The existing Poppler tools were sufficient for visual inspection.
+
+**How to apply:** Check for partial configuration changes after failed tool installs. Keep one-off PDF QA tooling from changing this app's language setup unnecessarily.
+
+## Preserve the live DocuSign setup during QA
+Do not replace the app's live DocuSign connection solely to validate a document change. When production testing is explicitly authorized, use clearly labeled fictional test data and isolate test envelopes from Equifax submission and landlord approval handlers.
+
+**Why:** The user reaffirmed that the app is live on production DocuSign, rejected switching that setup back to a test account, and confirmed that clearly labeled test-only applicants make sense.
+
+**How to apply:** Obtain authorization for each production test; this is not blanket permission to create production envelopes. Keep test completion callbacks separate from normal submission, then clean up the test envelope.

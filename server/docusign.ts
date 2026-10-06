@@ -154,6 +154,7 @@ export type AnchorTab = {
   width?: string
   height?: string
   fontSize?: string
+  disableAutoSize?: boolean
   required?: boolean
   /** Defaults to the first document; the Equifax service application is document 2. */
   documentId?: string
@@ -214,7 +215,9 @@ function buildTabs(tabs: AnchorTab[], choices: RadioChoice[] = []) {
     else if (t.type === 'initial') initialHereTabs.push({ ...base, scaleValue: t.scaleValue ?? '0.5' } as DsInitialHere)
     else if (t.type === 'checkbox') checkboxTabs.push(base as DsCheckbox)
     else if (t.type === 'dateSigned') dateSignedTabs.push(base as DsDateSigned)
-    else textTabs.push({ ...base, value: t.value ?? '', locked: t.locked === false ? 'false' : 'true', width: t.width, height: t.height, fontSize: t.fontSize } as DsText)
+    else textTabs.push({ ...base, value: t.value ?? '', locked: t.locked === false ? 'false' : 'true', width: t.width, height: t.height, fontSize: t.fontSize,
+      ...(t.disableAutoSize !== undefined ? { disableAutoSize: String(t.disableAutoSize) } : {}),
+    } as DsText)
   }
 
   const radioGroupTabs: DsRadioGroup[] = choices.map((choice) => ({

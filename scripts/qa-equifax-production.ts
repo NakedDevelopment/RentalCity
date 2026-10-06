@@ -1,7 +1,8 @@
 /**
  * Explicitly authorized production DocuSign QA, isolated from app profiles,
  * approvals, screening requests and all Equifax/email submission handlers.
- * Run: tsx scripts/qa-equifax-production.ts
+ * Run only after explicit authorization:
+ * tsx scripts/qa-equifax-production.ts --allow-production
  * The local-only bridge creates one clearly marked embedded test envelope.
  */
 import 'dotenv/config'
@@ -17,6 +18,9 @@ import { equifaxAgreementTabs } from '../server/equifaxAgreementTabs'
 
 const base = process.env.DOCUSIGN_BASE_PATH
 const account = process.env.DOCUSIGN_ACCOUNT_ID
+if (!process.argv.includes('--allow-production')) {
+  throw new Error('Production QA requires explicit authorization and the --allow-production flag')
+}
 if (!base || !account) throw new Error('Existing DocuSign connection is missing')
 const apiBase = `${base.replace(/\/$/, '')}/restapi/v2.1/accounts/${account}`
 const app = express()
@@ -72,13 +76,20 @@ app.post('/start', async (_req, res) => {
       // Read-only credential/account check before creating the production QA envelope.
       await api('')
       const agreement = loadEquifaxAgreementDocument()
-      const application = loadEquifaxApplicationDocument()
+      const application = await loadEquifaxApplicationDocument()
       const fields = equifaxApplicationTabs(details)
+      const tabs = [...equifaxAgreementTabs(details), ...fields.tabs]
+      if (process.argv.includes('--prefill')) {
+        const priorValues = JSON.parse(fs.readFileSync('.local/qa/equifax-qa-field-values.json', 'utf8')) as Record<string, string>
+        for (const tab of tabs) {
+          if (tab.type === 'text' && !tab.value && tab.tabLabel && priorValues[tab.tabLabel]) tab.value = priorValues[tab.tabLabel]
+        }
+      }
       envelopeId = await createEmbeddedEnvelope({
         documentBase64: agreement.base64, documentName: 'TEST ONLY - Subscriber Agreement.docx',
         fileExtension: agreement.fileExtension, signer,
         emailSubject: 'TEST ONLY - Rental City production QA - NOT AN APPLICATION',
-        tabs: [...equifaxAgreementTabs(details), ...fields.tabs],
+        tabs,
         radioChoices: fields.radioChoices,
         additionalDocument: { documentBase64: application.base64, documentName: 'TEST ONLY - Application.pdf', fileExtension: 'pdf' },
         returnUrl: 'http://127.0.0.1:3002/result',

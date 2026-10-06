@@ -3,6 +3,7 @@
 import fs from 'fs'
 import path from 'path'
 import { createHash } from 'node:crypto'
+import { PDFDocument, PDFTextField, PDFDropdown, PDFOptionList, PDFCheckBox, PDFRadioGroup } from 'pdf-lib'
 
 const PLAID_CONSENT_TEMPLATE_PATH = path.join(process.cwd(), 'server/documents/plaid-end-client-consent.html')
 const EQUIFAX_AGREEMENT_PATH = path.join(
@@ -38,7 +39,7 @@ export function loadEquifaxAgreementDocument(): { base64: string; fileExtension:
   return { base64: buf.toString('base64'), fileExtension: 'docx' }
 }
 
-export function loadEquifaxApplicationDocument(): { base64: string; fileExtension: 'pdf' } {
+export async function loadEquifaxApplicationDocument(): Promise<{ base64: string; fileExtension: 'pdf' }> {
   const buf = fs.readFileSync(EQUIFAX_APPLICATION_PATH)
   // The fillable PDF has fixed coordinates. Do not silently send revised pages
   // with the old field placements.
@@ -46,7 +47,18 @@ export function loadEquifaxApplicationDocument(): { base64: string; fileExtensio
   if (createHash('sha256').update(buf).digest('hex') !== expectedSha256) {
     throw new Error('Equifax application PDF changed; review all DocuSign fields before sending.')
   }
-  return { base64: buf.toString('base64'), fileExtension: 'pdf' }
+  // Original AcroForm dropdown appearances contain "Select" placeholders.
+  // Clear and flatten those widgets before adding our controlled DocuSign
+  // tabs; otherwise the executed PDF prints both the placeholder and answer.
+  const document = await PDFDocument.load(buf)
+  const form = document.getForm()
+  for (const field of form.getFields()) {
+    if (field instanceof PDFTextField) field.setText('')
+    else if (field instanceof PDFDropdown || field instanceof PDFOptionList || field instanceof PDFRadioGroup) field.clear()
+    else if (field instanceof PDFCheckBox) field.uncheck()
+  }
+  form.flatten()
+  return { base64: Buffer.from(await document.save()).toString('base64'), fileExtension: 'pdf' }
 }
 
 function escapeHtml(s: string): string {

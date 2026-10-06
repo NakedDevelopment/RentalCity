@@ -22,7 +22,8 @@ export function equifaxApplicationTabs(applicant: Applicant): {
   ): AnchorTab => ({
     type: 'text', documentId: '2', pageNumber: page,
     xPosition: String(x), yPosition: String(y), width: String(width),
-    height: '14', fontSize: 'Size9', tabLabel: label, required,
+    height: '14', fontSize: label.toLowerCase().includes('email') ? 'Size7' : 'Size9',
+    disableAutoSize: true, tabLabel: label, required,
     value, locked: false,
     ...(conditional ? { conditionalParentLabel: 'shared-office', conditionalParentValue: 'yes' } : {}),
   })

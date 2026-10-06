@@ -4206,7 +4206,7 @@ app.post('/api/docusign/equifax-agreement/create', async (req, res) => {
     }
     const createEnvelope = async () => {
       const { base64, fileExtension } = loadEquifaxAgreementDocument()
-      const application = loadEquifaxApplicationDocument()
+      const application = await loadEquifaxApplicationDocument()
       const applicationFields = equifaxApplicationTabs({
         businessName, businessPhone, landlordName, landlordEmail: user.email ?? '',
       })
