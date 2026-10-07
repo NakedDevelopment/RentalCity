@@ -31,6 +31,13 @@ The applicant must choose the title that best fits their actual position. Review
 
 **How to apply:** Preserve individual selections. Check the underlying form's role requirements before restricting a contact's title to executive positions or copying a signer's title into another person's field.
 
+## Application-form adjustment scope
+The requested industry and permissible-purpose prefills and standardized title dropdowns apply only to the newly added two-page Application for Service, not the original subscriber agreement.
+
+**Why:** On 2026-10-07 the user clarified: “These changes were only intended to be for the second part of the agreement that we recently added.”
+
+**How to apply:** Keep these adjustments within the application document. Do not extend them to the original subscriber agreement without an explicit request; its signer title remains free text.
+
 ## PDF field placement
 Derive positional signing tabs from native PDF widget rectangles, accounting for each page's own dimensions. Do not estimate them from downscaled screenshots.
 

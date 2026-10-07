@@ -98,13 +98,18 @@ test('one signer receives both documents and conditional application tabs withou
   assert.equal(purpose?.required, 'true')
   assert.equal(purpose?.font, 'ArialNarrow')
   assert.equal(purpose?.fontSize, 'Size7')
-  assert.equal(tabs?.listTabs?.length, 5)
-  assert.equal(new Set(tabs?.listTabs?.map((tab) => tab.tabLabel)).size, 5,
+  const subscriberTitle = tabs?.textTabs?.find((tab) => tab.tabLabel === 'Subscriber title')
+  assert.equal(subscriberTitle?.documentId, '1', 'original subscriber agreement retains its free-text title')
+  assert.equal(subscriberTitle?.pageNumber, '6')
+  assert.equal(subscriberTitle?.value, '')
+  assert.equal(subscriberTitle?.locked, 'false')
+  assert.equal(subscriberTitle?.required, 'true')
+  assert.equal(tabs?.listTabs?.length, 4)
+  assert.equal(new Set(tabs?.listTabs?.map((tab) => tab.tabLabel)).size, 4,
     'title dropdowns must remain independent rather than sharing a linked data label')
   for (const dropdown of tabs?.listTabs ?? []) {
-    assert.equal(dropdown.documentId, dropdown.tabLabel === 'Subscriber title' ? '1' : '2')
-    assert.equal(dropdown.pageNumber, dropdown.tabLabel === 'Subscriber title' ? '6'
-      : dropdown.tabLabel === 'Shared office signer title' ? '2' : '1')
+    assert.equal(dropdown.documentId, '2', 'title dropdowns belong only to the new application')
+    assert.equal(dropdown.pageNumber, dropdown.tabLabel === 'Shared office signer title' ? '2' : '1')
     assert.equal(dropdown.required, 'true')
     assert.equal(dropdown.locked, 'false')
     assert.deepEqual(dropdown.listItems, ['Owner', 'President', 'CEO', 'CFO', 'CMO'].map((value) => ({
