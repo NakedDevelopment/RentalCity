@@ -44,6 +44,12 @@ These field-only adjustments do not require another signing round for anyone who
 
 **How to apply:** Keep existing completion records and the signing version unchanged for these adjustments. Landlords who have not completed the combined package still need to sign it. This does not waive review of future substantive agreement changes.
 
+Publishing form changes does not refresh an already-created DocuSign envelope.
+
+**Why:** An unfinished test package continued showing earlier fields because reopening signing reused the existing envelope snapshot.
+
+**How to apply:** Distinguish completed-package validity from unfinished-envelope freshness. Preserve completed signatures; explicitly address old unfinished envelopes when validating updated forms. Replacing one can discard partial entries and consume another envelope, so explain that before doing it.
+
 ## PDF field placement
 Derive positional signing tabs from native PDF widget rectangles, accounting for each page's own dimensions. Do not estimate them from downscaled screenshots.
 
