@@ -46,7 +46,7 @@ export function equifaxApplicationTabs(applicant: Applicant): {
       text('Years in business', '1', 493, 261, 68),
       text('Type of ownership', '1', 125, 284, 171, '', false),
       text('License number, or N/A if not applicable', '1', 400, 284, 161),
-      text('Industry and nature of business', '1', 113, 342, 442),
+      text('Industry and nature of business', '1', 113, 342, 442, 'Real Estate Sales & Rentals'),
       text('Shared office company name', '1', 84, 462, 471, '', true, true),
       { ...text('Non-US operations locations', '1', 112, 519, 442), conditionalParentLabel: 'non-us-operations', conditionalParentValue: 'yes' },
       text('FCRA permissible purpose', '1', 118, 632, 438),
