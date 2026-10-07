@@ -1,4 +1,5 @@
 import type { AnchorTab, RadioChoice } from './docusign'
+import { EQUIFAX_TITLE_OPTIONS } from './equifaxTitleOptions'
 
 type Applicant = {
   businessName: string
@@ -27,10 +28,12 @@ export function equifaxApplicationTabs(applicant: Applicant): {
     value, locked: false,
     ...(conditional ? { conditionalParentLabel: 'shared-office', conditionalParentValue: 'yes' } : {}),
   })
-  const titleDropdown = (label: string, x: number, y: number): AnchorTab => ({
-    ...text(label, '1', x, y, 180),
+  const titleDropdown = (
+    label: string, x: number, y: number, page = '1', width = 180, conditional = false,
+  ): AnchorTab => ({
+    ...text(label, page, x, y, width, '', true, conditional),
     type: 'dropdown',
-    options: ['Owner', 'President', 'CEO', 'CFO', 'CMO'],
+    options: [...EQUIFAX_TITLE_OPTIONS],
   })
   const conditional = { conditionalParentLabel: 'shared-office', conditionalParentValue: 'yes' }
 
@@ -67,12 +70,12 @@ export function equifaxApplicationTabs(applicant: Applicant): {
       text('Recredentialing contact email', '1', 172, 863, 166, applicant.landlordEmail),
       text('Recredentialing contact phone', '1', 421, 863, 140, applicant.businessPhone),
       text('Person completing application', '1', 172, 943, 166, applicant.landlordName),
-      text('Applicant title', '1', 380, 943, 181),
+      titleDropdown('Applicant title', 380, 943, '1', 181),
       { type: 'sign', documentId: '2', pageNumber: '1', xPosition: '171', yPosition: '964', scaleValue: '0.35', tabLabel: 'Application signature' },
       { type: 'dateSigned', documentId: '2', pageNumber: '1', xPosition: '380', yPosition: '963', tabLabel: 'Application date' },
       text('Shared office applicant company', '2', 171, 376, 387, applicant.businessName, true, true),
       text('Shared office signer name', '2', 169, 397, 168, applicant.landlordName, true, true),
-      text('Shared office signer title', '2', 378, 397, 182, '', true, true),
+      titleDropdown('Shared office signer title', 378, 397, '2', 182, true),
       { type: 'sign', documentId: '2', pageNumber: '2', xPosition: '170', yPosition: '418', scaleValue: '0.35', tabLabel: 'Shared office attestation signature', ...conditional },
       { type: 'dateSigned', documentId: '2', pageNumber: '2', xPosition: '378', yPosition: '418', tabLabel: 'Shared office attestation date', ...conditional },
     ],

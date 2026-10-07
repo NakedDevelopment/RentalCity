@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { equifaxApplicationTabs } from './equifaxApplicationTabs'
+import { equifaxAgreementTabs } from './equifaxAgreementTabs'
 import { loadEquifaxAgreementDocument, loadEquifaxApplicationDocument } from './documents'
 import { buildEmbeddedEnvelopeDefinition } from './docusign'
 import { PDFDocument } from 'pdf-lib'
@@ -48,14 +49,17 @@ test('pinned application PDF and required tabs belong to the second document', a
   assert.equal(tabs.find((tab) => tab.tabLabel === 'Business email')?.fontSize, 'Size7')
   assert.ok(tabs.filter((tab) => tab.type === 'text').every((tab) => tab.disableAutoSize))
   const titleDropdowns = tabs.filter((tab) => tab.type === 'dropdown')
-  assert.deepEqual(titleDropdowns.map((tab) => tab.tabLabel), ['Principal title', 'Recredentialing contact title'])
+  assert.deepEqual(titleDropdowns.map((tab) => tab.tabLabel), [
+    'Principal title', 'Recredentialing contact title', 'Applicant title', 'Shared office signer title',
+  ])
   for (const dropdown of titleDropdowns) {
     assert.deepEqual(dropdown.options, ['Owner', 'President', 'CEO', 'CFO', 'CMO'])
     assert.equal(dropdown.required, true)
     assert.equal(dropdown.value, '')
   }
-  assert.equal(tabs.find((tab) => tab.tabLabel === 'Applicant title')?.type, 'text')
-  assert.equal(tabs.find((tab) => tab.tabLabel === 'Shared office signer title')?.type, 'text')
+  const sharedOfficeTitle = tabs.find((tab) => tab.tabLabel === 'Shared office signer title')
+  assert.equal(sharedOfficeTitle?.conditionalParentLabel, 'shared-office')
+  assert.equal(sharedOfficeTitle?.conditionalParentValue, 'yes')
 })
 
 test('one signer receives both documents and conditional application tabs without changing Plaid', async () => {
@@ -75,7 +79,10 @@ test('one signer receives both documents and conditional application tabs withou
   assert.deepEqual(plaidEquivalent.recipients.signers[0].tabs?.listTabs, [])
   assert.equal(plaidEquivalent.recipients.signers[0].tabs?.signHereTabs?.[0].documentId, '1')
   const envelope = buildEmbeddedEnvelopeDefinition({
-    ...args, tabs: [...args.tabs, ...fields.tabs], radioChoices: fields.radioChoices,
+    ...args, tabs: [
+      ...equifaxAgreementTabs({ ...applicant, businessAddress: '123 Sample St, Testville, CA 94105' }),
+      ...fields.tabs,
+    ], radioChoices: fields.radioChoices,
     additionalDocument: { documentBase64: application.base64, documentName: 'Application.pdf', fileExtension: 'pdf' },
   })
   assert.equal(envelope.documents.length, 2)
@@ -91,10 +98,13 @@ test('one signer receives both documents and conditional application tabs withou
   assert.equal(purpose?.required, 'true')
   assert.equal(purpose?.font, 'ArialNarrow')
   assert.equal(purpose?.fontSize, 'Size7')
-  assert.equal(tabs?.listTabs?.length, 2)
+  assert.equal(tabs?.listTabs?.length, 5)
+  assert.equal(new Set(tabs?.listTabs?.map((tab) => tab.tabLabel)).size, 5,
+    'title dropdowns must remain independent rather than sharing a linked data label')
   for (const dropdown of tabs?.listTabs ?? []) {
-    assert.equal(dropdown.documentId, '2')
-    assert.equal(dropdown.pageNumber, '1')
+    assert.equal(dropdown.documentId, dropdown.tabLabel === 'Subscriber title' ? '1' : '2')
+    assert.equal(dropdown.pageNumber, dropdown.tabLabel === 'Subscriber title' ? '6'
+      : dropdown.tabLabel === 'Shared office signer title' ? '2' : '1')
     assert.equal(dropdown.required, 'true')
     assert.equal(dropdown.locked, 'false')
     assert.deepEqual(dropdown.listItems, ['Owner', 'President', 'CEO', 'CFO', 'CMO'].map((value) => ({
@@ -102,6 +112,9 @@ test('one signer receives both documents and conditional application tabs withou
     })))
     assert.ok(!tabs?.textTabs?.some((tab) => tab.tabLabel === dropdown.tabLabel), 'dropdown must replace the text field, not overlay it')
   }
+  const sharedOfficeTitle = tabs?.listTabs?.find((tab) => tab.tabLabel === 'Shared office signer title')
+  assert.equal(sharedOfficeTitle?.conditionalParentLabel, 'shared-office')
+  assert.equal(sharedOfficeTitle?.conditionalParentValue, 'yes')
   assert.equal(tabs?.radioGroupTabs?.length, 4)
   assert.equal(tabs?.signHereTabs?.[2].conditionalParentLabel, 'shared-office')
 })
