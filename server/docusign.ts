@@ -154,6 +154,7 @@ export type AnchorTab = {
   width?: string
   height?: string
   fontSize?: string
+  font?: string
   disableAutoSize?: boolean
   required?: boolean
   /** Defaults to the first document; the Equifax service application is document 2. */
@@ -216,6 +217,7 @@ function buildTabs(tabs: AnchorTab[], choices: RadioChoice[] = []) {
     else if (t.type === 'checkbox') checkboxTabs.push(base as DsCheckbox)
     else if (t.type === 'dateSigned') dateSignedTabs.push(base as DsDateSigned)
     else textTabs.push({ ...base, value: t.value ?? '', locked: t.locked === false ? 'false' : 'true', width: t.width, height: t.height, fontSize: t.fontSize,
+      ...(t.font !== undefined ? { font: t.font } : {}),
       ...(t.disableAutoSize !== undefined ? { disableAutoSize: String(t.disableAutoSize) } : {}),
     } as DsText)
   }

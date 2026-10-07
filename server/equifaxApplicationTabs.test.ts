@@ -5,6 +5,8 @@ import { loadEquifaxAgreementDocument, loadEquifaxApplicationDocument } from './
 import { buildEmbeddedEnvelopeDefinition } from './docusign'
 import { PDFDocument } from 'pdf-lib'
 
+const permissiblePurpose = 'In connection with a credit transaction involving the consumer and the extension of credit to, or collection of an account of, the consumer, including Mortgage'
+
 test('pinned application PDF and required tabs belong to the second document', async () => {
   const { base64, fileExtension } = await loadEquifaxApplicationDocument()
   assert.equal(fileExtension, 'pdf')
@@ -37,6 +39,12 @@ test('pinned application PDF and required tabs belong to the second document', a
   assert.equal(industry?.value, 'Real Estate Sales & Rentals')
   assert.equal(industry?.locked, false)
   assert.equal(industry?.required, true)
+  const purpose = tabs.find((tab) => tab.tabLabel === 'FCRA permissible purpose')
+  assert.equal(purpose?.value, permissiblePurpose)
+  assert.equal(purpose?.required, true)
+  assert.equal(purpose?.locked, false)
+  assert.equal(purpose?.font, 'ArialNarrow')
+  assert.equal(purpose?.fontSize, 'Size7')
   assert.equal(tabs.find((tab) => tab.tabLabel === 'Business email')?.fontSize, 'Size7')
   assert.ok(tabs.filter((tab) => tab.type === 'text').every((tab) => tab.disableAutoSize))
 })
@@ -67,6 +75,12 @@ test('one signer receives both documents and conditional application tabs withou
   const industry = tabs?.textTabs?.find((tab) => tab.tabLabel === 'Industry and nature of business')
   assert.equal(industry?.value, 'Real Estate Sales & Rentals')
   assert.equal(industry?.locked, 'false')
+  const purpose = tabs?.textTabs?.find((tab) => tab.tabLabel === 'FCRA permissible purpose')
+  assert.equal(purpose?.value, permissiblePurpose)
+  assert.equal(purpose?.locked, 'false')
+  assert.equal(purpose?.required, 'true')
+  assert.equal(purpose?.font, 'ArialNarrow')
+  assert.equal(purpose?.fontSize, 'Size7')
   assert.equal(tabs?.radioGroupTabs?.length, 4)
   assert.equal(tabs?.signHereTabs?.[2].conditionalParentLabel, 'shared-office')
 })

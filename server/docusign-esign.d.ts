@@ -49,6 +49,7 @@ declare module 'docusign-esign' {
     width?: string
     height?: string
     fontSize?: string
+    font?: string
     disableAutoSize?: string
   }
   export type DateSigned = TabBase

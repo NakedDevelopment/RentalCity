@@ -49,7 +49,11 @@ export function equifaxApplicationTabs(applicant: Applicant): {
       text('Industry and nature of business', '1', 113, 342, 442, 'Real Estate Sales & Rentals'),
       text('Shared office company name', '1', 84, 462, 471, '', true, true),
       { ...text('Non-US operations locations', '1', 112, 519, 442), conditionalParentLabel: 'non-us-operations', conditionalParentValue: 'yes' },
-      text('FCRA permissible purpose', '1', 118, 632, 438),
+      {
+        ...text('FCRA permissible purpose', '1', 118, 632, 438,
+          'In connection with a credit transaction involving the consumer and the extension of credit to, or collection of an account of, the consumer, including Mortgage'),
+        font: 'ArialNarrow', fontSize: 'Size7',
+      },
       text('Principal first name', '1', 123, 719, 152),
       text('Principal last name', '1', 381, 719, 180),
       text('Principal title', '1', 381, 740, 180),
