@@ -38,6 +38,12 @@ The requested industry and permissible-purpose prefills and standardized title d
 
 **How to apply:** Keep these adjustments within the application document. Do not extend them to the original subscriber agreement without an explicit request; its signer title remains free text.
 
+These field-only adjustments do not require another signing round for anyone who has already completed the combined package.
+
+**Why:** The user confirmed that all landlords need the combined documents but explicitly said these final field changes should not prompt requests to sign again.
+
+**How to apply:** Keep existing completion records and the signing version unchanged for these adjustments. Landlords who have not completed the combined package still need to sign it. This does not waive review of future substantive agreement changes.
+
 ## PDF field placement
 Derive positional signing tabs from native PDF widget rectangles, accounting for each page's own dimensions. Do not estimate them from downscaled screenshots.
 
