@@ -24,6 +24,13 @@ After signing, Equifax sends the landlord a business-verification email link. Re
 
 **How to apply:** Describe signing as applying, not obtaining access. Never claim an email was sent without evidence, imply Rental City sends Equifax's verification link, or promise a fixed approval time.
 
+## Title choices must match the person and section
+The applicant must choose the title that best fits their actual position. Review each field's context rather than applying a dropdown indiscriminately wherever “Title” appears; a principal, contact, and signer may be different people.
+
+**Why:** The user explicitly emphasized that the choices describe the person's position and requested contextual review, not blind replacement of labels.
+
+**How to apply:** Preserve individual selections. Check the underlying form's role requirements before restricting a contact's title to executive positions or copying a signer's title into another person's field.
+
 ## PDF field placement
 Derive positional signing tabs from native PDF widget rectangles, accounting for each page's own dimensions. Do not estimate them from downscaled screenshots.
 
