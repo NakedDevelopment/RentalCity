@@ -27,6 +27,11 @@ export function equifaxApplicationTabs(applicant: Applicant): {
     value, locked: false,
     ...(conditional ? { conditionalParentLabel: 'shared-office', conditionalParentValue: 'yes' } : {}),
   })
+  const titleDropdown = (label: string, x: number, y: number): AnchorTab => ({
+    ...text(label, '1', x, y, 180),
+    type: 'dropdown',
+    options: ['Owner', 'President', 'CEO', 'CFO', 'CMO'],
+  })
   const conditional = { conditionalParentLabel: 'shared-office', conditionalParentValue: 'yes' }
 
   return {
@@ -56,9 +61,9 @@ export function equifaxApplicationTabs(applicant: Applicant): {
       },
       text('Principal first name', '1', 123, 719, 152),
       text('Principal last name', '1', 381, 719, 180),
-      text('Principal title', '1', 381, 740, 180),
+      titleDropdown('Principal title', 381, 740),
       text('Recredentialing contact name', '1', 172, 842, 166, applicant.landlordName),
-      text('Recredentialing contact title', '1', 380, 842, 180),
+      titleDropdown('Recredentialing contact title', 380, 842),
       text('Recredentialing contact email', '1', 172, 863, 166, applicant.landlordEmail),
       text('Recredentialing contact phone', '1', 421, 863, 140, applicant.businessPhone),
       text('Person completing application', '1', 172, 943, 166, applicant.landlordName),

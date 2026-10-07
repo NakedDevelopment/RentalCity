@@ -53,6 +53,13 @@ declare module 'docusign-esign' {
     disableAutoSize?: string
   }
   export type DateSigned = TabBase
+  export interface List extends TabBase {
+    locked?: string
+    width?: string
+    height?: string
+    fontSize?: string
+    listItems: { text: string; value: string; selected?: string }[]
+  }
   export interface Radio extends TabBase {
     value: string
     selected?: string
@@ -67,6 +74,7 @@ declare module 'docusign-esign' {
     signHereTabs?: SignHere[]
     initialHereTabs?: InitialHere[]
     textTabs?: Text[]
+    listTabs?: List[]
     checkboxTabs?: Checkbox[]
     dateSignedTabs?: DateSigned[]
     radioGroupTabs?: RadioGroup[]

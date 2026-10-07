@@ -47,6 +47,15 @@ test('pinned application PDF and required tabs belong to the second document', a
   assert.equal(purpose?.fontSize, 'Size7')
   assert.equal(tabs.find((tab) => tab.tabLabel === 'Business email')?.fontSize, 'Size7')
   assert.ok(tabs.filter((tab) => tab.type === 'text').every((tab) => tab.disableAutoSize))
+  const titleDropdowns = tabs.filter((tab) => tab.type === 'dropdown')
+  assert.deepEqual(titleDropdowns.map((tab) => tab.tabLabel), ['Principal title', 'Recredentialing contact title'])
+  for (const dropdown of titleDropdowns) {
+    assert.deepEqual(dropdown.options, ['Owner', 'President', 'CEO', 'CFO', 'CMO'])
+    assert.equal(dropdown.required, true)
+    assert.equal(dropdown.value, '')
+  }
+  assert.equal(tabs.find((tab) => tab.tabLabel === 'Applicant title')?.type, 'text')
+  assert.equal(tabs.find((tab) => tab.tabLabel === 'Shared office signer title')?.type, 'text')
 })
 
 test('one signer receives both documents and conditional application tabs without changing Plaid', async () => {
@@ -63,6 +72,7 @@ test('one signer receives both documents and conditional application tabs withou
   }
   const plaidEquivalent = buildEmbeddedEnvelopeDefinition(args)
   assert.equal(plaidEquivalent.documents.length, 1)
+  assert.deepEqual(plaidEquivalent.recipients.signers[0].tabs?.listTabs, [])
   assert.equal(plaidEquivalent.recipients.signers[0].tabs?.signHereTabs?.[0].documentId, '1')
   const envelope = buildEmbeddedEnvelopeDefinition({
     ...args, tabs: [...args.tabs, ...fields.tabs], radioChoices: fields.radioChoices,
@@ -81,6 +91,17 @@ test('one signer receives both documents and conditional application tabs withou
   assert.equal(purpose?.required, 'true')
   assert.equal(purpose?.font, 'ArialNarrow')
   assert.equal(purpose?.fontSize, 'Size7')
+  assert.equal(tabs?.listTabs?.length, 2)
+  for (const dropdown of tabs?.listTabs ?? []) {
+    assert.equal(dropdown.documentId, '2')
+    assert.equal(dropdown.pageNumber, '1')
+    assert.equal(dropdown.required, 'true')
+    assert.equal(dropdown.locked, 'false')
+    assert.deepEqual(dropdown.listItems, ['Owner', 'President', 'CEO', 'CFO', 'CMO'].map((value) => ({
+      text: value, value, selected: 'false',
+    })))
+    assert.ok(!tabs?.textTabs?.some((tab) => tab.tabLabel === dropdown.tabLabel), 'dropdown must replace the text field, not overlay it')
+  }
   assert.equal(tabs?.radioGroupTabs?.length, 4)
   assert.equal(tabs?.signHereTabs?.[2].conditionalParentLabel, 'shared-office')
 })

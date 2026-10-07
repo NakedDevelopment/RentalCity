@@ -15,6 +15,7 @@ import type {
   SignHere as DsSignHere,
   InitialHere as DsInitialHere,
   Text as DsText,
+  List as DsList,
   Checkbox as DsCheckbox,
   DateSigned as DsDateSigned,
   RadioGroup as DsRadioGroup,
@@ -140,7 +141,8 @@ async function getEnvelopesApi(): Promise<{ api: DsEnvelopesApi; accountId: stri
 
 export type AnchorTab = {
   anchorString?: string
-  type: 'sign' | 'initial' | 'text' | 'checkbox' | 'dateSigned'
+  type: 'sign' | 'initial' | 'text' | 'checkbox' | 'dateSigned' | 'dropdown'
+  options?: string[]
   /** Pre-filled value for type 'text'. Omit for a blank field the signer fills in themselves. */
   value?: string
   /** type 'text' only — false leaves the field editable by the signer instead of pre-filled/locked. Defaults to true. */
@@ -200,6 +202,7 @@ function buildTabs(tabs: AnchorTab[], choices: RadioChoice[] = []) {
   const signHereTabs: DsSignHere[] = []
   const initialHereTabs: DsInitialHere[] = []
   const textTabs: DsText[] = []
+  const listTabs: DsList[] = []
   const checkboxTabs: DsCheckbox[] = []
   const dateSignedTabs: DsDateSigned[] = []
 
@@ -216,6 +219,13 @@ function buildTabs(tabs: AnchorTab[], choices: RadioChoice[] = []) {
     else if (t.type === 'initial') initialHereTabs.push({ ...base, scaleValue: t.scaleValue ?? '0.5' } as DsInitialHere)
     else if (t.type === 'checkbox') checkboxTabs.push(base as DsCheckbox)
     else if (t.type === 'dateSigned') dateSignedTabs.push(base as DsDateSigned)
+    else if (t.type === 'dropdown') {
+      if (!t.options?.length) throw new Error(`Dropdown ${t.tabLabel ?? ''} requires options`)
+      listTabs.push({
+        ...base, locked: 'false', width: t.width, height: t.height, fontSize: t.fontSize,
+        listItems: t.options.map((option) => ({ text: option, value: option, selected: 'false' })),
+      })
+    }
     else textTabs.push({ ...base, value: t.value ?? '', locked: t.locked === false ? 'false' : 'true', width: t.width, height: t.height, fontSize: t.fontSize,
       ...(t.font !== undefined ? { font: t.font } : {}),
       ...(t.disableAutoSize !== undefined ? { disableAutoSize: String(t.disableAutoSize) } : {}),
@@ -230,7 +240,7 @@ function buildTabs(tabs: AnchorTab[], choices: RadioChoice[] = []) {
       { documentId: choice.documentId ?? '1', pageNumber: choice.pageNumber, xPosition: choice.no.x, yPosition: choice.no.y, value: 'no', required: 'true' },
     ],
   }))
-  return { signHereTabs, initialHereTabs, textTabs, checkboxTabs, dateSignedTabs, radioGroupTabs }
+  return { signHereTabs, initialHereTabs, textTabs, listTabs, checkboxTabs, dateSignedTabs, radioGroupTabs }
 }
 
 /** Replace an incomplete agreement with the updated version; never void a completed one. */
