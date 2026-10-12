@@ -8,6 +8,8 @@ The subscriber agreement and U.S. Application for Service belong in the same Doc
 
 **Why:** The user explicitly selected both existing signers and new applicants, and one combined signing session rather than another application form in Rental City.
 
+The user explicitly confirmed that the shared-space attestation is dynamic: answering Yes to sharing office space with another company/entity requires page-2 completion and signing; answering No legitimately skips that signature.
+
 **How to apply:** Preserve this scope when changing application documents or onboarding. Do not exempt existing signers merely because an earlier agreement was completed.
 
 ## Previously approved access stays active
