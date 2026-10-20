@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 
 type TenantPayment = {
   id: string
+  applicationId: string
   date: string
   label: string
   amount: string
@@ -92,6 +93,7 @@ export function PaymentHistoryPage() {
         setTenantPayments(
           rows.map((p) => ({
             id: p.id,
+            applicationId: p.application_id ?? '',
             date: formatDate(p.created_at),
             label: p.application_id
               ? `APP-${p.application_id.slice(0, 8).toUpperCase()}`
@@ -430,7 +432,7 @@ export function PaymentHistoryPage() {
                     <button
                       type="button"
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-600"
-                      aria-label={`More actions for ${payment.applicationId}`}
+                      aria-label={`More actions for ${payment.label} payment ${payment.id}`}
                     >
                       <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 8a2 2 0 110-4 2 2 0 010 4zm0 8a2 2 0 110-4 2 2 0 010 4zm0 8a2 2 0 110-4 2 2 0 010 4z" />
