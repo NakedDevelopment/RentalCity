@@ -20,3 +20,9 @@ The user approved completing non-Google lookup across property/tenant addresses 
 **Why:** The release must not require activation of Google Geocoding. RentCast searches for properties in a city are not a reliable way to choose the city's center.
 
 **How to apply:** Use approximate postal-area centers only for explicit area searches, never as fabricated exact property coordinates. Keep unresolvable properties unknown and visible per the existing matching policy. Future bulk operations still need their own authorization; the approved listing backfill is not a standing grant to alter production data.
+
+The user approved recovering coordinate matches from equivalent street/unit formatting and flagging conflicting addresses for review, without silently rewriting saved listing addresses.
+
+**Why:** Literal comparison rejected real property results with completed street types or differently positioned apartment numbers. Genuine ZIP, house-number, street-type, or direction conflicts can identify a different property and must not be treated as formatting.
+
+**How to apply:** Coordinate-only recovery is appropriate for an unambiguous equivalent address. Keep conflicting or ambiguous results unresolved and provide the saved address alongside the provider's candidate for review; never automatically adopt a different ZIP code.

@@ -1,12 +1,7 @@
 import { validCoordinates } from '../shared/reportCoordinates'
-
-export type AddressParts = {
-  addressLine1?: string | null
-  addressLine2?: string | null
-  city?: string | null
-  state?: string | null
-  postalCode?: string | null
-}
+import { isSameProperty, parseStreet, propertyConflict, type PropertyAddress } from './propertyAddress'
+export { isSameProperty } from './propertyAddress'
+export type AddressParts = PropertyAddress
 
 export function buildAddressString(parts: AddressParts): string {
   return [parts.addressLine1, parts.addressLine2, parts.city, parts.state, parts.postalCode]
@@ -15,32 +10,11 @@ export function buildAddressString(parts: AddressParts): string {
 
 export type GeocodeResult =
   | { ok: true; lat: number; lng: number }
-  | { ok: false; status: string; error_message?: string }
+  | { ok: false; status: string; error_message?: string; candidates?: LocationCandidate[] }
 
-// Normalize postal abbreviations, not street numbers or distinct street names.
-const abbreviations: Record<string, string> = {
-  street: 'st', avenue: 'ave', road: 'rd', boulevard: 'blvd', drive: 'dr',
-  lane: 'ln', court: 'ct', circle: 'cir', place: 'pl', terrace: 'ter',
-  parkway: 'pkwy', highway: 'hwy', trail: 'trl', north: 'n', south: 's',
-  east: 'e', west: 'w', northeast: 'ne', northwest: 'nw', southeast: 'se', southwest: 'sw',
-}
-const normalize = (value: unknown) => typeof value === 'string'
-  ? value.toLowerCase().replace(/[.,]/g, '').trim().split(/\s+/)
-    .map((word) => abbreviations[word] ?? word).join(' ')
-  : ''
-
-/** Never use a nearby result or a different property's coordinates. */
-export function isSameProperty(address: AddressParts, record: Record<string, unknown>): boolean {
-  if (!normalize(address.addressLine1) || normalize(address.addressLine1) !== normalize(record.addressLine1)) return false
-  if (address.state?.trim() && normalize(address.state) !== normalize(record.state)) return false
-  const zip = address.postalCode?.trim().slice(0, 5)
-  if (zip) {
-    if (zip !== String(record.zipCode ?? '').slice(0, 5)) return false
-  } else if (address.city?.trim() && normalize(address.city) !== normalize(record.city)) return false
-  // Building-level coordinates are valid for a unit; a different returned unit is not.
-  if (address.addressLine2?.trim() && record.addressLine2 &&
-    normalize(address.addressLine2) !== normalize(record.addressLine2)) return false
-  return true
+export type LocationCandidate = {
+  street: string; unit: string; city: string; state: string; zip: string
+  reason: string; hasCoordinates: boolean
 }
 
 /** RentCast property records only. No Google calls or approximate property fallback. */
@@ -50,9 +24,11 @@ export async function geocodeAddress(address: AddressParts, apiKey: string | und
     (!address.postalCode?.trim() && (!address.city?.trim() || !address.state?.trim()))) {
     return { ok: false, status: 'invalid_request', error_message: 'Provide a street address and city/state or ZIP code.' }
   }
+  const parsed = parseStreet(address.addressLine1, address.addressLine2)
+  if (parsed.unitConflict) return { ok: false, status: 'review_required', error_message: 'The address contains conflicting unit numbers.' }
   // Units do not affect a building's location and can prevent a parcel record match.
   const query = new URLSearchParams({
-    address: buildAddressString({ ...address, addressLine2: null }),
+    address: buildAddressString({ ...address, addressLine1: parsed.street, addressLine2: null }),
     limit: '5',
   })
   try {
@@ -68,10 +44,31 @@ export async function geocodeAddress(address: AddressParts, apiKey: string | und
     }
     const data: unknown = await res.json().catch(() => null)
     if (!Array.isArray(data)) return { ok: false, status: 'invalid_response' }
-    const matching = data.filter((record) => record && typeof record === 'object' && isSameProperty(address, record))
-    for (const record of matching) {
+    const records = data.filter((record): record is Record<string, unknown> =>
+      Boolean(record && typeof record === 'object' && !Array.isArray(record))).slice(0, 5)
+    const matching = records.filter((record) => isSameProperty(address, record))
+    const locations = matching.flatMap((record) => {
       const coords = validCoordinates(record.latitude, record.longitude)
-      if (coords) return { ok: true, ...coords }
+      return coords ? [coords] : []
+    })
+    const uniqueLocations = new Set(locations.map((coords) => `${coords.lat},${coords.lng}`))
+    const uniqueAddresses = new Set(matching.map((record) => {
+      const street = parseStreet(record.addressLine1)
+      return JSON.stringify([street.house, street.name, street.pre, street.post, street.suffix, record.state, record.zipCode])
+    }))
+    const ambiguous = uniqueLocations.size > 1 || uniqueAddresses.size > 1
+    if (uniqueLocations.size === 1 && !ambiguous && locations.length === matching.length) return { ok: true, ...locations[0] }
+    const string = (value: unknown) => typeof value === 'string' ? value : ''
+    const candidates: LocationCandidate[] = records.map((record) => ({
+      street: string(record.addressLine1), unit: string(record.addressLine2),
+      city: string(record.city), state: string(record.state), zip: string(record.zipCode),
+      reason: propertyConflict(address, record) ?? (ambiguous ? 'ambiguous_match' : 'missing_coordinates'),
+      hasCoordinates: Boolean(validCoordinates(record.latitude, record.longitude)),
+    }))
+    if (records.length) {
+      return { ok: false, status: 'review_required', error_message:
+        ambiguous ? 'Multiple property locations match. Please review the address.' :
+          'The returned property address needs review before its location can be used.', candidates }
     }
     return { ok: false, status: 'no_exact_match', error_message: 'No exact property location was found in RentCast.' }
   } catch {
@@ -90,7 +87,7 @@ export async function lookupPropertyLocation(address: AddressParts, apiKey: stri
   if (cached && cached.expires > Date.now()) return cached.result
   if (pending.has(key)) return pending.get(key)!
   const request = geocodeAddress(address, apiKey).then((result) => {
-    if (result.ok || result.status === 'no_exact_match') {
+    if (result.ok || result.status === 'no_exact_match' || result.status === 'review_required') {
       if (cache.size >= 2000) cache.delete(cache.keys().next().value!)
       cache.set(key, { result, expires: Date.now() + (result.ok ? 86400000 : 300000) })
     }

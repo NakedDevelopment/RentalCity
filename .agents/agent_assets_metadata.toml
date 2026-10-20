@@ -6,15 +6,32 @@ id = "hX366Hf086xdD7SoPKCne"
 uri = "file://docs/visual-spec.md"
 type = "text"
 title = "Rental City — Complete Visual Spec"
+logical_id = "a4e837fa-bd2b-417c-b0ba-9dec5119ef25"
 
 [[outputs]]
 id = "HZMgqZdzAGlCG19KDvIzt"
 uri = "file://rental-value-report.zip"
 type = "unspecified"
 title = "Rental Value Report — standalone lead magnet (import into a new Repl)"
+logical_id = "20409323-5e54-42ed-bf6a-423211ba5219"
 
 [[outputs]]
 id = "ifh3SEcR3FOSN9n5yj5Gz"
 uri = "file://PRODUCT.md"
 type = "text"
 title = "Rental City — Product Reference & Marketing Brief"
+logical_id = "b6751469-a697-46c0-9b43-9a22d4dcc882"
+
+[[outputs]]
+id = "7CCmhBCM0wZM1uEU6fSSq"
+uri = "file://generated-artifacts/listing-coordinate-review.csv"
+type = "table"
+title = "Listings needing address review"
+description = "33 unresolved listings, including 15 active listings. Includes saved addresses, lookup reasons, and RentCast candidate addresses where available. No saved listing addresses were changed."
+logical_id = "13ebdccc-6229-4026-96b3-600e2733a245"
+content_hash = "sha256:160cbababa674e6d9d60d712939fa6ca175917d491680a32e5d37845b95f124b"
+size = 4200
+mtime_ms = 1792474006923
+storage_uri = "gcs://replit-rams-assets-spock/rams/assets/repl:5844c47c-1391-404d-b4a9-e9631aee074e/13ebdccc-6229-4026-96b3-600e2733a245/4b816f99-dda2-4ea5-97b3-e8d47c885d62"
+storage_version_token = "1792474048307947"
+content_type = "text/csv"

@@ -80,3 +80,40 @@ test('repeated and concurrent lookups share a paid request; edited addresses do 
   assert.equal((await lookupPropertyLocation({ ...address, addressLine1: '123 Changed St' }, 'test-key')).ok, false)
   assert.equal(calls, 2)
 })
+
+test('lookup strips inline apartment formatting but preserves the original match requirements', async (t) => {
+  const input = { addressLine1: '998 Fair St #1 SW', city: 'Atlanta', state: 'GA', postalCode: '30314' }
+  t.mock.method(globalThis, 'fetch', async (url: string | URL | Request) => {
+    assert.equal(new URL(String(url)).searchParams.get('address'), '998 Fair St SW, Atlanta, GA, 30314')
+    return Response.json([{ addressLine1: '998 Fair St SW', addressLine2: 'Apt 1',
+      city: 'Atlanta', state: 'GA', zipCode: '30314', latitude: 33.7, longitude: -84.4 }])
+  })
+  assert.deepEqual(await geocodeAddress(input, 'test-key'), { ok: true, lat: 33.7, lng: -84.4 })
+  assert.equal(input.addressLine1, '998 Fair St #1 SW')
+})
+
+test('ZIP conflicts are returned as review candidates, never silently corrected', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => Response.json([{ ...record, zipCode: '78245' }]))
+  const result = await geocodeAddress(address, 'test-key')
+  assert.equal(result.ok, false)
+  if (!result.ok) {
+    assert.equal(result.status, 'review_required')
+    assert.equal(result.candidates?.[0].reason, 'zip_conflict')
+    assert.equal(result.candidates?.[0].zip, '78245')
+  }
+})
+
+test('ambiguous street-type completions are flagged even if they share a coordinate', async (t) => {
+  const request = t.mock.method(globalThis, 'fetch', async () => Response.json([
+    { ...record, addressLine1: '5500 Grand Lake Dr' },
+    { ...record, addressLine1: '5500 Grand Lake Rd' },
+  ]))
+  const incomplete = { ...address, addressLine1: '5500 Grand Lake' }
+  const result = await geocodeAddress(incomplete, 'test-key')
+  assert.equal(result.ok, false)
+  if (!result.ok) assert.equal(result.candidates?.[0].reason, 'ambiguous_match')
+  request.mock.mockImplementation(async () => Response.json([
+    record, { ...record, longitude: record.longitude + 0.02 },
+  ]))
+  assert.equal((await geocodeAddress(address, 'test-key')).ok, false)
+})
