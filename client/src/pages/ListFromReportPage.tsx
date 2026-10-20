@@ -389,6 +389,7 @@ function SurveyPopover({ userId, onComplete, onSkip }: SurveyPopoverProps) {
         policy_strictness_score: prefs.policyStrictnessScore,
         risk_tolerance_score: prefs.riskToleranceScore,
         conflict_style_score: prefs.conflictStyleScore,
+        accepts_housing_vouchers: answers.accepts_housing_vouchers === 'yes',
       },
       { onConflict: 'user_id' },
     )

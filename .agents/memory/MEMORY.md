@@ -11,3 +11,4 @@
 - [Password recovery routing](password-recovery-routing.md) — Supabase reset links can fall back to Site URL root; global RecoveryLinkHandler must catch them before role redirects; add prod URLs to Supabase allow-list.
 - [Plaid IDV QA failures](plaid-idv-qa.md) — repeated production attempts trigger network-risk failure; override known QA Risk Check results instead of creating more accounts.
 - [Property share invite intent](property-share-invites.md) — property link identifies the starting listing, but acceptance grants 14 days of access to all active listings of that landlord.
+- [Imported release verification](imported-release-verification.md) — check live schema and runtime provider access; imported passing reports do not verify cloud activation.
