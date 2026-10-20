@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { deriveLandlordPreferences } from '../lib/landlordPreferences'
 import { landlordQuestions } from '../lib/landlordQuestionnaire'
 import { centsToMoneyInput, moneyInputToCents } from '../lib/propertyDraft'
+import { geocodeAddress } from '../lib/geocodeClient'
 
 // ─── Session-storage data shape written by the rental report page ─────────────
 
@@ -823,7 +824,17 @@ export function ListFromReportPage() {
       return null
     }
 
-    return (data as { id: string }).id
+    const newPropertyId = (data as { id: string }).id
+
+    // Fire-and-forget: never block the save on geocoding.
+    void (async () => {
+      const coords = await geocodeAddress({ addressLine1: streetAddress, city, state, postalCode: zipCode })
+      if (coords) {
+        await supabase.from('properties').update({ lat: coords.lat, lng: coords.lng }).eq('id', newPropertyId)
+      }
+    })()
+
+    return newPropertyId
   }
 
   function lockAfterSave(id: string) {

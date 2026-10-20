@@ -421,3 +421,117 @@ Renter score (`tenantRentScore.ts`) is untouched by design. Plaid-skip-at-100%-c
 the shared income-satisfied rule (`GET /api/plaid/verification`), and the "Housing Voucher"
 badge on match cards/tenant profile are explicitly separate follow-up tasks per the ticket
 — not built, not stubbed.
+
+## 2026-10-19 — Pulse automation run (single-task mode)
+
+Task: Location-based matching — geocode properties & tenant addresses, add lat/lng columns.
+
+### Investigation note (deviation from the ticket's literal description)
+The ticket's Implementation Prompt said to wire geocoding into "POST `/api/properties`,
+POST `/api/admin/properties`, and PATCH `/api/properties/:id`." None of these endpoints
+exist in the live repo: property create/update is done entirely client-side via direct
+`supabase.from('properties').insert/update(...)` calls in `AddPropertyPreviewPage.tsx`,
+`ListFromReportPage.tsx`, and `LandlordPropertyDetailsPage.tsx` (the only server-side
+`/api/admin/properties*` route is `PATCH /api/admin/properties/:id/status`, which never
+touches address fields). This also means an `AdminPropertyCreatePage.tsx` referenced in
+this project's prior run notes does not exist in current `git log` — either that work
+never landed or was lost in a later Replit squash-publish; treated current live repo
+state as ground truth rather than stale notes.
+
+Given that architecture, geocoding was wired the same way this repo already proxies
+Google Maps calls for Street View/Places (`/api/street-view-image`, `/api/address-suggest`):
+a new thin, authenticated `POST /api/geocode` endpoint keeps `GOOGLE_MAPS_API_KEY`
+server-side, and each client insert/update call site fire-and-forgets a call to it, then
+patches `lat`/`lng` back onto the just-written row via a normal RLS-scoped client update
+(own `landlord_id`/`tenant_id` — no new RLS policy needed). Never blocks the user-facing
+save.
+
+### Changes
+1. `supabase/migrations/20261019000002_tenant_application_profiles_location.sql` — adds
+   `lat`/`lng` (double precision) + `idx_tenant_application_profiles_location` btree index
+   to `tenant_application_profiles`. Applied live via `psql` and verified via `\d`.
+2. `server/geocode.ts` — new `geocodeAddress(address, apiKey)` / `buildAddressString(parts)`
+   helpers. Never throws; every failure mode (missing key, non-OK Google status, network
+   failure, empty address) resolves to `{ ok: false, status, error_message }` so callers
+   can log and continue.
+3. `server/index.ts` — new `POST /api/geocode` (requires a signed-in user via the existing
+   `authUser` helper; never used by anonymous requests). Calls the new helper and
+   `console.error`s a clear `status`/`error_message`/user id line on failure — never logs
+   or returns the API key itself.
+4. `client/src/lib/geocodeClient.ts` — new shared client helper (`geocodeAddress`,
+   `addressKey`) used by all four write sites below; calls `/api/geocode` with the
+   session's access token, returns `null` (and logs) on any failure.
+5. `client/src/pages/AddPropertyPreviewPage.tsx` / `ListFromReportPage.tsx` — after a
+   successful property insert, fire-and-forget geocode the new address and patch
+   `lat`/`lng` onto the row.
+6. `client/src/pages/LandlordPropertyDetailsPage.tsx` — after a successful property
+   update, re-geocodes only if `address_line1`/`city`/`state`/`postal_code` actually
+   changed from the previously loaded record (avoids a redundant API call on every save).
+   Added optional `lat`/`lng` to the file's `PropertyRecord` type.
+7. `client/src/pages/RentalApplicationPage.tsx` — `saveProgress()` now re-geocodes the
+   tenant's private application address only when it differs from the last-geocoded
+   address (tracked via a ref seeded from the loaded record on mount), since this
+   function autosaves on every wizard step.
+8. `scripts/backfill-geocode.ts` + `"backfill:geocode"` package.json script — one-time
+   backfill for existing `properties`/`tenant_application_profiles` rows with an address
+   but `lat IS NULL`. Service-role client, 100ms delay between calls, prints a `SUMMARY`
+   plus a per-row failure list (id/status/error_message).
+
+### Step 0 / key verification — could not be run live this session
+This Mac automation sandbox has no access to the real `GOOGLE_MAPS_API_KEY` value — it
+exists only as a Replit secret in the deployed environment, not in this repo checkout (no
+`.env`, not in Pulse credential metadata, which never exposes secret values). A prior
+`[HUMAN]` task (`797b8b58`, already `done`) recorded that someone with Google Cloud
+Console access confirmed the Geocoding API is enabled for this key — proceeded to build
+on that basis rather than fabricating a live test result in this session.
+Ran `scripts/backfill-geocode.ts` for real against the live DB in this sandbox (no key
+present): all 97 `properties` + 3 `tenant_application_profiles` rows needing backfill
+correctly short-circuited to `status=missing_key` and the script printed a full SUMMARY —
+this confirms the DB query/update/summary plumbing works end to end; only the actual
+Google call is blocked by this environment's missing secret. **A [HUMAN] task has been
+filed to re-run `npm run backfill:geocode` from the Replit environment** (where the key
+is actually present) once this is pulled/republished, and to confirm Step 0's live
+Geocoding API test succeeds there.
+
+### Motion Designer / UX Auditor (single instance each)
+No new Hooked moments or user-facing UI — this task is a backend data-layer addition
+(migration, server proxy endpoint, fire-and-forget client calls). No new screens, no new
+visible states beyond existing save/error flows, which are unchanged.
+
+### QA — two-instance loop
+Both instances independently checked: no hardcoded/mock data (real Google Geocoding API
+calls, real DB columns); every table/column reference (`tenant_application_profiles.lat/lng`,
+`properties.lat/lng`) verified against live schema via `psql`, not assumed; zero TypeScript
+errors (confirmed via `git stash -u` A/B — the only `tsc` errors present are a pre-existing,
+unrelated `PaymentHistoryPage.tsx` baseline issue, present identically with and without
+this change). Instance B (adversarial) flagged that re-geocoding only "on address change"
+could mask a case where a user's first save already has an address but the comparison
+baseline (`property`/the loaded tenant profile) was itself stale — investigated directly:
+not reproducible, since `property`/the loaded profile is always re-fetched fresh before
+the form renders, and the ref is seeded from that same fresh load. **CONFIRMED PASS.**
+
+### Stress Tester (single instance)
+- Empty/missing address fields: `geocodeAddress` (server) returns `invalid_request` for
+  an empty joined address string before ever calling Google — PASS.
+- Network failure / Google API timeout: `AbortSignal.timeout(8000)` + try/catch resolves
+  to `{ ok: false, status: 'request_failed' }` rather than throwing — PASS.
+- Missing env var (`GOOGLE_MAPS_API_KEY` unset): short-circuits to `missing_key` before
+  any network call — PASS (verified live via the backfill run above).
+- Rapid saves (tenant wizard autosave): `addressKey` ref comparison prevents redundant
+  Google calls when the address hasn't changed between autosaves — PASS.
+- Invalid/malformed address: Google's own `ZERO_RESULTS` status surfaces as
+  `{ ok: false, status: 'no_results' }`, logged, save still succeeds — PASS.
+
+### Build gate
+`npx tsc --noEmit` (server, root `tsconfig.json`): zero errors.
+`cd client && npx tsc --noEmit`: only the pre-existing `PaymentHistoryPage.tsx` baseline
+error (confirmed present identically via `git stash -u` before this change) — zero errors
+introduced by this task.
+
+### Dependencies
+No new dependency. `package-lock.json` regenerated via the standard workaround to run
+`npm install`/the build gate, then reverted (`git checkout -- package-lock.json`).
+
+### Out of scope (per approved Implementation Prompt — not built this run)
+Distance/radius matching logic in `server/match.ts` was explicitly out of scope for this
+ticket and was not touched.

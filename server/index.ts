@@ -16,6 +16,7 @@ import {
   computeMatch,
   type MatchResult,
 } from './match'
+import { geocodeAddress, buildAddressString } from './geocode'
 import type { PlaidApi } from 'plaid'
 import {
   getPlaidClient,
@@ -944,6 +945,36 @@ app.get('/api/address-suggest', async (req, res) => {
   } finally {
     clearTimeout(timeout)
   }
+})
+
+/**
+ * Geocode a free-form address into lat/lng via the Google Maps Geocoding API.
+ * Keeps the API key server-side; requires sign-in to prevent anonymous quota abuse.
+ * Never throws on a geocoding failure — callers (property/tenant profile saves)
+ * never block on this, so failures are reported in the response body and logged here.
+ */
+app.post('/api/geocode', async (req, res) => {
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  const { addressLine1, addressLine2, city, state, postalCode } = (req.body ?? {}) as Record<string, unknown>
+  const address = buildAddressString({
+    addressLine1: typeof addressLine1 === 'string' ? addressLine1 : null,
+    addressLine2: typeof addressLine2 === 'string' ? addressLine2 : null,
+    city: typeof city === 'string' ? city : null,
+    state: typeof state === 'string' ? state : null,
+    postalCode: typeof postalCode === 'string' ? postalCode : null,
+  })
+
+  const result = await geocodeAddress(address, GOOGLE_MAPS_API_KEY)
+  if (!result.ok) {
+    console.error(
+      `Geocode failed for user ${user.id}: status=${result.status}` +
+        (result.error_message ? ` error_message=${result.error_message}` : ''),
+    )
+  }
+  return res.json(result)
 })
 
 /**

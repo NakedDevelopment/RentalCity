@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePlaidLink } from 'react-plaid-link'
 import { useAuth } from '../lib/useAuth'
@@ -6,6 +6,7 @@ import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
 import { getConsentStatus, saveConsentData } from '../lib/equifaxApi'
 import { createPlaidLinkToken, exchangePlaidPublicToken, getPlaidVerification, type PlaidVerification } from '../lib/plaidApi'
+import { geocodeAddress, addressKey } from '../lib/geocodeClient'
 
 type Profile = {
   display_name: string; phone: string; bio: string; city: string
@@ -79,6 +80,7 @@ export function RentalApplicationPage() {
   const [plaidBusy, setPlaidBusy] = useState(false)
   const [reviewing, setReviewing] = useState(false)
   const [triggerReady, setTriggerReady] = useState(false)
+  const lastGeocodedAddressRef = useRef<string | null>(null)
   const needsIncome = !plaid?.incomeVerified
   const visibleSteps = needsIncome ? steps : steps.slice(0, 4)
 
@@ -103,6 +105,13 @@ export function RentalApplicationPage() {
         leaseIntent: leaseIntent(preferences?.lease_length_months ?? null),
         moveInDate: preferences?.move_in_date ?? '',
         budget: budgetKey(preferences?.min_budget_cents ?? null, preferences?.max_budget_cents ?? null),
+      })
+      lastGeocodedAddressRef.current = addressKey({
+        addressLine1: normalized.address_line1,
+        addressLine2: normalized.address_line2,
+        city: normalized.city,
+        state: normalized.state,
+        postalCode: normalized.postal_code,
       })
       const loadedUniversal = ((a ?? [])[0] as Universal) ?? null
       setUniversal(loadedUniversal)
@@ -184,6 +193,26 @@ export function RentalApplicationPage() {
         emergency_contact_name: form.emergency_contact_name, emergency_contact_relationship: form.emergency_contact_relationship, emergency_contact_phone: form.emergency_contact_phone,
       }, { onConflict: 'tenant_id' })
       if (privateProfileError) throw privateProfileError
+
+      const nextAddressKey = addressKey({
+        addressLine1: form.address_line1, addressLine2: form.address_line2,
+        city: form.city, state: form.state, postalCode: form.postal_code,
+      })
+      if (form.address_line1 && form.city && nextAddressKey !== lastGeocodedAddressRef.current) {
+        lastGeocodedAddressRef.current = nextAddressKey
+        const tenantId = user.id
+        // Fire-and-forget: never block the save on geocoding.
+        void (async () => {
+          const coords = await geocodeAddress({
+            addressLine1: form.address_line1, addressLine2: form.address_line2,
+            city: form.city, state: form.state, postalCode: form.postal_code,
+          })
+          if (coords) {
+            await supabase.from('tenant_application_profiles').update({ lat: coords.lat, lng: coords.lng }).eq('tenant_id', tenantId)
+          }
+        })()
+      }
+
       const range = budgetRanges[form.budget]
       if (range && form.leaseIntent && form.moveInDate) {
         const { error: preferencesError } = await supabase.from('tenant_preferences').upsert({

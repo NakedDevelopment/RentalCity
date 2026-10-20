@@ -5,6 +5,7 @@ import { useAuth } from '../lib/useAuth'
 import { safeInternalPath } from '../lib/safeInternalPath'
 import { supabase } from '../lib/supabase'
 import { PropertyInviteLink } from '../components/PropertyInviteLink'
+import { geocodeAddress } from '../lib/geocodeClient'
 
 type ListingStatus = 'Active' | 'Draft' | 'Inactive' | 'Leased'
 
@@ -27,6 +28,8 @@ type PropertyRecord = {
   city: string
   state: string | null
   postal_code: string | null
+  lat?: number | null
+  lng?: number | null
   description: string | null
   bedrooms: number
   bathrooms: number
@@ -430,6 +433,27 @@ export function LandlordPropertyDetailsPage() {
     if (error) {
       setError(error.message)
       return
+    }
+
+    const addressChanged =
+      formState.addressLine1 !== property.address_line1 ||
+      formState.neighborhood !== property.city ||
+      (formState.stateCode || null) !== property.state ||
+      (formState.zipCode || null) !== property.postal_code
+    if (addressChanged) {
+      const propertyId = property.id
+      // Fire-and-forget: never block the save on geocoding.
+      void (async () => {
+        const coords = await geocodeAddress({
+          addressLine1: formState.addressLine1,
+          city: formState.neighborhood,
+          state: formState.stateCode,
+          postalCode: formState.zipCode,
+        })
+        if (coords) {
+          await supabase.from('properties').update({ lat: coords.lat, lng: coords.lng }).eq('id', propertyId)
+        }
+      })()
     }
 
     const { data: refreshed } = await supabase

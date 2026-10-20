@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import { trackMetaCustomEvent } from '../lib/metaPixel'
+import { geocodeAddress } from '../lib/geocodeClient'
 
 const PROPERTY_IMAGES_BUCKET = 'property-images'
 
@@ -186,6 +187,22 @@ export function AddPropertyPreviewPage() {
     if (insertError) {
       setError(friendlyPersistError(insertError, 'save'))
       return
+    }
+
+    // Fire-and-forget: never block the save on geocoding.
+    const newPropertyId = data?.id
+    if (newPropertyId) {
+      void (async () => {
+        const coords = await geocodeAddress({
+          addressLine1: draft.streetAddress,
+          city: draft.city,
+          state: draft.state,
+          postalCode: draft.zipCode,
+        })
+        if (coords) {
+          await supabase.from('properties').update({ lat: coords.lat, lng: coords.lng }).eq('id', newPropertyId)
+        }
+      })()
     }
 
     trackMetaCustomEvent('CreateListing', { listing_status: status })

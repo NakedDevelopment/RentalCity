@@ -20,7 +20,8 @@
     "db:apply-sql": "node scripts/apply-sql.mjs",
     "db:seed": "tsx scripts/seed.mjs",
     "db:seed-questionnaires": "node scripts/seed-questionnaires.mjs",
-    "db:eval-matches": "node scripts/eval-matches.mjs"
+    "db:eval-matches": "node scripts/eval-matches.mjs",
+    "backfill:geocode": "tsx scripts/backfill-geocode.ts"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.6.0",
