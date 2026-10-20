@@ -22,6 +22,7 @@ export function ProfileCreationPage() {
   const [loading, setLoading] = useState(false)
   const [fullNameError, setFullNameError] = useState<string | null>(null)
   const [phoneError, setPhoneError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -106,8 +107,9 @@ export function ProfileCreationPage() {
     }
     setFullNameError(null)
     setPhoneError(null)
+    setSaveError(null)
     setLoading(true)
-    await supabase
+    const { error } = await supabase
       .from('profiles')
       .update({
         display_name: fullName.trim() || null,
@@ -122,6 +124,10 @@ export function ProfileCreationPage() {
       })
       .eq('id', user.id)
     setLoading(false)
+    if (error) {
+      setSaveError('Could not save your profile. Please try again.')
+      return
+    }
     navigate(profileRole === 'landlord' ? '/onboarding/survey/intro' : '/')
   }
 
@@ -346,6 +352,7 @@ export function ProfileCreationPage() {
               </div>
 
               <div className="mt-6 space-y-4">
+                {saveError ? <p role="alert" className="text-sm text-red-600">{saveError}</p> : null}
                 <button
                   type="button"
                   onClick={handleNext}

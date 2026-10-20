@@ -18,7 +18,7 @@ import {
 } from './match'
 import { geocodeAddress, buildAddressString } from './geocode'
 import { rentCastCoordinates } from '../shared/reportCoordinates'
-import { haversineMiles, DEFAULT_MATCH_RADIUS_MILES } from './geo'
+import { haversineMiles, DEFAULT_MATCH_RADIUS_MILES, firstKnownLocation } from './geo'
 import type { PlaidApi } from 'plaid'
 import {
   getPlaidClient,
@@ -285,12 +285,12 @@ async function buildLandlordCatalogRows(
   ])
   const tenantLocationById = new Map<string, { lat: number | null; lng: number | null }>()
   for (const row of (tenantAppProfileRows ?? []) as Array<{ tenant_id: string; lat: number | null; lng: number | null }>) {
-    tenantLocationById.set(row.tenant_id, { lat: row.lat, lng: row.lng })
+    const coords = firstKnownLocation(row)
+    if (coords) tenantLocationById.set(row.tenant_id, coords)
   }
   for (const row of (tenantPrefRows ?? []) as Array<{ user_id: string; location_lat: number | null; location_lng: number | null }>) {
-    if (row.location_lat != null && row.location_lng != null) {
-      tenantLocationById.set(row.user_id, { lat: row.location_lat, lng: row.location_lng })
-    }
+    const coords = firstKnownLocation({ lat: row.location_lat, lng: row.location_lng })
+    if (coords) tenantLocationById.set(row.user_id, coords)
   }
 
   const nowIso = new Date().toISOString()
@@ -334,8 +334,9 @@ async function buildLandlordCatalogRows(
       const tenantLoc = tenantLocationById.get(tid) ?? null
       let distanceMiles: number | null = null
       if (tenantLoc?.lat != null && tenantLoc?.lng != null && prop.lat != null && prop.lng != null) {
-        distanceMiles = Math.round(haversineMiles(tenantLoc.lat, tenantLoc.lng, prop.lat, prop.lng))
-        if (distanceMiles > radiusMiles) continue
+        const distance = haversineMiles(tenantLoc.lat, tenantLoc.lng, prop.lat, prop.lng)
+        if (distance > radiusMiles) continue
+        distanceMiles = Math.round(distance)
       }
 
       const tenantAnswers = tenantData.answers ?? {}
@@ -1988,7 +1989,7 @@ async function sweepLandlordUploadReminders(): Promise<void> {
       let query = admin
         .from('profiles')
         .select('id, created_at')
-        .eq('role', 'landlord')
+        .in('role', ['landlord', 'listing_agent'])
         .lt('created_at', cutoff)
         .order('created_at', { ascending: true })
         .limit(BATCH)
@@ -2391,12 +2392,15 @@ app.post('/api/matches/for-tenant', async (req, res) => {
 
   // Effective tenant location priority: explicit request override (ad-hoc search-bar location) >
   // saved search preference > their rental application address. Skip filtering if none exist.
-  const explicitLat = typeof tenantLatRaw === 'number' && Number.isFinite(tenantLatRaw) ? tenantLatRaw : null
-  const explicitLng = typeof tenantLngRaw === 'number' && Number.isFinite(tenantLngRaw) ? tenantLngRaw : null
   const prefsLoc = tenantPrefsRow.data as { location_lat?: number | null; location_lng?: number | null } | null
   const appLoc = tenantAppProfileRow.data as { lat?: number | null; lng?: number | null } | null
-  const tenantLat = explicitLat ?? prefsLoc?.location_lat ?? appLoc?.lat ?? null
-  const tenantLng = explicitLng ?? prefsLoc?.location_lng ?? appLoc?.lng ?? null
+  const tenantLocation = firstKnownLocation(
+    { lat: tenantLatRaw, lng: tenantLngRaw },
+    { lat: prefsLoc?.location_lat, lng: prefsLoc?.location_lng },
+    appLoc,
+  )
+  const tenantLat = tenantLocation?.lat ?? null
+  const tenantLng = tenantLocation?.lng ?? null
   if (!tenantData) {
     const empty: Record<string, MatchResult & { tenantScore?: number }> = {}
     uniqueIds.forEach((id) => { empty[id] = { eligible: false, reasons: ['Tenant questionnaire not completed.'], overall: 0, dimensions: { affordability: 0, stability: 0, risk: 0, lifestyle: 0, policy: 0 } } })

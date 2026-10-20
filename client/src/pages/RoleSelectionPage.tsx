@@ -8,14 +8,20 @@ type Role = 'tenant' | 'landlord' | 'listing_agent'
 export function RoleSelectionPage() {
   const [role, setRole] = useState<Role | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
   const navigate = useNavigate()
 
   async function handleSave() {
     if (!role || !user) return
     setLoading(true)
-    await supabase.from('profiles').update({ role }).eq('id', user.id)
+    setError(null)
+    const { error: saveError } = await supabase.from('profiles').update({ role }).eq('id', user.id)
     setLoading(false)
+    if (saveError) {
+      setError('Could not save your role. Please try again.')
+      return
+    }
     // Tenants → rental needs in app shell; Landlords → profile setup
     navigate(role === 'tenant' ? '/rental-needs' : '/onboarding/profile')
   }
@@ -74,6 +80,7 @@ export function RoleSelectionPage() {
         </button>
       </div>
 
+      {error ? <p role="alert" className="mb-4 text-sm text-red-600">{error}</p> : null}
       <button
         type="button"
         onClick={handleSave}
