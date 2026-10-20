@@ -6,6 +6,7 @@ import { deriveLandlordPreferences } from '../lib/landlordPreferences'
 import { landlordQuestions } from '../lib/landlordQuestionnaire'
 import { centsToMoneyInput, moneyInputToCents } from '../lib/propertyDraft'
 import { geocodeAddress } from '../lib/geocodeClient'
+import { coordinatesForReportAddress, validCoordinates } from '../../../shared/reportCoordinates'
 
 // ─── Session-storage data shape written by the rental report page ─────────────
 
@@ -26,6 +27,8 @@ export interface ReportPrefill {
   /** From RentCast property record — null if unknown */
   yearBuilt: number | null
   lotSize: number | null
+  lat?: number | null
+  lng?: number | null
 }
 
 export const REPORT_PREFILL_KEY = 'rc-report-prefill'
@@ -56,7 +59,7 @@ function readPrefillFromParams(search: string): ReportPrefill | null {
   const stateZip = parts[2] || ''
   const stateMatch = stateZip.match(/^([A-Z]{2})(?:\s+(\d{5}))?/)
   const state = stateMatch?.[1] || ''
-  const zip = stateMatch?.[2] || ''
+  const zip = params.get('zip') || stateMatch?.[2] || parts[3]?.match(/^\d{5}(?:-\d{4})?$/)?.[0] || ''
 
   const rentDollars = parseFloat(params.get('rent') || '0')
   const lowDollars = parseFloat(params.get('low') || '0')
@@ -79,6 +82,7 @@ function readPrefillFromParams(search: string): ReportPrefill | null {
     estimatedRentHigh: Math.round(highDollars * 100),
     yearBuilt: yearRaw > 0 ? yearRaw : null,
     lotSize: lotRaw > 0 ? lotRaw : null,
+    ...validCoordinates(params.get('lat'), params.get('lng')),
   }
 }
 
@@ -703,7 +707,8 @@ export function ListFromReportPage() {
       }
     } catch { /* sessionStorage unavailable */ }
 
-    const data = readPrefillFromSession() ?? readPrefillFromParams(searchParams.toString())
+    // Explicit report links take priority over a different report left in this tab.
+    const data = readPrefillFromParams(searchParams.toString()) ?? readPrefillFromSession()
     if (!data) {
       setPrefillMissing(true)
       return
@@ -783,6 +788,7 @@ export function ListFromReportPage() {
       }
     }
 
+    const reportCoords = coordinatesForReportAddress(prefill, { streetAddress, city, state, zipCode })
     const { data, error } = await supabase
       .from('properties')
       .insert({
@@ -798,6 +804,8 @@ export function ListFromReportPage() {
         city,
         state,
         postal_code: zipCode || null,
+        lat: reportCoords?.lat ?? null,
+        lng: reportCoords?.lng ?? null,
         bedrooms: isNaN(bedroomCount) ? 0 : bedroomCount,
         bathrooms: isNaN(bathroomCount) ? 0 : bathroomCount,
         monthly_rent_cents: rentCents,
@@ -827,8 +835,8 @@ export function ListFromReportPage() {
 
     const newPropertyId = (data as { id: string }).id
 
-    // Fire-and-forget: never block the save on geocoding.
-    void (async () => {
+    // Only legacy reports, missing RentCast locations, or edited addresses need Google.
+    if (!reportCoords) void (async () => {
       const coords = await geocodeAddress({ addressLine1: streetAddress, city, state, postalCode: zipCode })
       if (coords) {
         await supabase.from('properties').update({ lat: coords.lat, lng: coords.lng }).eq('id', newPropertyId)

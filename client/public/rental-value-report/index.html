@@ -919,6 +919,8 @@ function renderResult(r, beds, baths, sqft, email) {
           estimatedRentHigh: Math.round((rentData.rentRangeHigh || 0) * 100),
           yearBuilt: rentData.yearBuilt || null,
           lotSize: rentData.lotSize || null,
+          lat: rentData.lat == null ? null : rentData.lat,
+          lng: rentData.lng == null ? null : rentData.lng,
         }));
       } catch (e) { /* sessionStorage may be unavailable (private browsing etc.) */ }
     }
@@ -979,6 +981,12 @@ function renderResult(r, beds, baths, sqft, email) {
         if (p.propertyType) q.set('type', p.propertyType);
         if (p.yearBuilt) q.set('year', String(p.yearBuilt));
         if (p.lotSize) q.set('lot', String(p.lotSize));
+        if (p.zipCode) q.set('zip', p.zipCode);
+        if (typeof p.lat === 'number' && isFinite(p.lat) && Math.abs(p.lat) <= 90 &&
+            typeof p.lng === 'number' && isFinite(p.lng) && Math.abs(p.lng) <= 180) {
+          q.set('lat', String(p.lat));
+          q.set('lng', String(p.lng));
+        }
         var qs = q.toString();
         if (qs) dest = dest + '?' + qs;
       }

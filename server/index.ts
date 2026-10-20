@@ -17,6 +17,7 @@ import {
   type MatchResult,
 } from './match'
 import { geocodeAddress, buildAddressString } from './geocode'
+import { rentCastCoordinates } from '../shared/reportCoordinates'
 import type { PlaidApi } from 'plaid'
 import {
   getPlaidClient,
@@ -646,6 +647,10 @@ app.post('/api/estimate', async (req, res) => {
     if (!rcRes.ok) {
       return res.status(rcRes.status).json(data)
     }
+    // Preserve the subject location even if optional report enrichment fails.
+    const subjectCoords = rentCastCoordinates(data.subjectProperty)
+    data.lat = subjectCoords?.lat ?? null
+    data.lng = subjectCoords?.lng ?? null
 
     await captureLead({
       timestamp: new Date().toISOString(),
@@ -681,6 +686,9 @@ app.post('/api/estimate', async (req, res) => {
 
     const propRecord =
       (Array.isArray(propsRes) ? propsRes[0] : propsRes && typeof propsRes === 'object' ? propsRes : null) || null
+    const reportCoords = rentCastCoordinates(data.subjectProperty, propRecord)
+    data.lat = reportCoords?.lat ?? null
+    data.lng = reportCoords?.lng ?? null
 
     const zipMatch = String(address).match(/\b(\d{5})(?:-\d{4})?\b/)
     const zipFinal = (propRecord && propRecord.zipCode) || (zipMatch ? zipMatch[1] : null)
@@ -770,6 +778,8 @@ app.post('/api/estimate', async (req, res) => {
     }
     const reportInput = {
       address: String(address),
+      lat: reportCoords?.lat ?? null,
+      lng: reportCoords?.lng ?? null,
       propertyType: propertyType || null,
       bedrooms: bedrooms != null && bedrooms !== '' ? Number(bedrooms) : null,
       bathrooms: bathrooms != null && bathrooms !== '' ? Number(bathrooms) : null,

@@ -2,9 +2,12 @@
 // summary and a standalone, shareable full report page from RentCast-derived
 // data. Faithful reproduction of templates/rental-analysis-reference.html.
 // No external dependencies — pure string templating.
+import { validCoordinates } from '../shared/reportCoordinates'
 
 export interface ReportInput {
   address: string
+  lat?: number | null
+  lng?: number | null
   propertyType?: string | null
   bedrooms?: number | null
   bathrooms?: number | null
@@ -447,6 +450,11 @@ function buildListUrl(input: ReportInput, d: Derived): string {
   if (ptype) params.set('type', ptype)
   if (d.property?.yearBuilt) params.set('year', String(d.property.yearBuilt))
   if (d.property?.lotSize) params.set('lot', String(d.property.lotSize))
+  const coords = validCoordinates(input.lat, input.lng)
+  if (coords) {
+    params.set('lat', String(coords.lat))
+    params.set('lng', String(coords.lng))
+  }
   return base + '?' + params.toString()
 }
 
