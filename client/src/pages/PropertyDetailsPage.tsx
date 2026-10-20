@@ -19,11 +19,13 @@ import {
 } from 'lucide-react'
 import { formatBedrooms, formatBathrooms, formatCurrency } from '../lib/propertyDraft'
 import { supabase } from '../lib/supabase'
+import { buildFallbackAddress, useStreetViewFallback } from '../lib/streetViewFallback'
 
 type PropertyDetails = {
   id: string
   title: string
   location: string
+  fallbackAddress: string
   price: string
   beds: string
   baths: string
@@ -127,6 +129,7 @@ export function PropertyDetailsPage() {
           title,
           city,
           state,
+          postal_code,
           bedrooms,
           bathrooms,
           sqft,
@@ -163,6 +166,7 @@ export function PropertyDetailsPage() {
         title?: string
         city?: string
         state?: string
+        postal_code?: string
         bedrooms?: number
         bathrooms?: number | string
         sqft?: number
@@ -203,12 +207,14 @@ export function PropertyDetailsPage() {
       const photoLabels = Array.isArray(row.photo_labels) ? row.photo_labels.map((l) => String(l)) : []
 
       const location = [row.city, row.state].filter(Boolean).join(', ')
+      const fallbackAddress = buildFallbackAddress(row)
 
       setActivePhotoIdx(0)
       setProperty({
         id: row.id,
         title,
         location,
+        fallbackAddress,
         price,
         beds,
         baths,
@@ -247,12 +253,15 @@ export function PropertyDetailsPage() {
   function PropertyHeroPhoto({
     url,
     alt,
+    fallbackAddress,
   }: {
     url: string | null
     alt: string
+    fallbackAddress: string
   }) {
     const [broken, setBroken] = useState(false)
     const show = Boolean(url) && !broken
+    const streetViewUrl = useStreetViewFallback(show ? null : fallbackAddress || null)
     return (
       <div className="overflow-hidden rounded-xl bg-gray-100 aspect-[16/8]">
         {show ? (
@@ -263,6 +272,13 @@ export function PropertyDetailsPage() {
             loading="eager"
             onError={() => setBroken(true)}
           />
+        ) : streetViewUrl ? (
+          <div className="relative h-full w-full">
+            <img src={streetViewUrl} alt={alt} className="h-full w-full object-cover" loading="eager" />
+            <span className="absolute bottom-2 left-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+              Street View
+            </span>
+          </div>
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <span className="text-lg text-gray-500">No photos yet</span>
@@ -353,6 +369,7 @@ export function PropertyDetailsPage() {
             key={property.photoUrls[activePhotoIdx] ?? 'none'}
             url={property.photoUrls[activePhotoIdx] ?? property.photoUrls[0] ?? null}
             alt={property.photoLabels[activePhotoIdx] || 'Main property photo'}
+            fallbackAddress={property.fallbackAddress}
           />
 
           {property.photoUrls.length > 1 ? (

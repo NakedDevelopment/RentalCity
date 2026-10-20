@@ -45,6 +45,19 @@ export function EquifaxSubscriberForm({
   const inputClass = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900'
   const { street, unit, city, state, zip } = details.address
   const addressTooLong = `${street}${unit ? `, ${unit}` : ''}, ${city}, ${state} ${zip}`.length > 85
+  const phoneDigits = details.phone.replace(/\D/g, '')
+  const formValid =
+    details.businessName.trim().length > 0 &&
+    details.businessName.length <= 60 &&
+    phoneDigits.length === 10 &&
+    street.trim().length >= 3 &&
+    street.length <= 60 &&
+    unit.length <= 25 &&
+    city.trim().length > 0 &&
+    city.length <= 45 &&
+    /^[A-Za-z]{2}$/.test(state) &&
+    /^\d{5}(?:-\d{4})?$/.test(zip) &&
+    !addressTooLong
 
   return (
     <form
@@ -108,7 +121,7 @@ export function EquifaxSubscriberForm({
         </div>
       </div>
       <div className="flex items-center gap-3 pt-1">
-        <button type="submit" disabled={submitting || addressTooLong} className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+        <button type="submit" disabled={submitting || !formValid} className="rounded-lg btn-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
           {submitting ? 'Opening…' : 'Continue to sign'}
         </button>
         <button type="button" onClick={onBack} className="text-sm text-gray-600 underline">Back</button>

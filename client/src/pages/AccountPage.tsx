@@ -109,6 +109,7 @@ export function AccountPage() {
     income_verified: boolean | null
     balances_verified: boolean | null
     identity_verified: boolean | null
+    income_satisfied: boolean
   } | null>(null)
   const [tenantScreening, setTenantScreening] = useState<{ status: string | null } | null>(null)
   const [landlordAgreementStatus, setLandlordAgreementStatus] = useState<DocusignStatus | null>(null)
@@ -136,7 +137,11 @@ export function AccountPage() {
               .select('lease_length_months, move_in_date, min_budget_cents, max_budget_cents, has_pets, living_situation')
               .eq('user_id', user.id)
               .maybeSingle(),
-            supabase.from('tenant_questionnaire').select('answers').eq('user_id', user.id).maybeSingle(),
+            supabase
+              .from('tenant_questionnaire')
+              .select('answers, participates_in_voucher_program, voucher_coverage_percentage')
+              .eq('user_id', user.id)
+              .maybeSingle(),
             supabase
               .from('universal_applications')
               .select('status, valid_until, created_at')
@@ -169,7 +174,20 @@ export function AccountPage() {
         setLandlordReviewsAboutMe(
           normalizeLandlordReviewRows((ratingsRaw ?? []) as unknown as LandlordReviewAboutTenantRow[]),
         )
-        setBankVerification((bankRow as typeof bankVerification) ?? null)
+        const voucherFullyCovered =
+          Boolean((questionnaireData as { participates_in_voucher_program?: boolean } | null)?.participates_in_voucher_program) &&
+          Number((questionnaireData as { voucher_coverage_percentage?: number } | null)?.voucher_coverage_percentage) === 100
+        const bankRowTyped = bankRow as { income_verified: boolean | null; balances_verified: boolean | null; identity_verified: boolean | null } | null
+        setBankVerification(
+          bankRowTyped || voucherFullyCovered
+            ? {
+                income_verified: bankRowTyped?.income_verified ?? null,
+                balances_verified: bankRowTyped?.balances_verified ?? null,
+                identity_verified: bankRowTyped?.identity_verified ?? null,
+                income_satisfied: Boolean(bankRowTyped?.income_verified) || voucherFullyCovered,
+              }
+            : null,
+        )
         setTenantScreening((screeningRow as typeof tenantScreening) ?? null)
       } else {
         setLandlordReviewsAboutMe([])
@@ -221,7 +239,7 @@ export function AccountPage() {
   const verificationItems = useMemo<VerificationStatusItem[]>(
     () => [
       { label: 'Identity verified', complete: !!bankVerification?.identity_verified },
-      { label: 'Income verified', complete: !!bankVerification?.income_verified },
+      { label: 'Income verified', complete: !!(bankVerification?.income_satisfied ?? bankVerification?.income_verified) },
       { label: 'Funds verified', complete: !!bankVerification?.balances_verified },
       { label: 'Background check', complete: tenantScreening?.status === 'complete' },
     ],

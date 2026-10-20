@@ -4,7 +4,7 @@ import { fetchAdminDirectory, type AdminDirectoryUser } from '../../lib/adminApi
 import { AdminPageHeader, AdminSearchInput, admin } from './adminUi'
 
 const PAGE_SIZE = 25
-type RoleFilter = 'all' | 'landlord' | 'tenant' | 'admin'
+type RoleFilter = 'all' | 'landlord' | 'listing_agent' | 'tenant' | 'admin'
 
 function matchesSearch(u: AdminDirectoryUser, q: string): boolean {
   if (!q) return true
@@ -25,7 +25,9 @@ export function AdminUsersPage() {
   const [searchParams] = useSearchParams()
   const roleParam = searchParams.get('role')
   const initialRole: RoleFilter =
-    roleParam === 'landlord' || roleParam === 'tenant' || roleParam === 'admin' ? roleParam : 'all'
+    roleParam === 'landlord' || roleParam === 'listing_agent' || roleParam === 'tenant' || roleParam === 'admin'
+      ? roleParam
+      : 'all'
 
   const [users, setUsers] = useState<AdminDirectoryUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -111,6 +113,7 @@ export function AdminUsersPage() {
               >
                 <option value="all">All roles</option>
                 <option value="landlord">Landlords</option>
+                <option value="listing_agent">Listing agents</option>
                 <option value="tenant">Tenants</option>
                 <option value="admin">Admins</option>
               </select>
@@ -139,18 +142,23 @@ export function AdminUsersPage() {
                   <th className="px-4 py-3">Display name</th>
                   <th className="px-4 py-3">Role</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Paid</th>
+                  <th className="px-4 py-3">Properties</th>
+                  <th className="px-4 py-3">Link views</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500">
+                    <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500">
                       {users.length === 0 ? 'No users in directory.' : 'No users match your search.'}
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((u) => (
+                  paginated.map((u) => {
+                    const isLandlordLike = u.role === 'landlord' || u.role === 'listing_agent'
+                    return (
                     <tr key={u.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono text-xs text-gray-800">{u.email || '—'}</td>
                       <td className="px-4 py-3 text-gray-700">{u.display_name || '—'}</td>
@@ -166,13 +174,41 @@ export function AdminUsersPage() {
                           <span className="text-emerald-700">Active</span>
                         )}
                       </td>
+                      <td className="px-4 py-3">
+                        {!isLandlordLike ? (
+                          <span className="text-gray-300">—</span>
+                        ) : u.has_paid_subscription ? (
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">Paid</span>
+                        ) : (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">Unpaid</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {!isLandlordLike ? (
+                          <span className="text-gray-300">—</span>
+                        ) : u.property_count === 0 ? (
+                          <span className="font-medium text-amber-700">0</span>
+                        ) : (
+                          <span className="tabular-nums text-gray-800">{u.property_count}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {!isLandlordLike ? (
+                          <span className="text-gray-300">—</span>
+                        ) : u.portal_link_views === 0 ? (
+                          <span className="font-medium text-amber-700">0</span>
+                        ) : (
+                          <span className="tabular-nums text-gray-800">{u.portal_link_views}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <Link to={`/admin/users/${u.id}`} className={admin.textLink}>
                           View
                         </Link>
                       </td>
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>

@@ -42,11 +42,13 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
       .eq('id', user.id)
       .maybeSingle()
 
+    const dbRole = data?.role as string | undefined
     let resolved: ProfileRole =
-      data?.role === 'admin' ? 'admin' : data?.role === 'landlord' ? 'landlord' : 'tenant'
-    const signedUpAsLandlord = user.user_metadata?.role === 'landlord'
-    if (resolved !== 'admin' && signedUpAsLandlord && resolved !== 'landlord') {
-      await supabase.from('profiles').update({ role: 'landlord' }).eq('id', user.id)
+      dbRole === 'admin' ? 'admin' : dbRole === 'landlord' || dbRole === 'listing_agent' ? 'landlord' : 'tenant'
+    const metaRole = user.user_metadata?.role as string | undefined
+    const signedUpAsLandlord = metaRole === 'landlord' || metaRole === 'listing_agent'
+    if (resolved !== 'admin' && signedUpAsLandlord && dbRole !== 'landlord' && dbRole !== 'listing_agent') {
+      await supabase.from('profiles').update({ role: metaRole === 'listing_agent' ? 'listing_agent' : 'landlord' }).eq('id', user.id)
       resolved = 'landlord'
     }
 
@@ -91,12 +93,14 @@ export function useProfileRole(user: User | null): UseProfileRoleResult {
         return
       }
 
+      const dbRole = data?.role as string | undefined
       let resolved: ProfileRole =
-        data?.role === 'admin' ? 'admin' : data?.role === 'landlord' ? 'landlord' : 'tenant'
-      const signedUpAsLandlord = currentUserAfter.user_metadata?.role === 'landlord'
+        dbRole === 'admin' ? 'admin' : dbRole === 'landlord' || dbRole === 'listing_agent' ? 'landlord' : 'tenant'
+      const metaRole = currentUserAfter.user_metadata?.role as string | undefined
+      const signedUpAsLandlord = metaRole === 'landlord' || metaRole === 'listing_agent'
 
-      if (resolved !== 'admin' && signedUpAsLandlord && resolved !== 'landlord') {
-        await supabase.from('profiles').update({ role: 'landlord' }).eq('id', userId)
+      if (resolved !== 'admin' && signedUpAsLandlord && dbRole !== 'landlord' && dbRole !== 'listing_agent') {
+        await supabase.from('profiles').update({ role: metaRole === 'listing_agent' ? 'listing_agent' : 'landlord' }).eq('id', userId)
         resolved = 'landlord'
       }
 

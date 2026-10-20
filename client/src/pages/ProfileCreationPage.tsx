@@ -20,6 +20,8 @@ export function ProfileCreationPage() {
   const [photoError, setPhotoError] = useState<string | null>(null)
   const [photoPreviewOpen, setPhotoPreviewOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [fullNameError, setFullNameError] = useState<string | null>(null)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -92,6 +94,18 @@ export function ProfileCreationPage() {
 
   async function handleNext() {
     if (!user) return
+    if (profileRole === 'landlord') {
+      if (!fullName.trim()) {
+        setFullNameError('Full name is required.')
+        return
+      }
+      if (!phone.trim()) {
+        setPhoneError('Phone number is required.')
+        return
+      }
+    }
+    setFullNameError(null)
+    setPhoneError(null)
     setLoading(true)
     await supabase
       .from('profiles')
@@ -226,15 +240,20 @@ export function ProfileCreationPage() {
                     <input
                       id="full-name"
                       type="text"
+                      required
                       value={fullName}
-                      onChange={(event) => setFullName(event.target.value)}
+                      onChange={(event) => {
+                        setFullName(event.target.value)
+                        if (fullNameError) setFullNameError(null)
+                      }}
                       placeholder="Enter your full name"
-                      className="w-full rounded-lg border border-gray-200 px-4 py-3 pr-10 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
+                      className={`w-full rounded-lg border px-4 py-3 pr-10 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none ${fullNameError ? 'border-red-400' : 'border-gray-200 focus:border-gray-300'}`}
                     />
                     <svg className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
+                  {fullNameError ? <p className="mt-1 text-xs text-red-600">{fullNameError}</p> : null}
                 </div>
 
                 <div>
@@ -246,14 +265,18 @@ export function ProfileCreationPage() {
                       id="phone"
                       type="tel"
                       value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
+                      onChange={(event) => {
+                        setPhone(event.target.value)
+                        if (phoneError) setPhoneError(null)
+                      }}
                       placeholder="Enter your phone number"
-                      className="w-full rounded-lg border border-gray-200 px-4 py-3 pr-10 text-sm text-gray-700 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
+                      className={`w-full rounded-lg border px-4 py-3 pr-10 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none ${phoneError ? 'border-red-400' : 'border-gray-200 focus:border-gray-300'}`}
                     />
                     <svg className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h2.28a2 2 0 011.897 1.368l1.156 3.47a2 2 0 01-.455 2.11l-1.274 1.274a16 16 0 006.364 6.364l1.274-1.274a2 2 0 012.11-.455l3.47 1.156A2 2 0 0121 18.72V21a2 2 0 01-2 2h-1C9.716 23 1 14.284 1 3V2a2 2 0 012-2z" />
                     </svg>
                   </div>
+                  {phoneError ? <p className="mt-1 text-xs text-red-600">{phoneError}</p> : null}
                 </div>
 
                 <div>

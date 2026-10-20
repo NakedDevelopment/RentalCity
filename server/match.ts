@@ -157,6 +157,8 @@ export type MatchResult = {
   reasons: string[]
   overall: number
   dimensions: MatchDimensions
+  /** Distance in miles between tenant and property, when both have a known location. */
+  distanceMiles?: number | null
 }
 
 export function computeMatch(

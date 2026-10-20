@@ -18,6 +18,7 @@ import {
 } from './match'
 import { geocodeAddress, buildAddressString } from './geocode'
 import { rentCastCoordinates } from '../shared/reportCoordinates'
+import { haversineMiles, DEFAULT_MATCH_RADIUS_MILES } from './geo'
 import type { PlaidApi } from 'plaid'
 import {
   getPlaidClient,
@@ -202,6 +203,10 @@ type LandlordCatalogRowOut = {
   match: MatchResult & { tenantScore?: number | null }
   name: string
   avatarUrl: string | null
+  participatesInVoucherProgram: boolean
+  voucherCoveragePercentage: number | null
+  /** Distance in miles between the tenant's known location and the property, when both are known. */
+  distanceMiles: number | null
 }
 
 /** Same candidate set as POST /api/matches/landlord-catalog (used for auth + listing). */
@@ -210,13 +215,14 @@ async function buildLandlordCatalogRows(
   landlordId: string,
   uniquePids: string[],
   limitPerProperty: number,
+  radiusMiles: number = DEFAULT_MATCH_RADIUS_MILES,
 ): Promise<LandlordCatalogRowOut[]> {
   const { data: properties } = await admin
     .from('properties')
-    .select('id, landlord_id, monthly_rent_cents')
+    .select('id, landlord_id, monthly_rent_cents, lat, lng')
     .in('id', uniquePids)
     .eq('landlord_id', landlordId)
-  const propList = (properties ?? []) as Array<{ id: string; landlord_id: string; monthly_rent_cents?: number | null }>
+  const propList = (properties ?? []) as Array<{ id: string; landlord_id: string; monthly_rent_cents?: number | null; lat?: number | null; lng?: number | null }>
   if (propList.length === 0) return []
 
   const landlordIds = [...new Set(propList.map((p) => p.landlord_id))]
@@ -238,7 +244,7 @@ async function buildLandlordCatalogRows(
   const { data: tenantRows } = await admin
     .from('tenant_questionnaire')
     .select(
-      'user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program',
+      'user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program, voucher_coverage_percentage',
     )
     .order('updated_at', { ascending: false })
     .limit(450)
@@ -252,6 +258,7 @@ async function buildLandlordCatalogRows(
     payment_risk_score?: number | null
     lifestyle_score?: number | null
     participates_in_voucher_program?: boolean | null
+    voucher_coverage_percentage?: number | null
   }
   const tqList = (tenantRows ?? []) as TQ[]
   if (tqList.length === 0) return []
@@ -270,6 +277,20 @@ async function buildLandlordCatalogRows(
       display_name: row.display_name ?? null,
       avatar_url: row.avatar_url ?? null,
     })
+  }
+
+  const [{ data: tenantPrefRows }, { data: tenantAppProfileRows }] = await Promise.all([
+    admin.from('tenant_preferences').select('user_id, location_lat, location_lng').in('user_id', tids),
+    admin.from('tenant_application_profiles').select('tenant_id, lat, lng').in('tenant_id', tids),
+  ])
+  const tenantLocationById = new Map<string, { lat: number | null; lng: number | null }>()
+  for (const row of (tenantAppProfileRows ?? []) as Array<{ tenant_id: string; lat: number | null; lng: number | null }>) {
+    tenantLocationById.set(row.tenant_id, { lat: row.lat, lng: row.lng })
+  }
+  for (const row of (tenantPrefRows ?? []) as Array<{ user_id: string; location_lat: number | null; location_lng: number | null }>) {
+    if (row.location_lat != null && row.location_lng != null) {
+      tenantLocationById.set(row.user_id, { lat: row.location_lat, lng: row.location_lng })
+    }
   }
 
   const nowIso = new Date().toISOString()
@@ -309,6 +330,13 @@ async function buildLandlordCatalogRows(
 
       const inviteLandlordId = inviteLandlordByTenant.get(tid) ?? null
       if (inviteLandlordId != null && prop.landlord_id !== inviteLandlordId) continue
+
+      const tenantLoc = tenantLocationById.get(tid) ?? null
+      let distanceMiles: number | null = null
+      if (tenantLoc?.lat != null && tenantLoc?.lng != null && prop.lat != null && prop.lng != null) {
+        distanceMiles = Math.round(haversineMiles(tenantLoc.lat, tenantLoc.lng, prop.lat, prop.lng))
+        if (distanceMiles > radiusMiles) continue
+      }
 
       const tenantAnswers = tenantData.answers ?? {}
       const baseTenantHistory = tenantAnswersToHistory(tenantAnswers)
@@ -363,6 +391,9 @@ async function buildLandlordCatalogRows(
         match: m,
         name: prof.display_name?.trim() || 'Tenant',
         avatarUrl: prof.avatar_url ?? null,
+        participatesInVoucherProgram: Boolean(tenantData.participates_in_voucher_program),
+        voucherCoveragePercentage: tenantData.voucher_coverage_percentage ?? null,
+        distanceMiles,
       })
     }
 
@@ -2328,10 +2359,13 @@ app.post('/api/matches/for-tenant', async (req, res) => {
   const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
   const user = await authUser(token)
   if (!user) return res.status(401).json({ error: 'Authentication required' })
-  const { tenantId, propertyIds, limit: limitRaw } = req.body as {
+  const { tenantId, propertyIds, limit: limitRaw, radiusMiles: radiusRaw, tenantLat: tenantLatRaw, tenantLng: tenantLngRaw } = req.body as {
     tenantId?: string
     propertyIds?: string[]
     limit?: unknown
+    radiusMiles?: unknown
+    tenantLat?: unknown
+    tenantLng?: unknown
   }
   if (!tenantId || !Array.isArray(propertyIds) || tenantId !== user.id) {
     return res.status(400).json({ error: 'Invalid request: tenantId must match authenticated user' })
@@ -2342,15 +2376,27 @@ app.post('/api/matches/for-tenant', async (req, res) => {
     typeof limitRaw === 'number' && Number.isFinite(limitRaw) && limitRaw > 0
       ? Math.min(250, Math.floor(limitRaw))
       : undefined
+  const radiusMiles = typeof radiusRaw === 'number' && Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : DEFAULT_MATCH_RADIUS_MILES
 
-  const [tenantRow, propertiesRows, inviteRow] = await Promise.all([
+  const [tenantRow, propertiesRows, inviteRow, tenantPrefsRow, tenantAppProfileRow] = await Promise.all([
     admin.from('tenant_questionnaire').select('answers, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program').eq('user_id', tenantId).maybeSingle(),
-    admin.from('properties').select('id, landlord_id, monthly_rent_cents').in('id', uniqueIds),
+    admin.from('properties').select('id, landlord_id, monthly_rent_cents, lat, lng').in('id', uniqueIds),
     admin.from('tenant_invite_restrictions').select('landlord_id').eq('tenant_id', tenantId).gt('ends_at', new Date().toISOString()).maybeSingle(),
+    admin.from('tenant_preferences').select('location_lat, location_lng').eq('user_id', tenantId).maybeSingle(),
+    admin.from('tenant_application_profiles').select('lat, lng').eq('tenant_id', tenantId).maybeSingle(),
   ])
   const tenantData = tenantRow.data
-  const properties = (propertiesRows.data ?? []) as { id: string; landlord_id: string; monthly_rent_cents?: number | null }[]
+  const properties = (propertiesRows.data ?? []) as { id: string; landlord_id: string; monthly_rent_cents?: number | null; lat?: number | null; lng?: number | null }[]
   const inviteLandlordId = (inviteRow.data as { landlord_id?: string } | null)?.landlord_id ?? null
+
+  // Effective tenant location priority: explicit request override (ad-hoc search-bar location) >
+  // saved search preference > their rental application address. Skip filtering if none exist.
+  const explicitLat = typeof tenantLatRaw === 'number' && Number.isFinite(tenantLatRaw) ? tenantLatRaw : null
+  const explicitLng = typeof tenantLngRaw === 'number' && Number.isFinite(tenantLngRaw) ? tenantLngRaw : null
+  const prefsLoc = tenantPrefsRow.data as { location_lat?: number | null; location_lng?: number | null } | null
+  const appLoc = tenantAppProfileRow.data as { lat?: number | null; lng?: number | null } | null
+  const tenantLat = explicitLat ?? prefsLoc?.location_lat ?? appLoc?.lat ?? null
+  const tenantLng = explicitLng ?? prefsLoc?.location_lng ?? appLoc?.lng ?? null
   if (!tenantData) {
     const empty: Record<string, MatchResult & { tenantScore?: number }> = {}
     uniqueIds.forEach((id) => { empty[id] = { eligible: false, reasons: ['Tenant questionnaire not completed.'], overall: 0, dimensions: { affordability: 0, stability: 0, risk: 0, lifestyle: 0, policy: 0 } } })
@@ -2393,14 +2439,25 @@ app.post('/api/matches/for-tenant', async (req, res) => {
       }
       continue
     }
+    if (tenantLat != null && tenantLng != null && prop.lat != null && prop.lng != null) {
+      const distance = haversineMiles(tenantLat, tenantLng, prop.lat, prop.lng)
+      if (distance > radiusMiles) {
+        matches[prop.id] = { eligible: false, reasons: ['Outside your search radius.'], overall: 0, dimensions: dimZero, distanceMiles: Math.round(distance) }
+        continue
+      }
+    }
     const rentDollars = (prop.monthly_rent_cents != null ? Number(prop.monthly_rent_cents) : 0) / 100
     const affordability = tenantMonthlyIncome != null && tenantMonthlyIncome > 0 && rentDollars > 0
       ? scoreRentToIncome(rentDollars, tenantMonthlyIncome)
       : fallbackAffordability
     const tenantDims = { ...baseTenantDims, affordability }
+    const distanceMiles =
+      tenantLat != null && tenantLng != null && prop.lat != null && prop.lng != null
+        ? Math.round(haversineMiles(tenantLat, tenantLng, prop.lat, prop.lng))
+        : null
     const landlord = landlordByUserId.get(prop.landlord_id)
     if (!landlord) {
-      matches[prop.id] = { eligible: true, reasons: [], overall: 50, dimensions: { affordability: tenantDims.affordability, stability: tenantDims.stability, risk: 5, lifestyle: 5, policy: 5 } }
+      matches[prop.id] = { eligible: true, reasons: [], overall: 50, dimensions: { affordability: tenantDims.affordability, stability: tenantDims.stability, risk: 5, lifestyle: 5, policy: 5 }, distanceMiles }
       continue
     }
     const prefs = landlordAnswersToPrefs(landlord.answers ?? {})
@@ -2411,7 +2468,7 @@ app.post('/api/matches/for-tenant', async (req, res) => {
       conflictStyleScore: landlord.conflict_style_score ?? prefs.conflictStyleScore,
       acceptsHousingVouchers: landlord.accepts_housing_vouchers ?? prefs.acceptsHousingVouchers,
     }
-    matches[prop.id] = computeMatch(tenantDims, prefsWithScores, tenantHistory)
+    matches[prop.id] = { ...computeMatch(tenantDims, prefsWithScores, tenantHistory), distanceMiles }
   }
   for (const id of uniqueIds) {
     if (!matches[id]) matches[id] = { eligible: false, reasons: ['Property not found.'], overall: 0, dimensions: { affordability: 0, stability: 0, risk: 0, lifestyle: 0, policy: 0 } }
@@ -2499,10 +2556,11 @@ app.post('/api/matches/landlord-catalog', async (req, res) => {
   const user = await authUser(token)
   if (!user) return res.status(401).json({ error: 'Authentication required' })
 
-  const { landlordId, propertyIds, limitPerProperty: limitRaw } = req.body as {
+  const { landlordId, propertyIds, limitPerProperty: limitRaw, radiusMiles: radiusRaw } = req.body as {
     landlordId?: string
     propertyIds?: string[]
     limitPerProperty?: unknown
+    radiusMiles?: unknown
   }
   if (!landlordId || !Array.isArray(propertyIds) || landlordId !== user.id) {
     return res.status(400).json({ error: 'Invalid request: landlordId must match authenticated user' })
@@ -2517,8 +2575,9 @@ app.post('/api/matches/landlord-catalog', async (req, res) => {
       typeof limitRaw === 'number' && Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 50,
     ),
   )
+  const radiusMiles = typeof radiusRaw === 'number' && Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : DEFAULT_MATCH_RADIUS_MILES
 
-  const out = await buildLandlordCatalogRows(admin, landlordId, uniquePids, limitPerProperty)
+  const out = await buildLandlordCatalogRows(admin, landlordId, uniquePids, limitPerProperty, radiusMiles)
   return res.json({ rows: out })
 })
 
@@ -2592,8 +2651,45 @@ app.get('/api/admin/directory', async (req, res) => {
     return res.status(500).json({ error: cErr.message })
   }
 
+  const { data: memberships, error: mErr } = await admin
+    .from('landlord_memberships')
+    .select('landlord_id, status, current_period_end')
+    .in('landlord_id', ids)
+  if (mErr) {
+    return res.status(500).json({ error: mErr.message })
+  }
+
+  const { data: propertyRows, error: propErr } = await admin
+    .from('properties')
+    .select('landlord_id')
+    .in('landlord_id', ids)
+  if (propErr) {
+    return res.status(500).json({ error: propErr.message })
+  }
+  const propertyCountByLandlord = new Map<string, number>()
+  for (const row of propertyRows ?? []) {
+    const landlordId = row.landlord_id as string
+    propertyCountByLandlord.set(landlordId, (propertyCountByLandlord.get(landlordId) ?? 0) + 1)
+  }
+
+  const { data: inviteLinks, error: ilErr } = await admin
+    .from('landlord_invite_links')
+    .select('landlord_id, view_count')
+    .in('landlord_id', ids)
+  if (ilErr) {
+    return res.status(500).json({ error: ilErr.message })
+  }
+  const portalViewsByLandlord = new Map<string, number>()
+  for (const row of inviteLinks ?? []) {
+    const landlordId = row.landlord_id as string
+    portalViewsByLandlord.set(landlordId, (portalViewsByLandlord.get(landlordId) ?? 0) + (Number(row.view_count) || 0))
+  }
+
   const profById = new Map((profiles ?? []).map((p) => [p.id as string, p]))
   const credById = new Map((credentials ?? []).map((c) => [c.landlord_id as string, c]))
+  const membershipById = new Map(
+    (memberships ?? []).map((m) => [m.landlord_id as string, m as { status?: string; current_period_end?: string | null }]),
+  )
   const rows = users.map((u) => {
     const p = profById.get(u.id)
     const c = credById.get(u.id) as {
@@ -2617,6 +2713,9 @@ app.get('/api/admin/directory', async (req, res) => {
       docusign_envelope_status: p?.docusign_envelope_status === 'completed' && p?.equifax_agreement_version !== EQUIFAX_APPLICATION_VERSION
         ? 'needs_resign' : ((p?.docusign_envelope_status as string | null | undefined) ?? null),
       plaid_agreement_signed_at: (p?.plaid_agreement_signed_at as string | null | undefined) ?? null,
+      has_paid_subscription: membershipIsActive(membershipById.get(u.id) ?? null),
+      property_count: propertyCountByLandlord.get(u.id) ?? 0,
+      portal_link_views: portalViewsByLandlord.get(u.id) ?? 0,
       equifax_credentials: c
         ? {
             memberNumberLast4: c.member_number_last4 ?? '',
@@ -2668,12 +2767,13 @@ function verificationRow(row: {
 }) {
   const num = (v: number | string | null | undefined) =>
     v === null || v === undefined ? null : Number(v)
+  const incomeVerified = Boolean(row.income_verified)
   return {
     status: (row.status as 'processing' | 'complete' | 'failed' | null) ?? 'processing',
     institutionName: row.institution_name,
     accountsCount: row.accounts_count ?? 0,
 
-    incomeVerified: Boolean(row.income_verified),
+    incomeVerified,
     balancesVerified: Boolean(row.balances_verified),
     debtsVerified: Boolean(row.debts_verified),
     dtiRatio: num(row.dti_ratio ?? null),
@@ -2684,6 +2784,12 @@ function verificationRow(row: {
     assetTier: row.asset_tier ?? null,
 
     lastVerifiedAt: row.last_verified_at,
+
+    // Default to the Plaid signal; GET /api/plaid/verification overrides this with the
+    // shared voucher-aware rule. Other endpoints (exchange/refresh) reflect Plaid only,
+    // which is correct for those flows (the tenant is actively connecting a bank there).
+    incomeSatisfied: incomeVerified,
+    incomeSatisfiedReason: (incomeVerified ? 'plaid' : null) as 'plaid' | 'voucher' | null,
   }
 }
 
@@ -2767,6 +2873,45 @@ app.post('/api/plaid/exchange', async (req, res) => {
   }
 })
 
+/**
+ * Shared income-satisfied rule: a tenant's income is treated as verified if Plaid
+ * confirmed it OR their housing voucher covers 100% of rent. Never writes a row to
+ * `plaid_financial_verifications` for the voucher path — DB state stays Plaid-only.
+ */
+async function isVoucherFullyCovered(admin: SupabaseClient, userId: string): Promise<boolean> {
+  const { data } = await admin
+    .from('tenant_questionnaire')
+    .select('participates_in_voucher_program, voucher_coverage_percentage')
+    .eq('user_id', userId)
+    .maybeSingle()
+  return Boolean(data?.participates_in_voucher_program) && Number(data?.voucher_coverage_percentage) === 100
+}
+
+function withIncomeSatisfied(
+  verification: ReturnType<typeof verificationRow> | null,
+  voucherFullyCovered: boolean,
+): (ReturnType<typeof verificationRow> & { incomeSatisfied: boolean; incomeSatisfiedReason: 'plaid' | 'voucher' | null }) | null {
+  if (!verification && !voucherFullyCovered) return null
+  const base =
+    verification ??
+    verificationRow({
+      status: 'complete',
+      institution_name: null,
+      accounts_count: 0,
+      income_verified: false,
+      balances_verified: false,
+      debts_verified: false,
+      dti_ratio: null,
+      identity_verified: false,
+      monthly_income_range_low_cents: null,
+      monthly_income_range_high_cents: null,
+      asset_tier: null,
+      last_verified_at: null,
+    })
+  const incomeSatisfiedReason: 'plaid' | 'voucher' | null = base.incomeVerified ? 'plaid' : voucherFullyCovered ? 'voucher' : null
+  return { ...base, incomeSatisfied: base.incomeVerified || voucherFullyCovered, incomeSatisfiedReason }
+}
+
 app.get('/api/plaid/verification', async (req, res) => {
   const user = await bearerUser(req)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
@@ -2782,6 +2927,8 @@ app.get('/api/plaid/verification', async (req, res) => {
     console.error('Plaid verification read error:', error.message)
     return res.status(500).json({ error: 'Could not load verification status' })
   }
+
+  const voucherFullyCovered = await isVoucherFullyCovered(admin, user.id)
 
   // Self-heal: the client polls this endpoint every few seconds while
   // status is 'processing', so use each poll as a retry opportunity too —
@@ -2804,14 +2951,14 @@ app.get('/api/plaid/verification', async (req, res) => {
           user.id,
           item.asset_report_token as string,
         )
-        return res.json({ verification })
+        return res.json({ verification: withIncomeSatisfied(verification, voucherFullyCovered) })
       } catch (err) {
         console.error('Plaid verification self-heal error:', (err as Error)?.message)
       }
     }
   }
 
-  return res.json({ verification: data ? verificationRow(data) : null })
+  return res.json({ verification: withIncomeSatisfied(data ? verificationRow(data) : null, voucherFullyCovered) })
 })
 
 app.post('/api/plaid/refresh', async (req, res) => {

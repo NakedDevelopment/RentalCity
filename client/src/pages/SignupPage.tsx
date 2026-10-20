@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { trackMetaEvent } from '../lib/metaPixel'
 
-type Role = 'tenant' | 'landlord'
+type Role = 'tenant' | 'landlord' | 'listing_agent'
 
 export function SignupPage() {
   const [role, setRole] = useState<Role | null>(null)
@@ -96,7 +96,7 @@ export function SignupPage() {
       session = sessionData?.session ?? null
     }
     if (session) {
-      if (role === 'landlord') {
+      if (role === 'landlord' || role === 'listing_agent') {
         navigate('/onboarding/profile', { replace: true })
       } else {
         navigate('/rental-needs', { replace: true })
@@ -171,6 +171,13 @@ export function SignupPage() {
               <span className="min-w-0 flex-1"><span className="block text-base font-semibold text-[#17324d]">Landlord</span><span className="mt-1 block text-sm leading-5 text-[#627589]">I&apos;m listing a property and want to find tenants.</span></span>
               <svg aria-hidden="true" className="h-5 w-5 shrink-0 text-[#9bb0c0] transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="m9 18 6-6-6-6" /></svg>
             </button>
+            <button type="button" data-testid="button-role-listing-agent" onClick={() => chooseRole('listing_agent')} className="signup-option group flex w-full items-center gap-4 rounded-2xl border border-[#dce7f0] bg-white p-5 text-left shadow-[0_4px_16px_rgba(35,74,105,.05)] focus:outline-none focus:ring-2 focus:ring-[#2a9dcc] focus:ring-offset-2 sm:p-6">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#fff4e6] text-[#c47a1e]">
+                <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              </span>
+              <span className="min-w-0 flex-1"><span className="block text-base font-semibold text-[#17324d]">Listing Agent</span><span className="mt-1 block text-sm leading-5 text-[#627589]">I&apos;m a real estate agent listing properties on behalf of landlords.</span></span>
+              <svg aria-hidden="true" className="h-5 w-5 shrink-0 text-[#9bb0c0] transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="m9 18 6-6-6-6" /></svg>
+            </button>
             <button type="button" data-testid="button-role-tenant" onClick={() => chooseRole('tenant')} className="signup-option group flex w-full items-center gap-4 rounded-2xl border border-[#dce7f0] bg-white p-5 text-left shadow-[0_4px_16px_rgba(35,74,105,.05)] focus:outline-none focus:ring-2 focus:ring-[#2a9dcc] focus:ring-offset-2 sm:p-6">
               <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#eef1ff] text-[#5369c9]">
                 <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
@@ -194,12 +201,12 @@ export function SignupPage() {
             Change role
           </button>
           <div className="mb-7 rounded-xl border border-[#c9e8f3] bg-[#f0faff] px-4 py-3">
-            <p data-testid="text-selected-role" className="text-sm font-semibold text-[#176b8d]">Signing up as a {role === 'landlord' ? 'Landlord' : 'Tenant'}</p>
-            <p className="mt-1 text-xs text-[#627589]">{role === 'landlord' ? 'You are ready to find the right tenants.' : 'You are ready to find your next home.'}</p>
+            <p data-testid="text-selected-role" className="text-sm font-semibold text-[#176b8d]">Signing up as a {role === 'landlord' ? 'Landlord' : role === 'listing_agent' ? 'Listing Agent' : 'Tenant'}</p>
+            <p className="mt-1 text-xs text-[#627589]">{role === 'landlord' ? 'You are ready to find the right tenants.' : role === 'listing_agent' ? 'You are ready to list properties for your clients.' : 'You are ready to find your next home.'}</p>
           </div>
           <h1 className="mb-2 text-[2rem] font-semibold tracking-[-.04em] text-[#17324d]">Create your account</h1>
           <p className="mb-8 text-sm leading-6 text-[#627589]">
-            {role === 'landlord' ? 'Start listing your property and connect with quality tenants.' : 'Tell us a little about yourself and find a place that fits.'}
+            {role === 'landlord' ? 'Start listing your property and connect with quality tenants.' : role === 'listing_agent' ? 'List properties on behalf of landlords and connect with quality tenants.' : 'Tell us a little about yourself and find a place that fits.'}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">

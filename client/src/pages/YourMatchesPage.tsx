@@ -8,6 +8,7 @@ import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
 import { trackMetaEvent } from '../lib/metaPixel'
+import { buildFallbackAddress, useStreetViewFallback } from '../lib/streetViewFallback'
 import {
   fetchLandlordMatchCatalog,
   fetchMatchesForTenant,
@@ -43,6 +44,7 @@ type MatchCard = {
   landlordDisplayName: string | null
   photoUrl: string | null
   photoAlt: string
+  photoAddress: string
 }
 
 type LandlordMatchStatus = 'locked' | 'unlocked' | 'accepted' | 'declined'
@@ -77,6 +79,9 @@ type LandlordMatchCard = {
   creditScore: string
   tenantScore: string
   leaseIntent: string
+  participatesInVoucherProgram: boolean
+  voucherCoveragePercentage: number | null
+  distanceMiles: number | null
 }
 
 const SAVED_IDS_KEY = 'rental-city-saved-matches'
@@ -91,9 +96,10 @@ function formatRelativeTime(createdAt: string) {
   return `Applied ${Math.floor(diffDays / 7)} weeks ago`
 }
 
-function MatchCardPhoto({ url, alt }: { url: string | null; alt: string }) {
+function MatchCardPhoto({ url, alt, fallbackAddress }: { url: string | null; alt: string; fallbackAddress?: string }) {
   const [broken, setBroken] = useState(false)
   const show = Boolean(url) && !broken
+  const streetViewUrl = useStreetViewFallback(show ? null : fallbackAddress || null)
   return (
     <div className="mb-4 aspect-[16/7] overflow-hidden rounded-lg bg-gray-100">
       {show ? (
@@ -104,6 +110,13 @@ function MatchCardPhoto({ url, alt }: { url: string | null; alt: string }) {
           loading="lazy"
           onError={() => setBroken(true)}
         />
+      ) : streetViewUrl ? (
+        <div className="relative h-full w-full">
+          <img src={streetViewUrl} alt={alt} className="h-full w-full object-cover" loading="lazy" />
+          <span className="absolute bottom-2 left-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+            Street View
+          </span>
+        </div>
       ) : (
         <div className="flex h-full w-full items-center justify-center">
           <span className="text-sm text-gray-500">No photos yet</span>
@@ -358,6 +371,13 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [applicationIdByPropertyId, setApplicationIdByPropertyId] = useState<Record<string, string>>({})
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
   const [hasActiveUniversalApplication, setHasActiveUniversalApplication] = useState<boolean | null>(null)
+  const [locationQuery, setLocationQuery] = useState('')
+  const [locationLatLng, setLocationLatLng] = useState<{ lat: number; lng: number } | null>(null)
+  const [locationLabel, setLocationLabel] = useState<string | null>(null)
+  const [locationRadiusMiles, setLocationRadiusMiles] = useState(50)
+  const [locationLoading, setLocationLoading] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [landlordRadiusMiles, setLandlordRadiusMiles] = useState(50)
   const [submissionModal, setSubmissionModal] = useState<{ propertyTitle: string } | null>(null)
   const [landlordProperty, setLandlordProperty] = useState('')
   const [landlordFilter, setLandlordFilter] = useState<LandlordMatchFilter>('all')
@@ -513,7 +533,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         .then((verification) => {
           if (cancelled) return
           setIncomeVerification(verification)
-          if (!verification?.incomeVerified && !profileData?.income_verification_prompt_dismissed_at) {
+          if (!verification?.incomeSatisfied && !profileData?.income_verification_prompt_dismissed_at) {
             setIncomePromptOpen(true)
           }
         })
@@ -533,7 +553,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       getPlaidVerification(accessToken)
         .then((verification) => {
           setIncomeVerification(verification)
-          if (verification?.incomeVerified) dismissIncomePrompt()
+          if (verification?.incomeSatisfied) dismissIncomePrompt()
         })
         .catch(() => {})
     }, 8000)
@@ -552,7 +572,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     const { data, error } = await supabase
       .from('properties')
       .select(
-        'id, title, address_line1, city, state, bedrooms, bathrooms, amenities, monthly_rent_cents, landlord_id, photo_urls, photo_labels, landlord:landlord_id(display_name, avatar_url)',
+        'id, title, address_line1, city, state, postal_code, bedrooms, bathrooms, amenities, monthly_rent_cents, landlord_id, photo_urls, photo_labels, landlord:landlord_id(display_name, avatar_url)',
       )
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -568,6 +588,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       address_line1: string
       city: string
       state: string | null
+      postal_code?: string | null
       bedrooms: number
       bathrooms: number
       amenities: unknown
@@ -603,6 +624,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             Array.isArray(p.photo_labels) && p.photo_labels.length > 0
               ? String(p.photo_labels[0] || 'Property photo')
               : 'Property photo',
+          photoAddress: buildFallbackAddress(p),
         }
       }),
     )
@@ -686,7 +708,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     let catalogRows: Awaited<ReturnType<typeof fetchLandlordMatchCatalog>>['rows'] = []
     if (token) {
       try {
-        const data = await fetchLandlordMatchCatalog(token, user.id, propertyIds, { limitPerProperty: 50 })
+        const data = await fetchLandlordMatchCatalog(token, user.id, propertyIds, { limitPerProperty: 50, radiusMiles: landlordRadiusMiles })
         catalogRows = data.rows ?? []
       } catch {
         catalogRows = []
@@ -760,6 +782,9 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         creditScore: '—',
         tenantScore: '—',
         leaseIntent: '—',
+        participatesInVoucherProgram: cr.participatesInVoucherProgram,
+        voucherCoveragePercentage: cr.voucherCoveragePercentage,
+        distanceMiles: cr.distanceMiles,
       })
     }
 
@@ -788,10 +813,31 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         creditScore: '—',
         tenantScore: '—',
         leaseIntent: '—',
+        participatesInVoucherProgram: false,
+        voucherCoveragePercentage: null,
+        distanceMiles: null,
       })
     }
 
     const tenantIds = [...new Set([...mergedByKey.values()].map((m) => m.tenantId))] as string[]
+    if (tenantIds.length > 0) {
+      const { data: voucherRows } = await supabase
+        .from('tenant_questionnaire')
+        .select('user_id, participates_in_voucher_program, voucher_coverage_percentage')
+        .in('user_id', tenantIds)
+      for (const row of (voucherRows ?? []) as Array<{
+        user_id: string
+        participates_in_voucher_program: boolean | null
+        voucher_coverage_percentage: number | null
+      }>) {
+        for (const match of mergedByKey.values()) {
+          if (match.tenantId === row.user_id) {
+            match.participatesInVoucherProgram = Boolean(row.participates_in_voucher_program)
+            match.voucherCoveragePercentage = row.voucher_coverage_percentage
+          }
+        }
+      }
+    }
     const leaseByTenantId = new Map<string, number | null>()
     if (tenantIds.length > 0) {
       const prefsResult = await supabase
@@ -823,7 +869,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     })
 
     setLandlordMatches(mergedList)
-  }, [user])
+  }, [user, landlordRadiusMiles])
 
   const loadLandlordProperties = useCallback(async () => {
     if (!user) return
@@ -926,6 +972,61 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
 
   const toggleAmenity = (key: keyof typeof amenities) =>
     setAmenities((prev) => ({ ...prev, [key]: !prev[key] }))
+
+  async function searchLocationByCity() {
+    if (!locationQuery.trim()) return
+    setLocationLoading(true)
+    setLocationError(null)
+    try {
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token
+      if (!token) throw new Error('Your session expired. Please sign in again.')
+      const res = await fetch('/api/geocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ city: locationQuery.trim() }),
+      })
+      const result = (await res.json()) as { ok: boolean; lat?: number; lng?: number }
+      if (!result.ok || result.lat == null || result.lng == null) {
+        setLocationError('Could not find that location. Try a city, state, or ZIP code.')
+        return
+      }
+      setLocationLatLng({ lat: result.lat, lng: result.lng })
+      setLocationLabel(locationQuery.trim())
+    } catch (err) {
+      setLocationError(err instanceof Error ? err.message : 'Could not search that location')
+    } finally {
+      setLocationLoading(false)
+    }
+  }
+
+  function useMyCurrentLocation() {
+    if (!navigator.geolocation) {
+      setLocationError('Location services are not available in this browser.')
+      return
+    }
+    setLocationLoading(true)
+    setLocationError(null)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationLatLng({ lat: position.coords.latitude, lng: position.coords.longitude })
+        setLocationLabel('Current location')
+        setLocationLoading(false)
+      },
+      () => {
+        setLocationError('Could not access your location. Try searching by city instead.')
+        setLocationLoading(false)
+      },
+      { timeout: 8000 },
+    )
+  }
+
+  function clearLocationSearch() {
+    setLocationQuery('')
+    setLocationLatLng(null)
+    setLocationLabel(null)
+    setLocationError(null)
+  }
 
   const toggleSaved = (id: string) => {
     setSavedIds((prev) => {
@@ -1035,7 +1136,11 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       }
       const ids = filteredMatches.map((m) => m.id)
       try {
-        const matches = await fetchMatchesForTenant(token, user.id, ids, { limit: MAX_TENANT_TOP_MATCHES })
+        const matches = await fetchMatchesForTenant(token, user.id, ids, {
+          limit: MAX_TENANT_TOP_MATCHES,
+          radiusMiles: locationRadiusMiles,
+          ...(locationLatLng ? { tenantLat: locationLatLng.lat, tenantLng: locationLatLng.lng } : {}),
+        })
         if (!cancelled) setMatchByPropertyId(matches)
       } catch {
         if (!cancelled) setMatchByPropertyId({})
@@ -1046,7 +1151,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     return () => {
       cancelled = true
     }
-  }, [user, profileRole, tenantOverallScore, tenantMatchScoreIdsKey])
+  }, [user, profileRole, tenantOverallScore, tenantMatchScoreIdsKey, locationRadiusMiles, locationLatLng])
 
   const hasMatches = profileRole === 'tenant' && tenantOverallScore != null ? matchesToShow.length > 0 : filteredMatches.length > 0
   const statusFilteredLandlordMatches = landlordMatches.filter((match) => {
@@ -1256,6 +1361,34 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
               <div className="border-t border-gray-100 pt-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                   <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:w-24 sm:pt-0">
+                    Radius
+                  </span>
+                  <div className="relative min-w-[min(100%,16rem)] max-w-md flex-1 sm:min-w-[14rem]">
+                    <select
+                      value={landlordRadiusMiles}
+                      onChange={(event) => setLandlordRadiusMiles(Number(event.target.value))}
+                      className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-4 py-2.5 pr-10 text-sm text-gray-700 focus:border-gray-300 focus:outline-none"
+                    >
+                      <option value={25}>25 miles</option>
+                      <option value={50}>50 miles</option>
+                      <option value={100}>100 miles</option>
+                      <option value={10000}>Any distance</option>
+                    </select>
+                    <svg
+                      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                  <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:w-24 sm:pt-0">
                     Tenant
                   </span>
                   <div className="relative min-w-[min(100%,16rem)] max-w-md flex-1 sm:min-w-[14rem]">
@@ -1329,7 +1462,16 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                         >
                           {match.listingLabel}
                         </Link>
-                        <p className="mt-0.5 text-sm text-gray-500">{match.appliedAgo}</p>
+                        <p className="mt-0.5 text-sm text-gray-500">
+                          {match.appliedAgo}
+                          {match.distanceMiles != null ? ` · ${match.distanceMiles} mi away` : ''}
+                        </p>
+                        {match.participatesInVoucherProgram ? (
+                          <span className="mt-1.5 inline-flex items-center rounded-full bg-[#fff4e6] px-3 py-1 text-xs font-medium text-[#c47a1e]">
+                            Housing Voucher
+                            {match.voucherCoveragePercentage != null ? ` — ${match.voucherCoveragePercentage}% covered` : ''}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <span
@@ -1664,7 +1806,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
           <div ref={rentScoreCardRef} className="relative flex-shrink-0 bg-white rounded-xl border border-gray-200 p-4 min-w-[140px]">
             <div className="flex items-center gap-1.5 mb-2">
               <span className="text-sm font-medium text-gray-700">Rent Score</span>
-              <RentScoreVerificationBadge verified={!!incomeVerification?.incomeVerified} />
+              <RentScoreVerificationBadge verified={!!incomeVerification?.incomeSatisfied} />
               {tenantOverallScore != null ? (
                 <button
                   type="button"
@@ -1749,6 +1891,71 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         >
           Saved Properties
         </button>
+      </div>
+
+      {hasActiveUniversalApplication === false && !locationLatLng ? (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Search by location below to see properties near you — we don&apos;t have a saved address for you yet.
+        </div>
+      ) : null}
+
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="min-w-[220px] flex-1">
+          <label htmlFor="location-search" className="block text-xs font-medium text-gray-500 mb-1">
+            Search by city or ZIP
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="location-search"
+              type="text"
+              value={locationQuery}
+              onChange={(e) => setLocationQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); void searchLocationByCity() }
+              }}
+              placeholder="e.g. Austin, TX or 78704"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => void searchLocationByCity()}
+              disabled={locationLoading || !locationQuery.trim()}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Search
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={useMyCurrentLocation}
+            disabled={locationLoading}
+            className="mt-1.5 text-xs font-medium text-gray-600 underline hover:text-gray-900 disabled:opacity-50"
+          >
+            Use my current location
+          </button>
+          {locationError ? <p className="mt-1 text-xs text-red-600">{locationError}</p> : null}
+          {locationLabel ? (
+            <p className="mt-1 text-xs text-gray-600">
+              Showing properties near <span className="font-medium">{locationLabel}</span>.{' '}
+              <button type="button" onClick={clearLocationSearch} className="underline">Clear</button>
+            </p>
+          ) : null}
+        </div>
+        <div>
+          <label htmlFor="location-radius" className="block text-xs font-medium text-gray-500 mb-1">
+            Radius: {locationRadiusMiles} mi
+          </label>
+          <input
+            id="location-radius"
+            type="range"
+            min={10}
+            max={200}
+            step={10}
+            value={locationRadiusMiles}
+            onChange={(e) => setLocationRadiusMiles(Number(e.target.value))}
+            className="w-32 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-4 items-center rounded-lg border border-gray-200 bg-white p-4">
@@ -1859,7 +2066,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
                   </button>
                 </div>
 
-                <MatchCardPhoto url={match.photoUrl} alt={match.photoAlt} />
+                <MatchCardPhoto url={match.photoUrl} alt={match.photoAlt} fallbackAddress={match.photoAddress} />
 
                 <div className="flex-1 flex flex-col">
                   {(() => {
@@ -2125,7 +2332,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
               <div className="flex h-20 w-20 items-center justify-center rounded-full border-[4px] border-emerald-500 bg-white text-3xl font-semibold text-gray-800 shadow-sm">
                 {tenantOverallScore ?? '—'}
               </div>
-              <RentScoreVerificationBadge verified={!!incomeVerification?.incomeVerified} />
+              <RentScoreVerificationBadge verified={!!incomeVerification?.incomeSatisfied} />
             </div>
             <h2 id="income-verification-title" className="mt-6 text-3xl font-semibold tracking-tight text-gray-900">
               Verify your Rent Score

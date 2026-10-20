@@ -4,6 +4,7 @@ import { formatBathrooms, formatBedrooms, formatCurrency } from '../lib/property
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import { PropertyInviteLink } from '../components/PropertyInviteLink'
+import { useStreetViewFallback } from '../lib/streetViewFallback'
 
 type PropertyStatus = 'Active' | 'Draft' | 'Inactive' | 'Leased'
 
@@ -16,6 +17,24 @@ type PropertyCard = {
   status: PropertyStatus
   photoUrl: string | null
   photoLabel: string
+}
+
+function PropertyGridPhoto({ photoUrl, address, title }: { photoUrl: string | null; address: string; title: string }) {
+  const streetViewUrl = useStreetViewFallback(photoUrl ? null : address || null)
+  if (photoUrl) {
+    return <img src={photoUrl} alt={title} className="h-full w-full object-cover" />
+  }
+  if (streetViewUrl) {
+    return (
+      <div className="relative h-full w-full">
+        <img src={streetViewUrl} alt={title} className="h-full w-full object-cover" />
+        <span className="absolute bottom-2 left-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+          Street View
+        </span>
+      </div>
+    )
+  }
+  return <span className="text-sm text-white/90">No photos yet</span>
 }
 
 const PAGE_SIZE = 6
@@ -296,15 +315,7 @@ export function PropertiesPage() {
           {properties.map((property) => (
             <article key={property.id} className="group overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_14px_32px_rgba(0,0,0,0.03)] transition-shadow hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)]">
               <div className="flex aspect-[16/8.4] items-center justify-center overflow-hidden bg-gradient-to-br from-[#F8FAFD] to-[#EEF4FE]">
-                {property.photoUrl ? (
-                  <img
-                    src={property.photoUrl}
-                    alt={property.title}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="text-sm text-white/90">{property.photoLabel}</span>
-                )}
+                <PropertyGridPhoto photoUrl={property.photoUrl} address={property.address} title={property.title} />
               </div>
 
               <div className="px-5 py-4">

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
 
-type Role = 'tenant' | 'landlord'
+type Role = 'tenant' | 'landlord' | 'listing_agent'
 
 export function RoleSelectionPage() {
   const [role, setRole] = useState<Role | null>(null)
@@ -35,7 +35,7 @@ export function RoleSelectionPage() {
         Are you here to find a place to rent or list your property for others to rent?
       </h2>
 
-      <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 gap-4 mb-8">
         <button
           type="button"
           onClick={() => setRole('tenant')}
@@ -59,6 +59,18 @@ export function RoleSelectionPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
           </svg>
           <span className="font-medium text-gray-900 text-center">I want to list my property</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setRole('listing_agent')}
+          className={`p-6 rounded-lg border-2 flex flex-col items-center gap-2 transition-colors ${
+            role === 'listing_agent' ? 'border-emerald-600 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'
+          }`}
+        >
+          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span className="font-medium text-gray-900 text-center">I'm a listing agent for landlords</span>
         </button>
       </div>
 

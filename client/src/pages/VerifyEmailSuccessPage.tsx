@@ -23,12 +23,14 @@ export function VerifyEmailSuccessPage() {
     let cancelled = false
     async function checkAndRedirect() {
       if (!user) return
-      const signedUpAsLandlord = user.user_metadata?.role === 'landlord'
+      const metaRole = user.user_metadata?.role as string | undefined
+      const signedUpAsLandlord = metaRole === 'landlord' || metaRole === 'listing_agent'
       const { data } = await supabase.from('profiles').select('role, display_name').eq('id', user.id).maybeSingle()
       if (cancelled) return
-      let isLandlord = data?.role === 'landlord'
+      const dbRole = data?.role as string | undefined
+      let isLandlord = dbRole === 'landlord' || dbRole === 'listing_agent'
       if (signedUpAsLandlord && !isLandlord) {
-        await supabase.from('profiles').update({ role: 'landlord' }).eq('id', user.id)
+        await supabase.from('profiles').update({ role: metaRole === 'listing_agent' ? 'listing_agent' : 'landlord' }).eq('id', user.id)
         isLandlord = true
       }
       const hasDisplayName = !!data?.display_name?.trim()

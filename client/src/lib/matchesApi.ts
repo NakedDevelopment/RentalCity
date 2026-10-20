@@ -16,13 +16,15 @@ export type MatchResult = {
   overall: number
   dimensions: MatchDimensions
   tenantScore?: number | null
+  /** Distance in miles between tenant and property, when both have a known location. */
+  distanceMiles?: number | null
 }
 
 export async function fetchMatchesForTenant(
   accessToken: string,
   tenantId: string,
   propertyIds: string[],
-  options?: { limit?: number },
+  options?: { limit?: number; radiusMiles?: number; tenantLat?: number; tenantLng?: number },
 ): Promise<Record<string, MatchResult>> {
   const res = await fetch('/api/matches/for-tenant', {
     method: 'POST',
@@ -34,6 +36,10 @@ export async function fetchMatchesForTenant(
       tenantId,
       propertyIds,
       ...(options?.limit != null && options.limit > 0 ? { limit: options.limit } : {}),
+      ...(options?.radiusMiles != null ? { radiusMiles: options.radiusMiles } : {}),
+      ...(options?.tenantLat != null && options?.tenantLng != null
+        ? { tenantLat: options.tenantLat, tenantLng: options.tenantLng }
+        : {}),
     }),
   })
   if (!res.ok) {
@@ -71,13 +77,16 @@ export type LandlordCatalogRow = {
   match: MatchResult & { tenantScore?: number | null }
   name: string
   avatarUrl: string | null
+  participatesInVoucherProgram: boolean
+  voucherCoveragePercentage: number | null
+  distanceMiles: number | null
 }
 
 export async function fetchLandlordMatchCatalog(
   accessToken: string,
   landlordId: string,
   propertyIds: string[],
-  options?: { limitPerProperty?: number },
+  options?: { limitPerProperty?: number; radiusMiles?: number },
 ): Promise<{ rows: LandlordCatalogRow[] }> {
   const res = await fetch('/api/matches/landlord-catalog', {
     method: 'POST',
@@ -91,6 +100,7 @@ export async function fetchLandlordMatchCatalog(
       ...(options?.limitPerProperty != null && options.limitPerProperty > 0
         ? { limitPerProperty: options.limitPerProperty }
         : {}),
+      ...(options?.radiusMiles != null ? { radiusMiles: options.radiusMiles } : {}),
     }),
   })
   if (!res.ok) {

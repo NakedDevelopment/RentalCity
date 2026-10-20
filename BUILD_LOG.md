@@ -535,3 +535,101 @@ No new dependency. `package-lock.json` regenerated via the standard workaround t
 ### Out of scope (per approved Implementation Prompt — not built this run)
 Distance/radius matching logic in `server/match.ts` was explicitly out of scope for this
 ticket and was not touched.
+
+## 2026-10-19 — Pulse automation run (project-wide sweep, 20 tasks)
+
+Processed all 20 oldest open `code_task` items (cap not exceeded — exactly 20 were open).
+Grouped into 7 build clusters since several tickets were decomposed pieces of the same
+customer submission (same pattern documented in `.agents/memory/MEMORY.md`'s duplicate-ticket
+precedent). See `USER_STORIES/TASK_*.md` for full ACs, investigation notes, and PM review per
+cluster: `TASK_ad7db778.md` (Listing Agent role), `TASK_75419996-a54035fe.md` (Equifax DocuSign
+field locks), `TASK_housing-voucher-cluster.md`, `TASK_admin-landlords-list-cluster.md`,
+`TASK_43ad8430.md` (Street View fallback), `TASK_onboarding-form-cluster.md`,
+`TASK_location-radius-cluster.md`.
+
+### Already-done discoveries (critical — verified via git log + live code, not ticket status)
+Two single-task-mode runs earlier today (commits `71f8c37`, `83ace79`) had already built the
+housing-voucher questionnaire fields + matching eligibility rule, and a location-geocoding data
+layer, respectively — both explicitly scoped their own BUILD_LOG entries to exclude exactly
+what this run's remaining tickets asked for (Plaid-skip/income-satisfied rule, the voucher
+badge, radius filtering, search UI). No duplicate work was done. Also found 2 of 5 landlord
+onboarding tickets (split address, phone auto-format) were already fully implemented in
+`EquifaxSubscriberForm.tsx` — verified via direct code read, not assumption.
+
+### Ground-truth corrections applied (ticket text vs real code — see individual USER_STORIES
+docs for full detail per cluster)
+- Real table is `plaid_financial_verifications`, not `bank_verifications` as every voucher
+  ticket stated.
+- `computeTenantRentScoreFromDimensions` takes one argument only — three tickets' claim of an
+  "updated signature" was false; left untouched per the customer's own explicit decision text.
+- `LandlordMatchPage.tsx` is a static onboarding explainer, not a tenant-card surface — the
+  Housing Voucher badge ticket's file reference was wrong; badge placed on the real surfaces
+  (`YourMatchesPage.tsx` landlord view, `LandlordTenantProfilePage.tsx`) instead.
+- Equifax Industry/Permissible-Purpose fields were already pre-filled but not locked (every tab
+  in that file defaults `locked: false`) — the actual gap was narrower than either ticket
+  assumed, and a checked-in test asserting `locked === false` was a stale regression snapshot,
+  not a deliberate spec, corrected alongside the fix.
+
+### QA — two-instance loop (reconciled)
+Both instances independently verified all ~29 ACs across the 7 clusters against live code and
+the live Supabase schema (confirmed every referenced table/column exists). Instance A flagged 2
+real SOFT FAILs that Instance B missed — investigated directly rather than averaged:
+1. `AdminUserDetailPage.tsx`'s properties-fetch `useEffect` guard was widened for the two render
+   sites but missed on the data-fetch site, so a listing_agent's "Listed properties" panel would
+   render but stay permanently empty. Confirmed and fixed.
+2. `LandlordTenantProfilePage.tsx`'s two `RentScoreVerificationBadge` call sites still read raw
+   `income_verified` after the income-satisfied rework touched `BankVerificationCard` on the same
+   page — a voucher-only tenant would see contradictory verified/not-verified badges side by
+   side. Confirmed and fixed (both now fall back to `income_satisfied`).
+Instance B additionally flagged a PLAUSIBLE gap (client `formValid` in `EquifaxSubscriberForm.tsx`
+didn't mirror the server's max-length checks) — investigated: the fields already have matching
+`maxLength` HTML attributes, so not practically reachable, but added explicit length checks
+anyway as cheap defense-in-depth. No HARD FAILs (no mock data, no unverified schema references,
+no TypeScript errors, no crash paths) in either pass.
+
+### Stress Tester (single instance)
+All 7 scenarios PASS: missing-location/malformed-input/special-character handling degrades
+gracefully everywhere traced; the `preview_landlord_invite` view-count increment is a single
+atomic SQL `UPDATE`, not a race-prone read-then-write; missing `GOOGLE_MAPS_API_KEY` degrades
+every new Street-View/geocode surface to its pre-existing empty state rather than erroring; the
+three new `/api/admin/directory` bulk queries fail closed (whole endpoint 500s) rather than
+silently serving wrong data, consistent with the existing `credentials` query's behavior.
+
+### PM Visual Verification — two-instance loop (reconciled)
+Instance B (sibling-pattern check) came back fully VERIFIED on its 5 focus areas, confirming via
+`.agents/memory/tailwind-palette-remap.md` and the live `tailwind.config.js` that this run's new
+emerald/amber/gray badges all resolve to pre-existing status-color CSS vars, not new colors.
+Instance A found 3 real mismatches investigated and fixed directly:
+1. The new "Street View" corner badge (3 surfaces) didn't match the one pre-existing "Street
+   View" badge already shipped in `ListFromReportPage.tsx` (different corner, opacity, text
+   size, missing `backdrop-blur-sm`) — aligned all three to the existing precedent exactly.
+2. The Housing Voucher badge on `YourMatchesPage.tsx` used `px-2 py-0.5` while its own sibling
+   status pill on the same card (and the same badge's OTHER call site on
+   `LandlordTenantProfilePage.tsx`) used `px-3 py-1` — aligned to match.
+3. The new tenant-view radius `<input type="range">` rendered as a bare OS-default slider
+   directly above the existing custom-styled Price Range slider on the same page — applied the
+   same `h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600` treatment.
+Noted, not changed: `AdminUsersPage.tsx`'s list-view Role column chip is flat gray for every
+role (predates this run — tenant/landlord/admin already looked identical there before
+listing_agent existed) — a pre-existing convention, not a regression introduced this run.
+
+### Build gate
+`npx tsc --noEmit` (root) and `cd client && npx tsc -p tsconfig.json --noEmit`: zero errors
+introduced (confirmed via `git stash -u` A/B — the only client error present,
+`PaymentHistoryPage.tsx`'s `applicationId` TS2322/TS2339, is identical before and after this
+diff). `npm run test:equifax-application`: 2/2 pass (updated to assert the new locked/value
+behavior).
+
+### Dependencies
+No new dependency. `package-lock.json` regenerated via the standard workaround to run
+`npm install`/the build gate, then reverted (`git checkout -- package-lock.json`).
+
+### Database
+Four additive migrations, all applied live via psql and verified:
+- `20261019000003_add_listing_agent_role.sql` — `ALTER TYPE user_role ADD VALUE
+  'listing_agent'` (verified via `enum_range`).
+- `20261019000004_landlord_invite_link_views.sql` — `landlord_invite_links.view_count` +
+  `preview_landlord_invite` RPC update (verified via `\d` and `pg_get_functiondef`).
+No other schema changes — all other referenced columns (`tenant_questionnaire.voucher_*`,
+`tenant_preferences.location_*`, `properties.lat/lng`, `landlord_memberships.*`) already existed
+live from prior runs.

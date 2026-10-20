@@ -38,10 +38,12 @@ function RoleBadge({ role }: { role: string }) {
   const style =
     role === 'landlord'
       ? 'bg-[#EEF4FE] text-[#3A7AFE]'
-      : role === 'admin'
-        ? 'bg-violet-100 text-violet-800'
-        : 'bg-emerald-50 text-emerald-800'
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${style}`}>{role}</span>
+      : role === 'listing_agent'
+        ? 'bg-[#fff4e6] text-[#c47a1e]'
+        : role === 'admin'
+          ? 'bg-violet-100 text-violet-800'
+          : 'bg-emerald-50 text-emerald-800'
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${style}`}>{role.replace('_', ' ')}</span>
 }
 
 function AccountStatusBadge({ suspended }: { suspended: boolean }) {
@@ -104,7 +106,7 @@ export function AdminUserDetailPage() {
   }, [id])
 
   useEffect(() => {
-    if (!id || row?.role !== 'landlord') return
+    if (!id || (row?.role !== 'landlord' && row?.role !== 'listing_agent')) return
     let cancelled = false
     ;(async () => {
       setPropsLoading(true)
@@ -287,7 +289,7 @@ export function AdminUserDetailPage() {
           </div>
         </div>
 
-        {row.role === 'landlord' ? (
+        {row.role === 'landlord' || row.role === 'listing_agent' ? (
           <div className={admin.panelPaddedLg}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -342,7 +344,7 @@ export function AdminUserDetailPage() {
           </div>
         ) : null}
 
-        {row.role === 'landlord' ? (
+        {row.role === 'landlord' || row.role === 'listing_agent' ? (
           <div className={admin.panelPaddedLg}>
             <h2 className={admin.detailTitle}>Equifax Credit Access</h2>
             <div className="mt-3 flex flex-wrap items-start justify-between gap-3">

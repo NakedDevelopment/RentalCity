@@ -12,6 +12,10 @@ export type PlaidVerificationRow = {
   monthly_income_range_high_cents: number | null
   asset_tier: string | null
   last_verified_at: string | null
+  /** True if Plaid verified income OR a housing voucher covers 100% of rent. */
+  income_satisfied?: boolean | null
+  /** Which path satisfied income — 'plaid', 'voucher', or null if not satisfied. */
+  income_satisfied_reason?: 'plaid' | 'voucher' | null
 }
 
 function CheckIcon() {
@@ -99,7 +103,7 @@ export function BankVerificationCard({
   const v = verification
   const hasAny = !!(
     v &&
-    (v.income_verified || v.balances_verified || v.debts_verified || v.identity_verified)
+    (v.income_verified || v.balances_verified || v.debts_verified || v.identity_verified || v.income_satisfied)
   )
 
   if (!docusignVerified) {
@@ -150,12 +154,17 @@ export function BankVerificationCard({
               ? `Verified via ${v!.institution_name}${
                   v!.accounts_count ? ` · ${v!.accounts_count} account${v!.accounts_count === 1 ? '' : 's'}` : ''
                 }`
-              : "Verified via the tenant\u2019s bank (Plaid)."}
+              : v!.income_satisfied_reason === 'voucher'
+                ? 'Income verified via housing voucher \u2014 no bank connected.'
+                : "Verified via the tenant\u2019s bank (Plaid)."}
           </p>
 
           {/* Signals row — always visible */}
           <dl className="divide-y divide-gray-100 rounded-lg border border-gray-100">
-            <ScoreRow label="Income" ok={!!v!.income_verified} />
+            <ScoreRow
+              label={v!.income_satisfied_reason === 'voucher' ? 'Income (housing voucher)' : 'Income'}
+              ok={!!(v!.income_satisfied ?? v!.income_verified)}
+            />
             <ScoreRow label="Identity" ok={!!v!.identity_verified} />
             <ScoreRow label="Funds available" ok={!!v!.balances_verified} />
             <div className="flex items-center justify-between px-3 py-2.5">

@@ -115,6 +115,10 @@ export function LandlordTenantProfilePage() {
   } | null>(null)
   const [tenantRentScore, setTenantRentScore] = useState<number | null>(null)
   const [tenantRentDimensions, setTenantRentDimensions] = useState<TenantRentScoreDimensions | null>(null)
+  const [tenantVoucher, setTenantVoucher] = useState<{ participates: boolean; coveragePercentage: number | null }>({
+    participates: false,
+    coveragePercentage: null,
+  })
   const [tenantRentBreakdownOpen, setTenantRentBreakdownOpen] = useState(false)
   const [tenantQuestionnaireAnswers, setTenantQuestionnaireAnswers] = useState<Record<string, unknown> | null>(null)
   const [pendingApplicationId, setPendingApplicationId] = useState<string | null>(null)
@@ -395,7 +399,7 @@ export function LandlordTenantProfilePage() {
         supabase
           .from('tenant_questionnaire')
           .select(
-            'affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score, answers',
+            'affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score, answers, participates_in_voucher_program, voucher_coverage_percentage',
           )
           .eq('user_id', id)
           .maybeSingle(),
@@ -446,10 +450,15 @@ export function LandlordTenantProfilePage() {
         setTenantRentDimensions(dims)
         setTenantRentScore(computeTenantRentScoreFromDimensions(dims))
         setTenantQuestionnaireAnswers(answers)
+        setTenantVoucher({
+          participates: Boolean((questionnaireData as { participates_in_voucher_program?: boolean }).participates_in_voucher_program),
+          coveragePercentage: (questionnaireData as { voucher_coverage_percentage?: number | null }).voucher_coverage_percentage ?? null,
+        })
       } else {
         setTenantRentDimensions(null)
         setTenantRentScore(null)
         setTenantQuestionnaireAnswers(null)
+        setTenantVoucher({ participates: false, coveragePercentage: null })
       }
 
       setTenantReviewsList(normalizeProfileReviews(ratingsRaw))
@@ -492,7 +501,20 @@ export function LandlordTenantProfilePage() {
         )
         .eq('user_id', id)
         .maybeSingle()
-      setTenantBankVerification((bankRow as PlaidVerificationRow | null) ?? null)
+      const voucherFullyCovered =
+        Boolean((questionnaireData as { participates_in_voucher_program?: boolean } | null)?.participates_in_voucher_program) &&
+        Number((questionnaireData as { voucher_coverage_percentage?: number } | null)?.voucher_coverage_percentage) === 100
+      const incomeSatisfied = Boolean((bankRow as { income_verified?: boolean } | null)?.income_verified) || voucherFullyCovered
+      setTenantBankVerification(
+        bankRow || voucherFullyCovered
+          ? ({
+              ...(bankRow as PlaidVerificationRow | null),
+              status: (bankRow as { status?: string } | null)?.status ?? 'complete',
+              income_satisfied: incomeSatisfied,
+              income_satisfied_reason: incomeSatisfied ? ((bankRow as { income_verified?: boolean } | null)?.income_verified ? 'plaid' : 'voucher') : null,
+            } as PlaidVerificationRow)
+          : null,
+      )
 
       const rows = (applicationsData ?? []) as unknown as LandlordTenantApplicationRow[]
       const forLandlord = rows.filter((r) => r.property?.landlord_id === user.id)
@@ -985,6 +1007,12 @@ export function LandlordTenantProfilePage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 gap-y-1">
                           <h2 className="text-[1.75rem] font-medium text-gray-900">{tenant.name}</h2>
+                          {tenantVoucher.participates ? (
+                            <span className="rounded-full bg-[#fff4e6] px-3 py-1 text-xs font-medium text-[#c47a1e]">
+                              Housing Voucher
+                              {tenantVoucher.coveragePercentage != null ? ` — ${tenantVoucher.coveragePercentage}% covered` : ''}
+                            </span>
+                          ) : null}
                           {matchDecisionContext && isAccepted ? (
                             <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
                               Accepted
@@ -1025,7 +1053,7 @@ export function LandlordTenantProfilePage() {
                     <div className="flex shrink-0 flex-col items-center rounded-lg border border-gray-100 bg-gray-50/80 px-5 py-3 sm:self-start">
                       <div className="flex items-center justify-center gap-1 text-xs text-gray-500">
                         <span>Rent Score</span>
-                        <RentScoreVerificationBadge verified={!!tenantBankVerification?.income_verified} />
+                        <RentScoreVerificationBadge verified={!!(tenantBankVerification?.income_satisfied ?? tenantBankVerification?.income_verified)} />
                         {tenant.tenantScore != null ? (
                           <button
                             type="button"
@@ -1561,7 +1589,7 @@ export function LandlordTenantProfilePage() {
                 <div className="min-w-[112px] rounded-xl border border-gray-200 bg-white px-4 py-3 text-center">
                   <div className="flex items-center justify-center gap-1 text-xs text-gray-500">
                     <span>Rent Score</span>
-                    <RentScoreVerificationBadge verified={!!tenantBankVerification?.income_verified} />
+                    <RentScoreVerificationBadge verified={!!(tenantBankVerification?.income_satisfied ?? tenantBankVerification?.income_verified)} />
                     {tenant.tenantScore != null ? (
                       <button
                         type="button"

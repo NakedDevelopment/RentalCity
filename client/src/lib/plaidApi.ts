@@ -15,6 +15,11 @@ export type PlaidVerification = {
   assetTier: string | null
 
   lastVerifiedAt: string | null
+
+  /** True if Plaid verified income OR a housing voucher covers 100% of rent. */
+  incomeSatisfied: boolean
+  /** Which path satisfied income — 'plaid', 'voucher', or null if not satisfied. */
+  incomeSatisfiedReason: 'plaid' | 'voucher' | null
 }
 
 export type PlaidIdentityVerificationStatus =
