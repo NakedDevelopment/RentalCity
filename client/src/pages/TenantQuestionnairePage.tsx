@@ -79,10 +79,13 @@ export function TenantQuestionnairePage() {
     })
   }, [user])
 
-  const totalSteps = tenantQuestions.length + 2 // bio + questions + income
+  const visibleQuestions = tenantQuestions.filter(
+    (q) => !q.showIf || answers[q.showIf.questionId] === q.showIf.equals,
+  )
+  const totalSteps = visibleQuestions.length + 2 // bio + questions + income
   const isBioStep = step === 1
   const isIncomeStep = step === totalSteps
-  const currentQuestion = !isBioStep && !isIncomeStep ? tenantQuestions[step - 2] : null
+  const currentQuestion = !isBioStep && !isIncomeStep ? visibleQuestions[step - 2] : null
   const selectedAnswer = currentQuestion ? answers[currentQuestion.id] : undefined
   const progressPercent = totalSteps > 0 ? Math.round((step / totalSteps) * 10) * 10 : 0
   const incomeNum = monthlyIncome.trim() ? parseFloat(monthlyIncome.replace(/[^0-9.]/g, '')) : 0
@@ -92,7 +95,16 @@ export function TenantQuestionnairePage() {
 
   function handleSelect(choiceId: TenantChoiceId) {
     if (!currentQuestion) return
-    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: choiceId }))
+    setAnswers((prev) => {
+      const next = { ...prev, [currentQuestion.id]: choiceId }
+      // Clear any answer whose show condition no longer holds (e.g. voucher coverage % after switching to "No").
+      for (const q of tenantQuestions) {
+        if (q.showIf?.questionId === currentQuestion.id && next[q.showIf.questionId] !== q.showIf.equals) {
+          delete next[q.id]
+        }
+      }
+      return next
+    })
   }
 
   async function handleBioNext() {
@@ -109,6 +121,7 @@ export function TenantQuestionnairePage() {
     if (!user || incomeNum <= 0) return
     const dims = scoreTenantDimensions(answers, rent, incomeNum)
     const answersWithIncome = { ...answers, monthly_income: incomeNum } as Record<string, unknown>
+    const participatesInVoucherProgram = answers.participates_in_voucher_program === 'yes'
     const { error } = await supabase
       .from('tenant_questionnaire')
       .upsert(
@@ -121,6 +134,10 @@ export function TenantQuestionnairePage() {
           lifestyle_score: dims.lifestyle,
           space_fit_score: dims.spaceFit,
           overall_score: dims.overall,
+          participates_in_voucher_program: participatesInVoucherProgram,
+          voucher_coverage_percentage: participatesInVoucherProgram
+            ? Number(answers.voucher_coverage_percentage)
+            : null,
         },
         { onConflict: 'user_id' }
       )

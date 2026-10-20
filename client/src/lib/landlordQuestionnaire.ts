@@ -145,6 +145,15 @@ export const landlordQuestions: LandlordQuestion[] = [
     ],
   },
   {
+    id: 'accepts_housing_vouchers',
+    text: 'Do you accept housing vouchers?',
+    type: 'single',
+    choices: [
+      { id: 'yes', label: 'Yes' },
+      { id: 'no', label: 'No' },
+    ],
+  },
+  {
     id: 'conflict_handling_style',
     text: 'How would you handle a situation where a tenant yells because you can’t get there soon enough to fix a problem?',
     type: 'single',

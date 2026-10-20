@@ -220,7 +220,7 @@ async function buildLandlordCatalogRows(
   const landlordIds = [...new Set(propList.map((p) => p.landlord_id))]
   const { data: landlordRows } = await admin
     .from('landlord_questionnaire')
-    .select('user_id, answers, policy_strictness_score, risk_tolerance_score, conflict_style_score')
+    .select('user_id, answers, policy_strictness_score, risk_tolerance_score, conflict_style_score, accepts_housing_vouchers')
     .in('user_id', landlordIds)
   type LRow = {
     user_id: string
@@ -228,6 +228,7 @@ async function buildLandlordCatalogRows(
     policy_strictness_score?: number
     risk_tolerance_score?: number
     conflict_style_score?: number
+    accepts_housing_vouchers?: boolean | null
   }
   const landlordByUserId = new Map<string, LRow>()
   ;(landlordRows ?? []).forEach((r: LRow) => landlordByUserId.set(r.user_id, r))
@@ -235,7 +236,7 @@ async function buildLandlordCatalogRows(
   const { data: tenantRows } = await admin
     .from('tenant_questionnaire')
     .select(
-      'user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score',
+      'user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program',
     )
     .order('updated_at', { ascending: false })
     .limit(450)
@@ -248,6 +249,7 @@ async function buildLandlordCatalogRows(
     stability_score?: number | null
     payment_risk_score?: number | null
     lifestyle_score?: number | null
+    participates_in_voucher_program?: boolean | null
   }
   const tqList = (tenantRows ?? []) as TQ[]
   if (tqList.length === 0) return []
@@ -293,6 +295,7 @@ async function buildLandlordCatalogRows(
         policyStrictnessScore: landlordRow.policy_strictness_score ?? landlordPrefs.policyStrictnessScore,
         riskToleranceScore: landlordRow.risk_tolerance_score ?? landlordPrefs.riskToleranceScore,
         conflictStyleScore: landlordRow.conflict_style_score ?? landlordPrefs.conflictStyleScore,
+        acceptsHousingVouchers: landlordRow.accepts_housing_vouchers ?? landlordPrefs.acceptsHousingVouchers,
       }
     }
 
@@ -306,7 +309,11 @@ async function buildLandlordCatalogRows(
       if (inviteLandlordId != null && prop.landlord_id !== inviteLandlordId) continue
 
       const tenantAnswers = tenantData.answers ?? {}
-      const tenantHistory = tenantAnswersToHistory(tenantAnswers)
+      const baseTenantHistory = tenantAnswersToHistory(tenantAnswers)
+      const tenantHistory = {
+        ...baseTenantHistory,
+        participatesInVoucherProgram: tenantData.participates_in_voucher_program ?? baseTenantHistory.participatesInVoucherProgram,
+      }
       const tenantMonthlyIncome = typeof tenantAnswers.monthly_income === 'number' ? tenantAnswers.monthly_income : null
       const fallbackAffordability = Number(tenantData.affordability_score) ?? 5
       const rentDollars = (prop.monthly_rent_cents != null ? Number(prop.monthly_rent_cents) : 0) / 100
@@ -2296,7 +2303,7 @@ app.post('/api/matches/for-tenant', async (req, res) => {
       : undefined
 
   const [tenantRow, propertiesRows, inviteRow] = await Promise.all([
-    admin.from('tenant_questionnaire').select('answers, affordability_score, stability_score, payment_risk_score, lifestyle_score').eq('user_id', tenantId).maybeSingle(),
+    admin.from('tenant_questionnaire').select('answers, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program').eq('user_id', tenantId).maybeSingle(),
     admin.from('properties').select('id, landlord_id, monthly_rent_cents').in('id', uniqueIds),
     admin.from('tenant_invite_restrictions').select('landlord_id').eq('tenant_id', tenantId).gt('ends_at', new Date().toISOString()).maybeSingle(),
   ])
@@ -2310,7 +2317,13 @@ app.post('/api/matches/for-tenant', async (req, res) => {
   }
 
   const tenantAnswers = (tenantData as { answers?: Record<string, unknown> }).answers ?? {}
-  const tenantHistory = tenantAnswersToHistory(tenantAnswers)
+  const baseTenantHistory = tenantAnswersToHistory(tenantAnswers)
+  const tenantHistory = {
+    ...baseTenantHistory,
+    participatesInVoucherProgram:
+      (tenantData as { participates_in_voucher_program?: boolean | null }).participates_in_voucher_program ??
+      baseTenantHistory.participatesInVoucherProgram,
+  }
   const tenantMonthlyIncome = typeof tenantAnswers.monthly_income === 'number' ? tenantAnswers.monthly_income : null
   const fallbackAffordability = Number(tenantData.affordability_score) ?? 5
   const baseTenantDims = {
@@ -2320,8 +2333,8 @@ app.post('/api/matches/for-tenant', async (req, res) => {
     lifestyle: Number(tenantData.lifestyle_score) ?? 5,
   }
   const landlordIds = [...new Set(properties.map((p) => p.landlord_id))]
-  const { data: landlordRows } = await admin.from('landlord_questionnaire').select('user_id, answers, policy_strictness_score, risk_tolerance_score, conflict_style_score').in('user_id', landlordIds)
-  type LandlordRow = { user_id: string; answers: Record<string, unknown>; policy_strictness_score?: number; risk_tolerance_score?: number; conflict_style_score?: number }
+  const { data: landlordRows } = await admin.from('landlord_questionnaire').select('user_id, answers, policy_strictness_score, risk_tolerance_score, conflict_style_score, accepts_housing_vouchers').in('user_id', landlordIds)
+  type LandlordRow = { user_id: string; answers: Record<string, unknown>; policy_strictness_score?: number; risk_tolerance_score?: number; conflict_style_score?: number; accepts_housing_vouchers?: boolean | null }
   const landlordByUserId = new Map<string, LandlordRow>()
   ;(landlordRows ?? []).forEach((r: LandlordRow) => {
     landlordByUserId.set(r.user_id, r)
@@ -2355,6 +2368,7 @@ app.post('/api/matches/for-tenant', async (req, res) => {
       policyStrictnessScore: landlord.policy_strictness_score ?? prefs.policyStrictnessScore,
       riskToleranceScore: landlord.risk_tolerance_score ?? prefs.riskToleranceScore,
       conflictStyleScore: landlord.conflict_style_score ?? prefs.conflictStyleScore,
+      acceptsHousingVouchers: landlord.accepts_housing_vouchers ?? prefs.acceptsHousingVouchers,
     }
     matches[prop.id] = computeMatch(tenantDims, prefsWithScores, tenantHistory)
   }
@@ -2393,16 +2407,21 @@ app.post('/api/matches/for-landlord', async (req, res) => {
   const uniqueTenantIds = [...new Set(tenantIds)]
 
   const [landlordRow, tenantRows] = await Promise.all([
-    admin.from('landlord_questionnaire').select('answers, policy_strictness_score, risk_tolerance_score, conflict_style_score').eq('user_id', landlordId).maybeSingle(),
-    admin.from('tenant_questionnaire').select('user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score').in('user_id', uniqueTenantIds),
+    admin.from('landlord_questionnaire').select('answers, policy_strictness_score, risk_tolerance_score, conflict_style_score, accepts_housing_vouchers').eq('user_id', landlordId).maybeSingle(),
+    admin.from('tenant_questionnaire').select('user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program').in('user_id', uniqueTenantIds),
   ])
-  const landlordData = landlordRow.data as { answers?: Record<string, unknown>; policy_strictness_score?: number; risk_tolerance_score?: number; conflict_style_score?: number } | null
-  const tenants = (tenantRows.data ?? []) as Array<{ user_id: string; answers?: Record<string, unknown>; overall_score?: number; affordability_score?: number; stability_score?: number; payment_risk_score?: number; lifestyle_score?: number }>
+  const landlordData = landlordRow.data as { answers?: Record<string, unknown>; policy_strictness_score?: number; risk_tolerance_score?: number; conflict_style_score?: number; accepts_housing_vouchers?: boolean | null } | null
+  const tenants = (tenantRows.data ?? []) as Array<{ user_id: string; answers?: Record<string, unknown>; overall_score?: number; affordability_score?: number; stability_score?: number; payment_risk_score?: number; lifestyle_score?: number; participates_in_voucher_program?: boolean | null }>
 
   let landlordPrefs: ReturnType<typeof landlordAnswersToPrefs> | null = null
   if (landlordData) {
     landlordPrefs = landlordAnswersToPrefs(landlordData.answers ?? {})
-    landlordPrefs = { ...landlordPrefs, policyStrictnessScore: landlordData.policy_strictness_score ?? landlordPrefs.policyStrictnessScore, riskToleranceScore: landlordData.risk_tolerance_score ?? landlordPrefs.riskToleranceScore }
+    landlordPrefs = {
+      ...landlordPrefs,
+      policyStrictnessScore: landlordData.policy_strictness_score ?? landlordPrefs.policyStrictnessScore,
+      riskToleranceScore: landlordData.risk_tolerance_score ?? landlordPrefs.riskToleranceScore,
+      acceptsHousingVouchers: landlordData.accepts_housing_vouchers ?? landlordPrefs.acceptsHousingVouchers,
+    }
   }
 
   const matches: Record<string, MatchResult & { tenantScore?: number | null }> = {}
@@ -2418,7 +2437,11 @@ app.post('/api/matches/for-landlord', async (req, res) => {
       paymentRisk: Number(t.payment_risk_score) ?? 5,
       lifestyle: Number(t.lifestyle_score) ?? 5,
     }
-    const tenantHistory = tenantAnswersToHistory(t.answers ?? {})
+    const baseTenantHistory = tenantAnswersToHistory(t.answers ?? {})
+    const tenantHistory = {
+      ...baseTenantHistory,
+      participatesInVoucherProgram: t.participates_in_voucher_program ?? baseTenantHistory.participatesInVoucherProgram,
+    }
     matches[t.user_id] = { ...computeMatch(tenantDims, landlordPrefs, tenantHistory), tenantScore }
   }
   for (const id of uniqueTenantIds) {

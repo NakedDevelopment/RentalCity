@@ -319,3 +319,105 @@ build gate, then reverted (`git checkout -- package-lock.json`) since nothing ch
 ### Database
 No schema changes — all referenced columns (`profiles.avatar_url`, `properties.*`) already
 existed live. `last_sign_in_at` is intentionally never queried from a public table.
+
+## 2026-10-19 — Pulse automation run (single-task mode)
+
+Task `b16ed2c1-1a88-4d7c-b2cc-fee3b2a3cb02`: housing voucher (Section 8) questionnaire
+fields + voucher-aware matching. See `USER_STORIES/TASK_b16ed2c1-1a88-4d7c-b2cc-fee3b2a3cb02.md`
+for full ACs. Decisions below were FINAL/approved by Jason per the task's Implementation
+Prompt — not re-litigated.
+
+### Changes
+1. `supabase/migrations/20261019000001_add_housing_voucher_fields.sql` (new, additive,
+   applied live via psql) — `landlord_questionnaire.accepts_housing_vouchers boolean`,
+   `tenant_questionnaire.participates_in_voucher_program boolean`,
+   `tenant_questionnaire.voucher_coverage_percentage integer`.
+2. `client/src/lib/landlordQuestionnaire.ts` — new `accepts_housing_vouchers` Yes/No
+   question, placed before `conflict_handling_style` per spec. Choice ids are literally
+   `'yes'`/`'no'` (not the usual `'a'/'b'`) so the save-path boolean conversion is direct.
+3. `client/src/lib/tenantQuestionnaire.ts` — new `participates_in_voucher_program` Yes/No
+   question (score 0, does not affect renter score) and a conditional
+   `voucher_coverage_percentage` follow-up (25/50/75/100, score 0) shown only when the
+   prior answer is `'yes'`. Added a minimal `showIf: { questionId, equals }` field to the
+   `TenantQuestion` type — the only conditional-display mechanism this questionnaire had
+   before was none at all.
+4. `client/src/pages/TenantQuestionnairePage.tsx` — steps now iterate a `visibleQuestions`
+   array filtered by `showIf` instead of the raw `tenantQuestions` array, so `totalSteps`
+   and step indexing shrink/grow automatically as the voucher-participation answer changes.
+   `handleSelect` clears any dependent answer whose `showIf` condition no longer holds
+   (e.g. switching voucher participation from Yes to No clears a stale coverage %).
+   `handleComplete` now also writes the two dedicated columns from the JSONB answers.
+5. `client/src/pages/CompatibilitySurveyPage.tsx` — `handleComplete` (landlord) now also
+   writes `accepts_housing_vouchers` from the JSONB answer.
+6. `server/match.ts` — `landlordAnswersToPrefs` derives `acceptsHousingVouchers` (boolean |
+   null) and `tenantAnswersToHistory` derives `participatesInVoucherProgram` (boolean) from
+   the raw JSONB answer strings. `computeMatch` adds one new eligibility rule: a voucher
+   tenant is ineligible for a landlord with `acceptsHousingVouchers === false` (strict
+   equality — `null`/unanswered landlords are NOT excluded, matching spec). Non-voucher
+   tenants are completely unaffected (condition short-circuits on
+   `participatesInVoucherProgram`).
+7. `server/index.ts` — all three match endpoints (`/api/matches/for-tenant`,
+   `/api/matches/for-landlord`, `buildLandlordCatalogRows` used by
+   `/api/matches/landlord-catalog`) now `SELECT` the two new dedicated columns and merge
+   them onto the prefs/history objects before calling `computeMatch`, using the same
+   `dedicated-column ?? jsonb-derived-fallback` pattern already established for
+   `policy_strictness_score`/`risk_tolerance_score`/`conflict_style_score`. This applies the
+   rule symmetrically in both directions (tenant's matches and landlord's matches) through
+   one shared function, per spec.
+
+### Investigation note (deviation from the ticket's literal description)
+The ticket's Implementation Prompt said "Server save path... Where `landlord_questionnaire`
+/ `tenant_questionnaire` are written in `server/`." Investigation found this is incorrect —
+both tables are written directly from the client via `supabase.from(...).upsert(...)` in
+`CompatibilitySurveyPage.tsx`/`TenantQuestionnairePage.tsx`; `server/index.ts` only ever
+*reads* these tables (for matching). The dedicated-column writes were added at the actual
+client upsert call sites instead.
+
+### Motion Designer (single instance)
+No new Hooked moments — additional questionnaire questions and a server-side matching
+rule are not new interaction/reward moments, consistent with MOTION.md's guardrail for
+informational/form steps.
+
+### UX Auditor (single instance)
+- UX-10 (Components Behave Consistently): both new questions render through each
+  questionnaire's existing generic choice-button component, no special-casing.
+- UX-15 (Simplicity Wins): conditional display was implemented as a minimal generic
+  `showIf` field rather than a one-off special case for this specific question, so future
+  conditional questions can reuse it.
+**UX APPROVED — proceed to QA.**
+
+### QA — two-instance loop
+Both instances independently verified all 13 ACs against live code (not assumption).
+12/13 CONFIRMED PASS by both. AC-12 (migration applied to live DB) — both instances
+correctly flagged they lacked live DB credentials in their sandboxed context to verify
+independently; reconciled as CONFIRMED PASS based on this run's own direct `psql`
+verification (SELECT against `information_schema.columns` showed all 3 new columns live
+before any code was written, confirming the additive migration applied cleanly).
+Instance B's adversarial pass additionally flagged a type-soundness gap in
+`landlordAnswersToPrefs`'s parameter type (declared `boolean | null`, real runtime value
+from JSONB is the string `'yes'/'no'`) — fixed by widening the type to
+`boolean | string | null` to match reality instead of relying on an `as` cast. No HARD
+FAILs (no mock data, no unverified schema reference, no TypeScript error, no crash path).
+
+### Stress Tester (single instance)
+- Pre-existing rows with no answer to the new questions (created before this migration):
+  `accepts_housing_vouchers`/`participates_in_voucher_program` read as `null`/`undefined`
+  → treated as "unanswered"/"non-voucher" respectively, matching spec (landlords who
+  haven't answered are not excluded; tenants default to non-voucher behavior) — PASS.
+- No new env vars, no new third-party API calls, no free-text input (all new answers are
+  fixed-choice buttons) — no new injection/missing-config surface — PASS.
+- Network failure on upsert: unchanged pre-existing `if (error) { setCompleteError(...) }`
+  pattern on both questionnaire pages — PASS.
+
+### Build gate
+`npx tsc --noEmit`: zero errors, both before and after the QA fix round.
+
+### Dependencies
+No new dependency. `package-lock.json` regenerated via the standard workaround to run the
+build gate, then reverted (`git checkout -- package-lock.json`) since nothing changed.
+
+### Out of scope (per approved Implementation Prompt — not built this run)
+Renter score (`tenantRentScore.ts`) is untouched by design. Plaid-skip-at-100%-coverage,
+the shared income-satisfied rule (`GET /api/plaid/verification`), and the "Housing Voucher"
+badge on match cards/tenant profile are explicitly separate follow-up tasks per the ticket
+— not built, not stubbed.

@@ -14,6 +14,8 @@ export type TenantQuestion = {
   helperText?: string
   type: 'single'
   choices: TenantChoice[]
+  /** When set, this question is only shown if the referenced question's answer equals the given choice id. */
+  showIf?: { questionId: TenantQuestionId; equals: TenantChoiceId }
 }
 
 // Full tenant questionnaire + scores from scoring doc
@@ -167,6 +169,27 @@ export const tenantQuestions: TenantQuestion[] = [
       { id: 'b', label: 'I will be looking for a new home as soon as my lease is up.', score: 8 },
       { id: 'c', label: 'I would give them back the same energy.', score: 3 },
       { id: 'd', label: 'I would pack up and leave because I shouldn’t be disrespected.', score: 2 },
+    ],
+  },
+  {
+    id: 'participates_in_voucher_program',
+    text: 'Do you participate in a housing voucher program?',
+    type: 'single',
+    choices: [
+      { id: 'yes', label: 'Yes', score: 0 },
+      { id: 'no', label: 'No', score: 0 },
+    ],
+  },
+  {
+    id: 'voucher_coverage_percentage',
+    text: 'What percentage of your rent does it cover?',
+    type: 'single',
+    showIf: { questionId: 'participates_in_voucher_program', equals: 'yes' },
+    choices: [
+      { id: '25', label: '25%', score: 0 },
+      { id: '50', label: '50%', score: 0 },
+      { id: '75', label: '75%', score: 0 },
+      { id: '100', label: '100%', score: 0 },
     ],
   },
 ]

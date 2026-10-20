@@ -17,6 +17,7 @@ function hasChoice(
 export function landlordAnswersToPrefs(answers: Record<string, unknown> & {
   policy_strictness_score?: number
   risk_tolerance_score?: number
+  accepts_housing_vouchers?: boolean | string | null
 }) {
   let maxEviction: number | null = null
   const ev = answers?.eviction_policy as string | string[] | undefined
@@ -48,6 +49,17 @@ export function landlordAnswersToPrefs(answers: Record<string, unknown> & {
     case 'd': conflictStyle = 2; break
   }
 
+  // Dedicated column (when selected server-side) is the source of truth; fall back to the raw answer.
+  const voucherAnswer = answers?.accepts_housing_vouchers
+  const acceptsHousingVouchers: boolean | null =
+    typeof voucherAnswer === 'boolean'
+      ? voucherAnswer
+      : voucherAnswer === 'yes'
+        ? true
+        : voucherAnswer === 'no'
+          ? false
+          : null
+
   return {
     maxEvictionRecencyMonths: maxEviction,
     maxBankruptcyRecencyMonths: maxBankruptcy,
@@ -55,6 +67,7 @@ export function landlordAnswersToPrefs(answers: Record<string, unknown> & {
     conflictStyleScore: conflictStyle,
     policyStrictnessScore: answers?.policy_strictness_score ?? 5,
     riskToleranceScore: answers?.risk_tolerance_score ?? 5,
+    acceptsHousingVouchers,
   }
 }
 
@@ -95,10 +108,15 @@ export function tenantAnswersToHistory(answers: Record<string, unknown>) {
   else if (lt === 'c') lateFees = 3
   else if (lt === 'd') lateFees = 4
 
+  const voucherAnswer = answers?.participates_in_voucher_program
+  const participatesInVoucherProgram =
+    typeof voucherAnswer === 'boolean' ? voucherAnswer : voucherAnswer === 'yes'
+
   return {
     evictionRecencyMonths: evictionMonths,
     bankruptcyRecencyMonths: bankruptcyMonths,
     lateFeesLastTwoYears: lateFees,
+    participatesInVoucherProgram,
   }
 }
 
@@ -116,12 +134,14 @@ export type LandlordPrefs = {
   conflictStyleScore: number
   policyStrictnessScore: number
   riskToleranceScore: number
+  acceptsHousingVouchers: boolean | null
 }
 
 export type TenantHistory = {
   evictionRecencyMonths: number | null
   bankruptcyRecencyMonths: number | null
   lateFeesLastTwoYears: number | null
+  participatesInVoucherProgram: boolean
 }
 
 export type MatchDimensions = {
@@ -163,6 +183,10 @@ export function computeMatch(
   ) {
     eligible = false
     reasons.push('Too many late payments for this landlord\'s policy.')
+  }
+  if (tenantHistory.participatesInVoucherProgram && landlord.acceptsHousingVouchers === false) {
+    eligible = false
+    reasons.push('Landlord does not accept housing vouchers.')
   }
 
   if (!eligible) {
