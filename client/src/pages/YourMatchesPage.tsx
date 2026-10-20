@@ -981,18 +981,18 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       const { data } = await supabase.auth.getSession()
       const token = data.session?.access_token
       if (!token) throw new Error('Your session expired. Please sign in again.')
-      const res = await fetch('/api/geocode', {
+      const res = await fetch('/api/location-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ city: locationQuery.trim() }),
+        body: JSON.stringify({ query: locationQuery.trim() }),
       })
-      const result = (await res.json()) as { ok: boolean; lat?: number; lng?: number }
-      if (!result.ok || result.lat == null || result.lng == null) {
-        setLocationError('Could not find that location. Try a city, state, or ZIP code.')
+      const result = (await res.json()) as { ok: boolean; lat?: number; lng?: number; label?: string; error_message?: string }
+      if (!res.ok || !result.ok || result.lat == null || result.lng == null) {
+        setLocationError(result.error_message ?? 'Could not find that location. Try a city, state, or ZIP code.')
         return
       }
       setLocationLatLng({ lat: result.lat, lng: result.lng })
-      setLocationLabel(locationQuery.trim())
+      setLocationLabel(result.label ?? locationQuery.trim())
     } catch (err) {
       setLocationError(err instanceof Error ? err.message : 'Could not search that location')
     } finally {
@@ -1902,11 +1902,12 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4">
         <div className="min-w-[220px] flex-1">
           <label htmlFor="location-search" className="block text-xs font-medium text-gray-500 mb-1">
-            Search by city or ZIP
+            Search by city, state or ZIP
           </label>
           <div className="flex gap-2">
             <input
               id="location-search"
+              maxLength={120}
               type="text"
               value={locationQuery}
               onChange={(e) => setLocationQuery(e.target.value)}
@@ -1925,6 +1926,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
               Search
             </button>
           </div>
+          <p className="mt-1 text-xs text-gray-500">City and ZIP searches use an approximate area center. Listings with unknown locations remain visible.</p>
           <button
             type="button"
             onClick={useMyCurrentLocation}

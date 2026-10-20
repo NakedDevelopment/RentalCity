@@ -788,7 +788,8 @@ export function ListFromReportPage() {
       }
     }
 
-    const reportCoords = coordinatesForReportAddress(prefill, { streetAddress, city, state, zipCode })
+    const reportCoords = coordinatesForReportAddress(prefill, { streetAddress, city, state, zipCode }) ??
+      await geocodeAddress({ addressLine1: streetAddress, city, state, postalCode: zipCode })
     const { data, error } = await supabase
       .from('properties')
       .insert({
@@ -834,14 +835,6 @@ export function ListFromReportPage() {
     }
 
     const newPropertyId = (data as { id: string }).id
-
-    // Only legacy reports, missing RentCast locations, or edited addresses need Google.
-    if (!reportCoords) void (async () => {
-      const coords = await geocodeAddress({ addressLine1: streetAddress, city, state, postalCode: zipCode })
-      if (coords) {
-        await supabase.from('properties').update({ lat: coords.lat, lng: coords.lng }).eq('id', newPropertyId)
-      }
-    })()
 
     return newPropertyId
   }

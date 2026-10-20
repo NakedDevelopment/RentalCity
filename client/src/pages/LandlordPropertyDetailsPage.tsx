@@ -404,6 +404,15 @@ export function LandlordPropertyDetailsPage() {
       photoItems.forEach((p) => p.url && photoUrls.push(p.url))
     }
 
+    const addressChanged =
+      formState.addressLine1 !== property.address_line1 ||
+      formState.neighborhood !== property.city ||
+      (formState.stateCode || null) !== property.state ||
+      (formState.zipCode || null) !== property.postal_code
+    const coords = addressChanged ? await geocodeAddress({
+      addressLine1: formState.addressLine1, city: formState.neighborhood,
+      state: formState.stateCode, postalCode: formState.zipCode,
+    }) : null
     const { error } = await supabase
       .from('properties')
       .update({
@@ -412,6 +421,8 @@ export function LandlordPropertyDetailsPage() {
         city: formState.neighborhood,
         state: formState.stateCode || null,
         postal_code: formState.zipCode || null,
+        // Never retain the old address's coordinates after an unresolved edit.
+        ...(addressChanged ? { lat: coords?.lat ?? null, lng: coords?.lng ?? null } : {}),
         description: formState.description || null,
         bedrooms: Number.parseInt(formState.bedrooms || '0', 10),
         bathrooms: Number.parseFloat(formState.bathrooms || '0'),
@@ -433,27 +444,6 @@ export function LandlordPropertyDetailsPage() {
     if (error) {
       setError(error.message)
       return
-    }
-
-    const addressChanged =
-      formState.addressLine1 !== property.address_line1 ||
-      formState.neighborhood !== property.city ||
-      (formState.stateCode || null) !== property.state ||
-      (formState.zipCode || null) !== property.postal_code
-    if (addressChanged) {
-      const propertyId = property.id
-      // Fire-and-forget: never block the save on geocoding.
-      void (async () => {
-        const coords = await geocodeAddress({
-          addressLine1: formState.addressLine1,
-          city: formState.neighborhood,
-          state: formState.stateCode,
-          postalCode: formState.zipCode,
-        })
-        if (coords) {
-          await supabase.from('properties').update({ lat: coords.lat, lng: coords.lng }).eq('id', propertyId)
-        }
-      })()
     }
 
     const { data: refreshed } = await supabase

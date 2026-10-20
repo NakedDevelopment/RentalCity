@@ -28,6 +28,7 @@
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/supabase-js": "^2.45.0",
     "@types/ws": "^8.18.1",
+    "@types/zipcodes": "^8.0.5",
     "cors": "^2.8.5",
     "docusign-esign": "^10.0.0",
     "dotenv": "^16.4.0",
@@ -43,6 +44,7 @@
     "recharts": "^3.10.1",
     "stripe": "^17.0.0",
     "ws": "^8.21.3",
+    "zipcodes": "^8.0.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

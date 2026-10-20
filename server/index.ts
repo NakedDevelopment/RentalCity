@@ -16,7 +16,8 @@ import {
   computeMatch,
   type MatchResult,
 } from './match'
-import { geocodeAddress, buildAddressString } from './geocode'
+import { lookupPropertyLocation } from './geocode'
+import { searchLocation } from './locationSearch'
 import { rentCastCoordinates } from '../shared/reportCoordinates'
 import { haversineMiles, DEFAULT_MATCH_RADIUS_MILES, firstKnownLocation } from './geo'
 import type { PlaidApi } from 'plaid'
@@ -989,31 +990,51 @@ app.get('/api/address-suggest', async (req, res) => {
   }
 })
 
-/**
- * Geocode a free-form address into lat/lng via the Google Maps Geocoding API.
- * Keeps the API key server-side; requires sign-in to prevent anonymous quota abuse.
- * Never throws on a geocoding failure — callers (property/tenant profile saves)
- * never block on this, so failures are reported in the response body and logged here.
- */
+// Paid property lookups have a per-user limit; city/ZIP lookup is entirely offline.
+const locationLookupLimits = new Map<string, { count: number; expires: number }>()
+app.post('/api/location-search', async (req, res) => {
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+  const query = typeof req.body?.query === 'string' ? req.body.query : ''
+  return res.json(searchLocation(query))
+})
+
+/** Exact RentCast property location; never sends addresses to Google. */
 app.post('/api/geocode', async (req, res) => {
   const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
   const user = await authUser(token)
   if (!user) return res.status(401).json({ error: 'Authentication required' })
 
   const { addressLine1, addressLine2, city, state, postalCode } = (req.body ?? {}) as Record<string, unknown>
-  const address = buildAddressString({
+  // Support already-open clients that used the old city-only geocode contract.
+  if (!addressLine1) {
+    return res.json(searchLocation(typeof postalCode === 'string' && postalCode ? postalCode :
+      [city, state].filter((v) => typeof v === 'string' && v.trim()).join(', ')))
+  }
+  const now = Date.now()
+  for (const [id, limit] of locationLookupLimits) {
+    if (limit.expires <= now) locationLookupLimits.delete(id)
+  }
+  const limit = locationLookupLimits.get(user.id) ?? { count: 0, expires: now + 600000 }
+  if (limit.count >= 30) return res.status(429).json({ ok: false, status: 'rate_limited', error_message: 'Too many location lookups. Please try again later.' })
+  limit.count++
+  locationLookupLimits.set(user.id, limit)
+  const address = {
     addressLine1: typeof addressLine1 === 'string' ? addressLine1 : null,
     addressLine2: typeof addressLine2 === 'string' ? addressLine2 : null,
     city: typeof city === 'string' ? city : null,
     state: typeof state === 'string' ? state : null,
     postalCode: typeof postalCode === 'string' ? postalCode : null,
-  })
+  }
+  if (Object.values(address).some((value) => value && value.length > 200)) {
+    return res.status(400).json({ ok: false, status: 'invalid_request' })
+  }
 
-  const result = await geocodeAddress(address, GOOGLE_MAPS_API_KEY)
+  const result = await lookupPropertyLocation(address, RENTCAST_API_KEY)
   if (!result.ok) {
     console.error(
-      `Geocode failed for user ${user.id}: status=${result.status}` +
-        (result.error_message ? ` error_message=${result.error_message}` : ''),
+      `Property location lookup failed: status=${result.status}`,
     )
   }
   return res.json(result)

@@ -15,15 +15,15 @@ export function addressKey(a: GeocodableAddress): string {
 }
 
 /**
- * Calls the server-side /api/geocode proxy (keeps GOOGLE_MAPS_API_KEY off the client).
+ * Calls the server-side RentCast property lookup (keeps the API key off the client).
  * Never throws — failures are logged and resolve to null so callers can fire-and-forget.
  */
 export async function geocodeAddress(address: GeocodableAddress): Promise<{ lat: number; lng: number } | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  if (!session?.access_token) return null
   try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.access_token) return null
     const res = await fetch('/api/geocode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
@@ -39,7 +39,7 @@ export async function geocodeAddress(address: GeocodableAddress): Promise<{ lat:
       | { ok: true; lat: number; lng: number }
       | { ok: false; status: string; error_message?: string }
       | null
-    if (j?.ok) return { lat: j.lat, lng: j.lng }
+    if (res.ok && j?.ok) return { lat: j.lat, lng: j.lng }
     console.error('Geocode request failed', j)
     return null
   } catch (err) {

@@ -170,6 +170,11 @@ export function AddPropertyPreviewPage() {
       return
     }
 
+    // Save the location atomically with the address before navigating away.
+    const coords = await geocodeAddress({
+      addressLine1: draft.streetAddress, city: draft.city,
+      state: draft.state, postalCode: draft.zipCode,
+    })
     const { data, error: insertError } = await supabase
       .from('properties')
       .insert({
@@ -179,6 +184,8 @@ export function AddPropertyPreviewPage() {
         city: draft.city,
         state: draft.state,
         postal_code: draft.zipCode,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
         bedrooms: Number.isNaN(bedroomCount) ? 0 : bedroomCount,
         bathrooms: Number.isNaN(bathroomCount) ? 0 : bathroomCount,
         monthly_rent_cents: monthlyRentCents,
@@ -199,22 +206,6 @@ export function AddPropertyPreviewPage() {
     if (insertError) {
       setError(friendlyPersistError(insertError, 'save'))
       return
-    }
-
-    // Fire-and-forget: never block the save on geocoding.
-    const newPropertyId = data?.id
-    if (newPropertyId) {
-      void (async () => {
-        const coords = await geocodeAddress({
-          addressLine1: draft.streetAddress,
-          city: draft.city,
-          state: draft.state,
-          postalCode: draft.zipCode,
-        })
-        if (coords) {
-          await supabase.from('properties').update({ lat: coords.lat, lng: coords.lng }).eq('id', newPropertyId)
-        }
-      })()
     }
 
     trackMetaCustomEvent('CreateListing', { listing_status: status })

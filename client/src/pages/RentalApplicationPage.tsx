@@ -93,7 +93,7 @@ export function RentalApplicationPage() {
     ;(async () => {
       const [{ data: p }, { data: privateProfile }, { data: a }, { data: preferences }] = await Promise.all([
         supabase.from('profiles').select('display_name,phone,bio,city').eq('id', user.id).maybeSingle(),
-        supabase.from('tenant_application_profiles').select('date_of_birth,address_line1,address_line2,city,state,postal_code,emergency_contact_name,emergency_contact_relationship,emergency_contact_phone').eq('tenant_id', user.id).maybeSingle(),
+        supabase.from('tenant_application_profiles').select('date_of_birth,address_line1,address_line2,city,state,postal_code,lat,lng,emergency_contact_name,emergency_contact_relationship,emergency_contact_phone').eq('tenant_id', user.id).maybeSingle(),
         supabase.from('universal_applications').select('id,status,valid_until,created_at,wizard_completed_at,triggering_property_id').eq('tenant_id', user.id).order('created_at', { ascending: false }).limit(1),
         supabase.from('tenant_preferences').select('move_in_date,lease_length_months,min_budget_cents,max_budget_cents').eq('user_id', user.id).maybeSingle(),
       ])
@@ -106,13 +106,13 @@ export function RentalApplicationPage() {
         moveInDate: preferences?.move_in_date ?? '',
         budget: budgetKey(preferences?.min_budget_cents ?? null, preferences?.max_budget_cents ?? null),
       })
-      lastGeocodedAddressRef.current = addressKey({
+      lastGeocodedAddressRef.current = privateProfile?.lat != null && privateProfile?.lng != null ? addressKey({
         addressLine1: normalized.address_line1,
         addressLine2: normalized.address_line2,
         city: normalized.city,
         state: normalized.state,
         postalCode: normalized.postal_code,
-      })
+      }) : null
       const loadedUniversal = ((a ?? [])[0] as Universal) ?? null
       setUniversal(loadedUniversal)
       setTriggerReady(Boolean(loadedUniversal?.triggering_property_id) || !params.get('propertyId'))
@@ -183,6 +183,13 @@ export function RentalApplicationPage() {
     if (!user) return false
     setSaving(true); setError(null)
     try {
+      const locationAddress = {
+        addressLine1: form.address_line1, addressLine2: form.address_line2,
+        city: form.city, state: form.state, postalCode: form.postal_code,
+      }
+      const nextAddressKey = addressKey(locationAddress)
+      const needsLookup = nextAddressKey !== lastGeocodedAddressRef.current
+      const coords = needsLookup && form.address_line1 ? await geocodeAddress(locationAddress) : null
       const { error: profileError } = await supabase.from('profiles').update({
         display_name: form.display_name, phone: form.phone, bio: form.bio, city: form.city,
       }).eq('id', user.id)
@@ -190,28 +197,12 @@ export function RentalApplicationPage() {
       const { error: privateProfileError } = await supabase.from('tenant_application_profiles').upsert({
         tenant_id: user.id, date_of_birth: form.date_of_birth, address_line1: form.address_line1,
         address_line2: form.address_line2, city: form.city, state: form.state, postal_code: form.postal_code,
+        ...(needsLookup ? { lat: coords?.lat ?? null, lng: coords?.lng ?? null } : {}),
         emergency_contact_name: form.emergency_contact_name, emergency_contact_relationship: form.emergency_contact_relationship, emergency_contact_phone: form.emergency_contact_phone,
       }, { onConflict: 'tenant_id' })
       if (privateProfileError) throw privateProfileError
 
-      const nextAddressKey = addressKey({
-        addressLine1: form.address_line1, addressLine2: form.address_line2,
-        city: form.city, state: form.state, postalCode: form.postal_code,
-      })
-      if (form.address_line1 && form.city && nextAddressKey !== lastGeocodedAddressRef.current) {
-        lastGeocodedAddressRef.current = nextAddressKey
-        const tenantId = user.id
-        // Fire-and-forget: never block the save on geocoding.
-        void (async () => {
-          const coords = await geocodeAddress({
-            addressLine1: form.address_line1, addressLine2: form.address_line2,
-            city: form.city, state: form.state, postalCode: form.postal_code,
-          })
-          if (coords) {
-            await supabase.from('tenant_application_profiles').update({ lat: coords.lat, lng: coords.lng }).eq('tenant_id', tenantId)
-          }
-        })()
-      }
+      if (coords) lastGeocodedAddressRef.current = nextAddressKey
 
       const range = budgetRanges[form.budget]
       if (range && form.leaseIntent && form.moveInDate) {
