@@ -5,6 +5,7 @@ import {
   formatCurrency,
   loadPropertyDraft,
   moneyInputToCents,
+  savePropertyDraft,
   type PropertyDraftPhoto,
 } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
@@ -133,24 +134,35 @@ export function AddPropertyPreviewPage() {
     const photoLabels = photosToUse.map((p) => p.label)
     let photoUrls: string[] = []
 
-    if (photosToUse.some((p) => p.file)) {
+    const hasNewUploads = photosToUse.some((p) => p.file)
+    if (hasNewUploads) {
       const uploadFolderId = crypto.randomUUID()
       for (let i = 0; i < photosToUse.length; i++) {
         const photo = photosToUse[i]
-        if (!photo.file) continue
-        const ext = photo.file.name.split('.').pop()?.toLowerCase() || 'jpg'
-        const path = `${user.id}/${uploadFolderId}/${i}.${ext}`
-        const { error: uploadError } = await supabase.storage
-          .from(PROPERTY_IMAGES_BUCKET)
-          .upload(path, photo.file, { upsert: true })
-        if (uploadError) {
-          setError(friendlyPersistError(uploadError, 'upload'))
-          setSubmitting(false)
-          return
+        if (photo.url) {
+          photoUrls.push(photo.url)
+        } else if (photo.file) {
+          const ext = photo.file.name.split('.').pop()?.toLowerCase() || 'jpg'
+          const path = `${user.id}/${uploadFolderId}/${i}.${ext}`
+          const { error: uploadError } = await supabase.storage
+            .from(PROPERTY_IMAGES_BUCKET)
+            .upload(path, photo.file, { upsert: true })
+          if (uploadError) {
+            setError(friendlyPersistError(uploadError, 'upload'))
+            setSubmitting(false)
+            return
+          }
+          const { data: urlData } = supabase.storage.from(PROPERTY_IMAGES_BUCKET).getPublicUrl(path)
+          photo.url = urlData.publicUrl
+          photoUrls.push(photo.url)
         }
-        const { data: urlData } = supabase.storage.from(PROPERTY_IMAGES_BUCKET).getPublicUrl(path)
-        photoUrls.push(urlData.publicUrl)
       }
+      // Persist the resolved Storage URLs back into the draft immediately, so a
+      // failed insert below (or navigating away before it completes) doesn't
+      // force re-uploading files that already landed in Storage.
+      savePropertyDraft({ ...draft, photos: photosToUse })
+    } else {
+      photosToUse.forEach((p) => p.url && photoUrls.push(p.url))
     }
     if (status === 'active' && photoUrls.length === 0) {
       setError('To publish, upload at least one property photo.')
@@ -276,9 +288,9 @@ export function AddPropertyPreviewPage() {
                     index === 0 ? 'h-[210px] sm:col-span-2 sm:row-span-2' : 'h-[96px]'
                   }`}
                 >
-                  {photo.previewUrl ? (
+                  {photo.previewUrl || photo.url ? (
                     <img
-                      src={photo.previewUrl}
+                      src={photo.previewUrl || photo.url}
                       alt={photo.label}
                       className="h-full w-full object-cover"
                     />

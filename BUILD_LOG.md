@@ -632,4 +632,79 @@ Four additive migrations, all applied live via psql and verified:
   `preview_landlord_invite` RPC update (verified via `\d` and `pg_get_functiondef`).
 No other schema changes — all other referenced columns (`tenant_questionnaire.voucher_*`,
 `tenant_preferences.location_*`, `properties.lat/lng`, `landlord_memberships.*`) already existed
+
+## 2026-10-29 — Pulse automation run (project-wide sweep, 1 task)
+
+Single open code_task this run: `[CODE] Fix image loss bug in AddPropertyPreviewPage: photos not
+uploaded when saving as draft` (ID `9e6f086c-1966-4a69-8a54-62bc6ad21813`). See
+`USER_STORIES/TASK_9e6f086c-1966-4a69-8a54-62bc6ad21813.md` for full ACs and PM sign-off.
+
+### Root cause
+`savePropertyDraft` (`client/src/lib/propertyDraft.ts`) stripped `file`/`previewUrl` from photos
+before writing to localStorage, keeping only `id`/`label`/`cover`. Any time a photo's live
+in-memory `File` object was lost — e.g. the "Edit" link round-tripping through
+`AddPropertyPhotosPage` (which remounts and re-reads `uploadedPhotos` from the stripped
+localStorage draft), or any fresh page load reading `draft.photos` instead of
+`location.state.photos` — `persistProperty()` in `AddPropertyPreviewPage.tsx` found
+`photosToUse.some(p => p.file)` false, skipped the upload loop entirely, and inserted the new
+`properties` row with `photo_urls: []`, silently discarding the user's photo selection.
+`LandlordPropertyDetailsPage.tsx` already had the correct fix for this exact problem (an
+`item.url` persisted-URL fallback) for editing an *existing* property — `AddPropertyPreviewPage`
+(new-property creation, insert-only) never got the equivalent treatment.
+
+### Fix
+Ported the already-correct `LandlordPropertyDetailsPage.tsx` pattern into the new-property path:
+- `propertyDraft.ts` — added optional `url?: string` to `PropertyDraftPhoto`; `savePropertyDraft`
+  now persists `url` alongside `id`/`label`/`cover`.
+- `AddPropertyPreviewPage.tsx` — `persistProperty`'s upload loop now checks `photo.url` first
+  (reuse, no re-upload) before falling back to `photo.file` (upload + set `photo.url` on
+  success); when no photo has a fresh `file` at all, every already-uploaded `photo.url` is
+  pushed into `photoUrls` instead of leaving it empty. The resolved URLs are written back via
+  `savePropertyDraft` immediately after the upload loop (before the `properties` insert), so a
+  failed insert or navigating away doesn't force re-uploading files already in Storage. Both
+  photo-grid previews (`AddPropertyPreviewPage.tsx`, `AddPropertyPhotosPage.tsx`) now fall back
+  to `photo.url` when `previewUrl` is absent, so reused photos render instead of showing blank
+  label-only tiles.
+- No schema change — `properties.photo_urls`/`photo_labels` (`text[]` NOT NULL) confirmed
+  unchanged via live psql; this is a client-only state-handling fix.
+
+### QA — two-instance loop (reconciled)
+Both instances independently returned PASS on every AC with no disagreement — CONFIRMED PASS.
+Instance A traced the happy path (fresh upload, round-trip reuse, mixed file+url lists, the
+`active`+zero-photos guard) line-by-line against the reference pattern — all 4 ACs PASS.
+Instance B's adversarial pass covered empty-photo list, the `file`+`url` both-present case, the
+`draft` staleness question (`loadPropertyDraft()` is called once per render and is the same
+object used for both `savePropertyDraft` and the `properties` insert, so no corruption risk),
+rapid-click `disabled={submitting}` guard, in-place `photo.url` mutation safety (no React state
+to go stale, component re-derives from `location.state`/localStorage every render), and schema/
+bucket-name verification — all PASS. One minor, pre-existing-equivalent gap noted (if upload
+fails partway through a multi-photo batch, URLs resolved before the failure aren't persisted
+until the loop completes) — not a regression (pre-fix behavior lost everything on any failure)
+and outside the stated ACs, not actioned.
+
+### Stress Tester (single instance)
+Empty photo list (`status=draft` inserts `photo_urls: []`, never `null`; `status=active` hits the
+existing length-guard first) — PASS. Rapid repeat clicks — pre-existing `disabled={submitting}`
+guard on both buttons, unregressed — PASS. Partial upload-loop network failure — degrades to
+pre-fix behavior (loses in-flight progress), not worse — PASS. No new Supabase queries, no new
+env vars, no new IDs introduced by this fix — N/A for the remaining standard scenarios.
+
+### Motion Designer / UX Auditor
+Not run — this is a backend/state-handling bug fix with no new screens, hooked moments, or
+layout changes. The two photo-grid fallbacks (`photo.url` rendering) are a 1-line parity fix to
+existing thumbnail markup, not new UI.
+
+### PM Visual Verification
+Skipped — no UI/visual change (per Step 4 gate, only required for UI tasks).
+
+### Build gate
+`npx tsc --noEmit`: zero errors.
+
+### Dependencies
+No new dependency. `package-lock.json` regenerated via the standard workaround to run
+`npm install`/the build gate, then reverted (`git checkout -- package-lock.json`).
+
+### Database
+No migration — client-only fix, confirmed via live psql schema read (no `properties` column
+changes needed).
 live from prior runs.

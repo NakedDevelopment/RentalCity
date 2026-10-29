@@ -6,6 +6,8 @@ export type PropertyDraftPhoto = {
   previewUrl?: string
   /** File for upload; kept in memory, not persisted */
   file?: File
+  /** Supabase Storage public URL once uploaded; persisted to draft */
+  url?: string
 }
 
 export type PropertyDraft = {
@@ -65,7 +67,7 @@ export function savePropertyDraft(draft: PropertyDraft) {
   if (typeof window === 'undefined') return
   const toPersist = {
     ...draft,
-    photos: draft.photos.map(({ id, label, cover }) => ({ id, label, cover })),
+    photos: draft.photos.map(({ id, label, cover, url }) => ({ id, label, cover, url })),
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toPersist))
 }

@@ -208,9 +208,9 @@ export function AddPropertyPhotosPage() {
                     ×
                   </button>
                   <div className="flex h-[136px] items-center justify-center overflow-hidden">
-                    {photo.previewUrl ? (
+                    {photo.previewUrl || photo.url ? (
                       <img
-                        src={photo.previewUrl}
+                        src={photo.previewUrl || photo.url}
                         alt={photo.label}
                         className="h-full w-full object-cover"
                       />
