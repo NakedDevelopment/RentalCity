@@ -90,6 +90,7 @@ export function LandlordAgreementsModal({
       if (event.origin !== window.location.origin) return
       const data = event.data as { source?: string; type?: AgreementKind; completed?: boolean }
       if (data?.source !== 'docusign-return') return
+      if (data.type !== 'equifax' && data.type !== 'plaid') return
       setSigningUrl(null)
       setSigningType(null)
       if (data.completed) {

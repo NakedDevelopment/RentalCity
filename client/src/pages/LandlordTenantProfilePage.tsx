@@ -47,6 +47,8 @@ import {
 } from '../components/TenantLeasePreferencesDisplay'
 import { LandlordAgreementsModal } from '../components/LandlordAgreementsModal'
 import { getDocusignStatus, type DocusignStatus } from '../lib/docusignApi'
+import { useProfileRole } from '../lib/useProfileRole'
+import { LandlordLeaseCard } from '../components/LandlordLeaseCard'
 
 const APPLICATION_ID_PARAM_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -92,6 +94,7 @@ function normalizeProfileReviews(rows: unknown): TenantProfileReviewRow[] {
 
 export function LandlordTenantProfilePage() {
   const { user } = useAuth()
+  const { role: profileRole } = useProfileRole(user)
   const { id = '1' } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -1085,6 +1088,18 @@ export function LandlordTenantProfilePage() {
                       : 'This tenant has not added a bio yet.'}
                   </p>
                 </ProfileContentCard>
+
+                {profileRole === 'landlord' && (applicationPropertyId || (propertyParam && APPLICATION_ID_PARAM_RE.test(propertyParam))) ? (
+                  <LandlordLeaseCard
+                    tenantId={id}
+                    propertyId={(applicationPropertyId || propertyParam) ?? ''}
+                    applicationId={
+                      landlordTenantApplications.find(
+                        (row) => row.property_id === (applicationPropertyId || propertyParam),
+                      )?.id ?? null
+                    }
+                  />
+                ) : null}
 
                 {hasUnlockedProfileAccess ? (
                   <>
