@@ -8,6 +8,9 @@ export type PropertyDraftPhoto = {
   file?: File
   /** Supabase Storage public URL once uploaded; persisted to draft */
   url?: string
+  uploadStatus?: 'uploading' | 'error' | 'complete'
+  uploadProgress?: number
+  uploadError?: string
 }
 
 export type PropertyDraft = {
@@ -67,7 +70,7 @@ export function savePropertyDraft(draft: PropertyDraft) {
   if (typeof window === 'undefined') return
   const toPersist = {
     ...draft,
-    photos: draft.photos.map(({ id, label, cover, url }) => ({ id, label, cover, url })),
+    photos: serializablePhotos(draft.photos),
   }
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toPersist))
 }
@@ -75,6 +78,30 @@ export function savePropertyDraft(draft: PropertyDraft) {
 export function clearPropertyDraft() {
   if (typeof window === 'undefined') return
   window.localStorage.removeItem(STORAGE_KEY)
+}
+
+function serializablePhotos(photos: PropertyDraftPhoto[]) {
+  return photos.map(({ id, label, cover, url }) => ({ id, label, cover, url }))
+}
+
+// Unsaved edits are isolated by owner and listing; never autosave other form
+// fields or change a published listing while its photos are uploading.
+export function loadPropertyPhotoDraft(userId: string, propertyId: string): PropertyDraftPhoto[] | null {
+  const raw = window.localStorage.getItem(`rental-city-property-photos:${userId}:${propertyId}`)
+  if (!raw) return null
+  const photos: unknown = JSON.parse(raw)
+  return Array.isArray(photos) ? photos as PropertyDraftPhoto[] : null
+}
+
+export function savePropertyPhotoDraft(userId: string, propertyId: string, photos: PropertyDraftPhoto[]) {
+  window.localStorage.setItem(
+    `rental-city-property-photos:${userId}:${propertyId}`,
+    JSON.stringify(serializablePhotos(photos)),
+  )
+}
+
+export function clearPropertyPhotoDraft(userId: string, propertyId: string) {
+  window.localStorage.removeItem(`rental-city-property-photos:${userId}:${propertyId}`)
 }
 
 export function moneyInputToCents(value: string) {

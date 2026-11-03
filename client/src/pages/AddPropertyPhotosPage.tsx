@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { loadPropertyDraft, savePropertyDraft, type PropertyDraftPhoto } from '../lib/propertyDraft'
-
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/heic']
-const MAX_SIZE_BYTES = 10 * 1024 * 1024
+import { loadPropertyDraft, savePropertyDraft } from '../lib/propertyDraft'
+import { useAuth } from '../lib/useAuth'
+import { usePropertyPhotoUploads } from '../lib/usePropertyPhotoUploads'
+import { PropertyPhotoUploadStatus } from '../components/PropertyPhotoUploadStatus'
 
 /** Old default placeholder ids – filter these out when loading draft */
 const LEGACY_PLACEHOLDER_IDS = new Set(['living-room', 'kitchen', 'bedroom'])
@@ -18,66 +18,14 @@ const photoTips = [
 export function AddPropertyPhotosPage() {
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const draft = loadPropertyDraft()
-  const [uploadedPhotos, setUploadedPhotos] = useState<PropertyDraftPhoto[]>(() => {
-    const loaded = draft.photos.filter((p) => !LEGACY_PLACEHOLDER_IDS.has(p.id))
-    return loaded
-  })
+  const { user } = useAuth()
+  const uploads = usePropertyPhotoUploads(
+    user?.id,
+    () => loadPropertyDraft().photos.filter((p) => !LEGACY_PLACEHOLDER_IDS.has(p.id)),
+    (photos) => savePropertyDraft({ ...loadPropertyDraft(), photos }),
+  )
+  const { photos: uploadedPhotos, setPhotos: setUploadedPhotos, addFiles: processFiles, removePhoto, error: uploadError } = uploads
   const [saved, setSaved] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-
-  useEffect(() => {
-    savePropertyDraft({
-      ...loadPropertyDraft(),
-      photos: uploadedPhotos,
-    })
-  }, [uploadedPhotos])
-
-  function removePhoto(id: string) {
-    setUploadedPhotos((current) => {
-      const photo = current.find((p) => p.id === id)
-      if (photo?.previewUrl) URL.revokeObjectURL(photo.previewUrl)
-      const next = current.filter((p) => p.id !== id)
-      if (next.length === 0) return []
-      return next.map((p, index) => ({ ...p, cover: index === 0 }))
-    })
-  }
-
-  function processFiles(files: FileList | null) {
-    if (!files?.length) return
-    setUploadError(null)
-    const accepted: PropertyDraftPhoto[] = []
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const isAccepted =
-        ACCEPTED_TYPES.includes(file.type) ||
-        file.type === 'image/heic' ||
-        file.name.toLowerCase().endsWith('.heic')
-      if (!isAccepted) {
-        setUploadError(`${file.name} is not supported. Use JPG, PNG, or HEIC.`)
-        continue
-      }
-      if (file.size > MAX_SIZE_BYTES) {
-        setUploadError(`${file.name} is over 10MB.`)
-        continue
-      }
-      const id = `photo-${Date.now()}-${i}`
-      accepted.push({
-        id,
-        label: file.name.replace(/\.[^/.]+$/, '') || `Photo ${uploadedPhotos.length + accepted.length + 1}`,
-        cover: uploadedPhotos.length === 0 && accepted.length === 0,
-        previewUrl: URL.createObjectURL(file),
-        file,
-      })
-    }
-    if (accepted.length > 0) {
-      setUploadedPhotos((current) => {
-        const next = [...current, ...accepted]
-        if (next.some((p) => p.cover)) return next
-        return next.map((p, i) => ({ ...p, cover: i === 0 }))
-      })
-    }
-  }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
@@ -99,15 +47,8 @@ export function AddPropertyPhotosPage() {
     })
   }
 
-  useEffect(() => {
-    return () => {
-      uploadedPhotos.forEach((p) => {
-        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl)
-      })
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- revoke on unmount only
-
   function handleSaveDraft() {
+    if (uploads.incomplete || !uploads.persistPhotos()) return
     setSaved(true)
     window.setTimeout(() => setSaved(false), 2000)
   }
@@ -127,7 +68,7 @@ export function AddPropertyPhotosPage() {
 
         <div className="rounded-2xl border border-gray-200 bg-white px-6 py-6 shadow-sm">
           <h1 className="text-[2rem] font-medium text-gray-900">Upload Photos</h1>
-          <p className="mt-3 text-sm leading-7 text-gray-600">Upload at least 5 photos of your property.</p>
+          <p className="mt-3 text-sm leading-7 text-gray-600">Upload up to 5 photos of your property. At least 1 is required to publish.</p>
 
           <div className="mt-6">
             <div className="mb-2 flex items-center justify-between text-sm text-gray-600">
@@ -190,7 +131,7 @@ export function AddPropertyPhotosPage() {
           <div className="mt-5 rounded-xl border border-gray-200 bg-white px-4 py-4">
             <div className="flex items-center justify-between">
               <h2 className="text-[1.35rem] font-medium text-gray-900">Uploaded Photos</h2>
-              <span className="text-sm text-gray-500">{uploadedPhotos.length} of 5 minimum</span>
+              <span className="text-sm text-gray-500">{uploadedPhotos.length} photos (5 maximum)</span>
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-4">
@@ -218,7 +159,7 @@ export function AddPropertyPhotosPage() {
                       <span className="text-sm text-white">{photo.label}</span>
                     )}
                   </div>
-                  <div className="absolute bottom-2 left-2">
+                  <div className="absolute top-2 left-2">
                     <span
                       role="button"
                       tabIndex={0}
@@ -231,6 +172,7 @@ export function AddPropertyPhotosPage() {
                       {photo.cover ? '★ Cover' : 'Make Cover'}
                     </span>
                   </div>
+                  <PropertyPhotoUploadStatus photo={photo} onRetry={uploads.retryPhoto} />
                 </div>
               ))}
             </div>
@@ -246,9 +188,11 @@ export function AddPropertyPhotosPage() {
           </div>
 
           <p className="mt-5 text-center text-sm text-gray-500">
-            {uploadedPhotos.length >= 5
-              ? 'You have enough photos to continue'
-              : `Upload ${5 - uploadedPhotos.length} more photo${5 - uploadedPhotos.length === 1 ? '' : 's'} to continue`}
+            {uploads.uploading
+              ? 'Please wait for all photo uploads to finish before saving or continuing.'
+              : uploads.incomplete
+                ? 'Retry or remove incomplete photos before saving or continuing.'
+                : 'Uploaded photos are saved to your draft automatically.'}
           </p>
         </div>
 
@@ -256,15 +200,19 @@ export function AddPropertyPhotosPage() {
           <button
             type="button"
             onClick={handleSaveDraft}
-            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            disabled={uploads.incomplete}
+            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Save as Draft
           </button>
 
           <button
             type="button"
-            onClick={() => navigate('/onboarding/property/preview', { state: { photos: uploadedPhotos } })}
-            className="inline-flex items-center gap-2 rounded-lg btn-primary px-6 py-3 text-sm font-medium text-white"
+            disabled={uploads.incomplete}
+            onClick={() => {
+              if (!uploads.incomplete && uploads.persistPhotos()) navigate('/onboarding/property/preview')
+            }}
+            className="inline-flex items-center gap-2 rounded-lg btn-primary px-6 py-3 text-sm font-medium text-white disabled:opacity-50"
           >
             Next: Preview Property
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

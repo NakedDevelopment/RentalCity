@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { centsToMoneyInput, formatCurrency, moneyInputToCents } from '../lib/propertyDraft'
+import {
+  centsToMoneyInput, formatCurrency, moneyInputToCents,
+  loadPropertyPhotoDraft, savePropertyPhotoDraft, clearPropertyPhotoDraft,
+} from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { safeInternalPath } from '../lib/safeInternalPath'
 import { supabase } from '../lib/supabase'
 import { PropertyInviteLink } from '../components/PropertyInviteLink'
 import { geocodeAddress } from '../lib/geocodeClient'
+import { usePropertyPhotoUploads } from '../lib/usePropertyPhotoUploads'
+import { PropertyPhotoUploadStatus } from '../components/PropertyPhotoUploadStatus'
 
 type ListingStatus = 'Active' | 'Draft' | 'Inactive' | 'Leased'
 
@@ -43,18 +48,6 @@ type PropertyRecord = {
   amenities: string[]
   photo_labels: string[]
   photo_urls: string[]
-}
-
-const PROPERTY_IMAGES_BUCKET = 'property-images'
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/heic']
-const MAX_SIZE_BYTES = 10 * 1024 * 1024
-
-type PhotoItem = {
-  id: string
-  label: string
-  url?: string
-  file?: File
-  previewUrl?: string
 }
 
 const DEFAULT_AMENITIES = [
@@ -140,7 +133,6 @@ export function LandlordPropertyDetailsPage() {
     listingStatus: 'Draft' as ListingStatus,
   })
   const [amenities, setAmenities] = useState<Array<{ label: string; enabled: boolean }>>([])
-  const [photoItems, setPhotoItems] = useState<PhotoItem[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -149,6 +141,10 @@ export function LandlordPropertyDetailsPage() {
   const [shareStatus, setShareStatus] = useState<string | null>(null)
 
   const landlordId = user?.id
+  const uploads = usePropertyPhotoUploads(landlordId, () => [], (photos) => {
+    if (landlordId) savePropertyPhotoDraft(landlordId, id, photos)
+  })
+  const { photos: photoItems, setPhotos: setPhotoItems } = uploads
   const shareUrl = property && property.id === id && shareLink?.propertyId === property.id ? shareLink.url : null
   const handleShareLinkChange = useCallback((url: string | null) => {
     setShareLink(url ? { propertyId: id, url } : null)
@@ -207,16 +203,19 @@ export function LandlordPropertyDetailsPage() {
         enabled: normalized.amenities.includes(label),
       })),
     )
-    const labels = normalized.photo_labels.length > 0 ? normalized.photo_labels : ['Main Image']
+    const labels = normalized.photo_labels
     const urls = normalized.photo_urls ?? []
+    const draftPhotos = isEditMode && landlordId ? loadPropertyPhotoDraft(landlordId, normalized.id) : null
     setPhotoItems(
-      labels.map((label, i) => ({
-        id: `photo-${i}-${label}`,
-        label,
-        url: urls[i],
+      draftPhotos ?? urls.map((url, i) => ({
+        id: `photo-${i}`,
+        label: labels[i] || `Photo ${i + 1}`,
+        cover: i === 0,
+        url,
       })),
+      false,
     )
-  }, [])
+  }, [isEditMode, landlordId])
 
   useEffect(() => {
     async function loadProperty() {
@@ -286,31 +285,11 @@ export function LandlordPropertyDetailsPage() {
   }
 
   function removePhoto(index: number) {
-    setPhotoItems((current) => {
-      const item = current[index]
-      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl)
-      return current.filter((_, i) => i !== index)
-    })
+    if (photoItems[index]) uploads.removePhoto(photoItems[index].id)
   }
 
   function processFiles(files: FileList | null) {
-    if (!files?.length) return
-    const accepted: PhotoItem[] = []
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const isAccepted =
-        ACCEPTED_TYPES.includes(file.type) ||
-        file.type === 'image/heic' ||
-        file.name.toLowerCase().endsWith('.heic')
-      if (!isAccepted || file.size > MAX_SIZE_BYTES) continue
-      accepted.push({
-        id: `new-${Date.now()}-${i}`,
-        label: file.name.replace(/\.[^/.]+$/, '') || `Photo ${photoItems.length + accepted.length + 1}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-      })
-    }
-    if (accepted.length > 0) setPhotoItems((current) => [...current, ...accepted])
+    if (isEditMode && !saving) uploads.addFiles(files)
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -324,14 +303,6 @@ export function LandlordPropertyDetailsPage() {
     e.stopPropagation()
   }
 
-  const photoItemsRef = useRef(photoItems)
-  photoItemsRef.current = photoItems
-  useEffect(() => {
-    return () => {
-      photoItemsRef.current.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl))
-    }
-  }, [])
-
   const moveInCost = useMemo(() => {
     const total =
       moneyInputToCents(formState.monthlyRent) +
@@ -342,6 +313,11 @@ export function LandlordPropertyDetailsPage() {
 
   async function persistProperty(statusOverride?: 'draft' | 'active' | 'inactive' | 'leased') {
     if (!property || !user) return
+    if (uploads.incomplete) {
+      setError('Finish, retry, or remove incomplete photo uploads before saving.')
+      return
+    }
+    if (!uploads.persistPhotos()) return
 
     setSaving(true)
     setError(null)
@@ -359,7 +335,7 @@ export function LandlordPropertyDetailsPage() {
         !formState.monthlyRent.trim() ||
         !formState.bedrooms.trim() ||
         !formState.bathrooms.trim()
-      const hasAnyPhoto = photoItems.some((p) => Boolean(p.url || p.file))
+      const hasAnyPhoto = photoItems.some((p) => Boolean(p.url))
 
       if (requiredMissing) {
         setError('To publish, complete address, rent, beds, and baths.')
@@ -374,35 +350,7 @@ export function LandlordPropertyDetailsPage() {
     }
 
     const photoLabels = photoItems.map((p) => p.label)
-    const photoUrls: string[] = []
-
-    const hasNewUploads = photoItems.some((p) => p.file)
-    if (hasNewUploads) {
-      const uploadFolderId = crypto.randomUUID()
-      for (let i = 0; i < photoItems.length; i++) {
-        const item = photoItems[i]
-        if (item.url) {
-          photoUrls.push(item.url)
-        } else if (item.file) {
-          const ext = item.file.name.split('.').pop()?.toLowerCase() || 'jpg'
-          const path = `${user.id}/${property.id}/${uploadFolderId}/${i}.${ext}`
-          const { error: uploadError } = await supabase.storage
-            .from(PROPERTY_IMAGES_BUCKET)
-            .upload(path, item.file, { upsert: true })
-          if (uploadError) {
-            setError(uploadError.message)
-            setSaving(false)
-            return
-          }
-          const { data: urlData } = supabase.storage
-            .from(PROPERTY_IMAGES_BUCKET)
-            .getPublicUrl(path)
-          photoUrls.push(urlData.publicUrl)
-        }
-      }
-    } else {
-      photoItems.forEach((p) => p.url && photoUrls.push(p.url))
-    }
+    const photoUrls = photoItems.flatMap((photo) => photo.url ? [photo.url] : [])
 
     const addressChanged =
       formState.addressLine1 !== property.address_line1 ||
@@ -446,6 +394,7 @@ export function LandlordPropertyDetailsPage() {
       return
     }
 
+    clearPropertyPhotoDraft(user.id, property.id)
     const { data: refreshed } = await supabase
       .from('properties')
       .select(
@@ -667,7 +616,7 @@ export function LandlordPropertyDetailsPage() {
           </InfoPanel>
 
           <InfoPanel title={isEditMode ? 'Property Images' : 'Property Photos'}>
-            <div
+                  <div
               role="button"
               tabIndex={0}
               onDrop={handleDrop}
@@ -702,13 +651,15 @@ export function LandlordPropertyDetailsPage() {
               {photoItems.map((item, index) => (
                 <div
                   key={item.id}
-                  className="relative flex aspect-[5/3] items-center justify-center overflow-hidden rounded-xl bg-gray-300"
+                  className="overflow-hidden rounded-xl bg-gray-300"
                 >
+                  <div className="relative flex aspect-[5/3] items-center justify-center">
                   {isEditMode ? (
                     <>
                       <button
                         type="button"
                         onClick={() => makeCover(index)}
+                        disabled={saving}
                         className={`absolute left-2 top-2 z-10 rounded-md px-2 py-1 text-[10px] font-medium ${
                           index === 0 ? 'gradient-primary text-white' : 'bg-white/85 text-gray-700'
                         }`}
@@ -718,6 +669,7 @@ export function LandlordPropertyDetailsPage() {
                       <button
                         type="button"
                         onClick={() => removePhoto(index)}
+                        disabled={saving}
                         className="absolute right-2 top-2 z-10 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black"
                         aria-label={`Remove ${item.label}`}
                       >
@@ -736,12 +688,22 @@ export function LandlordPropertyDetailsPage() {
                   ) : (
                     <span className="text-xs text-white/90">{item.label}</span>
                   )}
+                  </div>
+                  {isEditMode ? <PropertyPhotoUploadStatus photo={item} onRetry={uploads.retryPhoto} /> : null}
                 </div>
               ))}
             </div>
             <p className="mt-4 text-sm text-gray-500">
-              Upload at least 5 high-quality images. First image will be the primary photo.
+              Upload up to 5 high-quality images. At least 1 is required to publish. First image will be the primary photo.
             </p>
+            {isEditMode && uploads.incomplete ? (
+              <p className="mt-2 text-sm text-amber-800">
+                {uploads.uploading
+                  ? 'Please wait for all photo uploads to finish before saving or leaving.'
+                  : 'Retry or remove incomplete photos before saving.'}
+              </p>
+            ) : null}
+            {isEditMode && uploads.error ? <p className="mt-2 text-sm text-red-600" role="alert">{uploads.error}</p> : null}
           </InfoPanel>
         </div>
 

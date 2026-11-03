@@ -1,19 +1,17 @@
 import { useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   clearPropertyDraft,
   formatCurrency,
   loadPropertyDraft,
   moneyInputToCents,
   savePropertyDraft,
-  type PropertyDraftPhoto,
 } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import { trackMetaCustomEvent } from '../lib/metaPixel'
 import { geocodeAddress } from '../lib/geocodeClient'
 
-const PROPERTY_IMAGES_BUCKET = 'property-images'
 
 const AMENITY_LABELS: Record<string, string> = {
   pet_friendly: 'Pet Friendly',
@@ -73,12 +71,10 @@ function AmenityItem({ label }: { label: string }) {
 }
 
 export function AddPropertyPreviewPage() {
-  const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
   const draft = loadPropertyDraft()
-  const photosFromState = (location.state as { photos?: PropertyDraftPhoto[] })?.photos
-  const displayPhotos = photosFromState && photosFromState.length > 0 ? photosFromState : draft.photos
+  const displayPhotos = draft.photos
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -125,45 +121,22 @@ export function AddPropertyPreviewPage() {
 
     setSubmitting(true)
 
-    const photosToUse = photosFromState && photosFromState.length > 0 ? photosFromState : draft.photos
+    // The durable draft is authoritative; history state can contain stale files
+    // or photos removed on a subsequent visit to the photo step.
+    const photosToUse = loadPropertyDraft().photos
+    if (photosToUse.some((photo) => !photo.url)) {
+      setError('Return to the photo step and finish, retry, or remove incomplete uploads before saving.')
+      setSubmitting(false)
+      return
+    }
     if (status === 'active' && photosToUse.length === 0) {
       setError('To publish, add at least one property photo.')
       setSubmitting(false)
       return
     }
     const photoLabels = photosToUse.map((p) => p.label)
-    let photoUrls: string[] = []
-
-    const hasNewUploads = photosToUse.some((p) => p.file)
-    if (hasNewUploads) {
-      const uploadFolderId = crypto.randomUUID()
-      for (let i = 0; i < photosToUse.length; i++) {
-        const photo = photosToUse[i]
-        if (photo.url) {
-          photoUrls.push(photo.url)
-        } else if (photo.file) {
-          const ext = photo.file.name.split('.').pop()?.toLowerCase() || 'jpg'
-          const path = `${user.id}/${uploadFolderId}/${i}.${ext}`
-          const { error: uploadError } = await supabase.storage
-            .from(PROPERTY_IMAGES_BUCKET)
-            .upload(path, photo.file, { upsert: true })
-          if (uploadError) {
-            setError(friendlyPersistError(uploadError, 'upload'))
-            setSubmitting(false)
-            return
-          }
-          const { data: urlData } = supabase.storage.from(PROPERTY_IMAGES_BUCKET).getPublicUrl(path)
-          photo.url = urlData.publicUrl
-          photoUrls.push(photo.url)
-        }
-      }
-      // Persist the resolved Storage URLs back into the draft immediately, so a
-      // failed insert below (or navigating away before it completes) doesn't
-      // force re-uploading files that already landed in Storage.
-      savePropertyDraft({ ...draft, photos: photosToUse })
-    } else {
-      photosToUse.forEach((p) => p.url && photoUrls.push(p.url))
-    }
+    const photoUrls = photosToUse.flatMap((photo) => photo.url ? [photo.url] : [])
+    savePropertyDraft({ ...draft, photos: photosToUse })
     if (status === 'active' && photoUrls.length === 0) {
       setError('To publish, upload at least one property photo.')
       setSubmitting(false)
