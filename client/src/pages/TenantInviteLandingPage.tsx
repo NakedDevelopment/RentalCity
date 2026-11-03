@@ -5,7 +5,7 @@ import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
 import { clearPendingLandlordInviteToken, getPendingLandlordInviteToken, setPendingLandlordInviteToken } from '../lib/pendingLandlordInvite'
 
-type Preview = { ok: true; landlord_name: string } | { ok: false }
+type Preview = { ok: true; landlord_name: string; unavailable: boolean } | { ok: false }
 
 export function TenantInviteLandingPage() {
   const { token } = useParams<{ token: string }>()
@@ -16,8 +16,11 @@ export function TenantInviteLandingPage() {
   const [loading, setLoading] = useState(true)
   const [redeemError, setRedeemError] = useState<string | null>(null)
   const [redeeming, setRedeeming] = useState(false)
+  const [previewError, setPreviewError] = useState(false)
 
   useEffect(() => {
+    setLoading(true)
+    setPreviewError(false)
     if (!token || !/^[0-9a-f-]{36}$/i.test(token)) {
       setPreview({ ok: false })
       setLoading(false)
@@ -27,14 +30,25 @@ export function TenantInviteLandingPage() {
     ;(async () => {
       const { data, error } = await supabase.rpc('preview_landlord_invite', { invite_token: token })
       if (cancelled) return
-      setLoading(false)
       if (error || !data || !(data as { ok?: boolean }).ok) {
+        setLoading(false)
         if (!error && getPendingLandlordInviteToken() === token) clearPendingLandlordInviteToken()
         setPreview({ ok: false })
         return
       }
       const d = data as { ok: boolean; landlord_name?: string }
-      setPreview({ ok: true, landlord_name: d.landlord_name ?? 'Your host' })
+      try {
+        const response = await fetch(`/api/invites/${encodeURIComponent(token)}/availability`, { cache: 'no-store' })
+        if (!response.ok) throw new Error('Could not check invite availability')
+        const availability = await response.json() as { unavailable: boolean }
+        if (typeof availability.unavailable !== 'boolean') throw new Error('Invalid availability response')
+        if (cancelled) return
+        setPreview({ ok: true, landlord_name: d.landlord_name ?? 'Your host', unavailable: availability.unavailable })
+      } catch {
+        if (cancelled) return
+        setPreviewError(true)
+      }
+      setLoading(false)
     })()
     return () => {
       cancelled = true
@@ -42,7 +56,7 @@ export function TenantInviteLandingPage() {
   }, [token])
 
   async function redeemAndContinue() {
-    if (!token || !user) return
+    if (!token || !user || !preview?.ok || preview.unavailable) return
     setRedeemError(null)
     setRedeeming(true)
     try {
@@ -90,11 +104,32 @@ export function TenantInviteLandingPage() {
     )
   }
 
+  if (previewError) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-16">
+        <p className="text-sm text-gray-600">Could not check property availability. Please refresh to try again.</p>
+      </div>
+    )
+  }
+
   if (!preview?.ok) {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
         <h1 className="text-xl font-medium text-gray-900">Invalid or expired invite</h1>
         <p className="mt-3 text-sm text-gray-600">Ask your host for a new link.</p>
+        <Link to="/" className="mt-6 inline-block text-sm font-medium text-gray-900 underline">
+          Back to Rental City
+        </Link>
+      </div>
+    )
+  }
+
+  if (preview.unavailable) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-16">
+        <h1 className="text-2xl font-medium text-gray-900">
+          This property has been leased and is no longer available.
+        </h1>
         <Link to="/" className="mt-6 inline-block text-sm font-medium text-gray-900 underline">
           Back to Rental City
         </Link>

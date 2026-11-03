@@ -463,6 +463,34 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+app.get('/api/invites/:token/availability', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store')
+  const { token } = req.params
+  if (!/^[0-9a-f-]{36}$/i.test(token)) return res.status(400).json({ error: 'Invalid invite' })
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(503).json({ error: 'Invite availability is unavailable' })
+  try {
+    const { data: invite, error: inviteError } = await admin
+      .from('landlord_invite_links')
+      .select('property_id, landlord_id')
+      .eq('token', token)
+      .maybeSingle()
+    if (inviteError) throw inviteError
+    if (!invite) return res.status(404).json({ error: 'Invalid invite' })
+    if (!invite.property_id) return res.json({ unavailable: false })
+    const { data: property, error: propertyError } = await admin
+      .from('properties')
+      .select('status')
+      .eq('id', invite.property_id)
+      .eq('landlord_id', invite.landlord_id)
+      .maybeSingle()
+    if (propertyError) throw propertyError
+    return res.json({ unavailable: !property || property.status !== 'active' })
+  } catch {
+    return res.status(500).json({ error: 'Could not check invite availability' })
+  }
+})
+
 // TEMP diagnostic: shows which host headers the deployment receives so we can
 // confirm subdomain (host-based) routing. Safe to remove once verified.
 app.get('/api/__hostcheck', (req, res) => {
