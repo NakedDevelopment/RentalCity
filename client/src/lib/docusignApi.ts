@@ -72,7 +72,7 @@ export async function createPlaidConsentSigningSession(
 export async function confirmDocusignCompletion(
   accessToken: string,
   envelopeId: string,
-  type: 'equifax' | 'plaid',
+  type: 'equifax' | 'plaid' | 'lease',
 ): Promise<{ completed: boolean; status?: string }> {
   const res = await fetch('/api/docusign/complete', {
     method: 'POST',

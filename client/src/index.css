@@ -39,6 +39,18 @@
   --color-score-moderate:        #FFB020;
 }
 
+@keyframes lease-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(10px); }
+  60% { transform: translateX(-10px); }
+  80% { transform: translateX(6px); }
+}
+
+.lease-shake {
+  animation: lease-shake 0.4s ease-in-out;
+}
+
 .btn-primary {
   background: linear-gradient(83.7338deg, #00BBFF 11.921%, #3A7AFE 90.638%);
   color: white;

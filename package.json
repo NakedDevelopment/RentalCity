@@ -13,6 +13,7 @@
     "test:auth-recovery": "tsx --test shared/recoverySession.test.ts",
     "test:equifax-access": "tsx --test shared/equifaxAccess.test.ts",
     "test:equifax-application": "tsx --test server/equifaxApplicationTabs.test.ts",
+    "test:leases": "tsx --test server/leaseSigning.test.ts",
     "db:push": "supabase db push",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > client/src/types/supabase.ts",

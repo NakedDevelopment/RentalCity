@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "acConfirmed": true,
+  "alreadyDone": false,
+  "uiChanged": true,
+  "needsDatabase": true,
+  "credentialsMissing": false,
+  "migrationsApplied": [
+    "public.leases table with landlord, tenant, property, nullable application, original and signed storage paths, envelope id and status, sent_at, completed_at, created_at, updated_at",
+    "leases_one_open_per_party unique index for in-progress rows",
+    "private leases storage bucket (application/pdf, 8 MB) with RLS and no Data API grants for anon or authenticated"
+  ],
+  "summary": "A landlord can upload a PDF lease for a tenant on a property they own. The tenant signs it inside the app with the existing DocuSign embedded ceremony. The original and signed PDFs are stored in a private bucket and downloaded by either party through an authenticated API, and the landlord sees sent, viewed, and signed status. Equifax and Plaid agreements are unchanged, and there is no lease generator.",
+  "contextMd": "Rental City — context as of 2026-11-03. Stack: React 18 + Vite + TS (client/), Express + Node (server/), Supabase. Phase 1 tenant lease signing: a landlord uploads a PDF on the tenant profile for a property they own; the tenant signs in the existing DocuSign embedded ceremony (DOCUSIGN_ACCOUNT_ID only, no second account); original and signed PDFs live in the private leases bucket and are downloaded only through the authenticated API. public.leases is service-role only (RLS on, no policies). Equifax and Plaid agreements are unchanged. State lease templates and a lease generator stay out of scope. Do not create live DocuSign envelopes from tests (40 envelopes a month).",
+  "blockers": []
+}

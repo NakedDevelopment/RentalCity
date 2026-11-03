@@ -11,6 +11,7 @@ import { TenantInviteBanner } from './TenantInviteBanner'
 import { UserMenu } from './UserMenu'
 import { LandlordAgreementsModal } from './LandlordAgreementsModal'
 import { getDocusignStatus, type DocusignStatus } from '../lib/docusignApi'
+import { TenantLeasePrompt } from './TenantLeasePrompt'
 
 type NavItem = { path: string; label: string; icon: LucideIcon; external?: boolean }
 
@@ -304,6 +305,7 @@ export function TenantLayout() {
           </nav>
 
           <div className="mx-auto w-full max-w-[1440px] px-4 pt-6 pb-10 sm:px-6 lg:px-8">
+            {profileRole === 'tenant' ? <TenantLeasePrompt /> : null}
             {profileRole === 'tenant' && invitedPropertyId ? (
               <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
                 Your invitation is active.{' '}
