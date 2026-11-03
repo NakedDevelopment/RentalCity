@@ -70,6 +70,8 @@ import { equifaxAgreementTabs } from './equifaxAgreementTabs'
 import { EQUIFAX_APPLICATION_VERSION, hasEquifaxCreditAccess, hasSignedCurrentEquifaxApplication } from '../shared/equifaxAccess'
 import { normalizeEquifaxSubscriberDetails, type EquifaxSubscriberInput } from './equifaxSubscriber'
 import { docusignReturnOrigin } from './docusignReturnOrigin'
+import { completeLeaseEnvelope, registerLeaseRoutes } from './leaseRoutes'
+import { LeaseRequestError } from './leaseSigning'
 import { publicAppUrl } from '../shared/publicAppUrl'
 import { randomUUID } from 'node:crypto'
 import { buildReport, type ReportData, type ReportComparable } from './report-template'
@@ -4617,9 +4619,19 @@ app.post('/api/docusign/complete', async (req, res) => {
   const admin = getSupabaseAdmin()
   if (!admin) return res.status(500).json({ error: 'Server configuration error' })
 
-  const { envelopeId, type } = req.body as { envelopeId?: string; type?: 'equifax' | 'plaid' }
-  if (!envelopeId || (type !== 'equifax' && type !== 'plaid')) {
+  const { envelopeId, type } = req.body as { envelopeId?: string; type?: 'equifax' | 'plaid' | 'lease' }
+  if (!envelopeId || (type !== 'equifax' && type !== 'plaid' && type !== 'lease')) {
     return res.status(400).json({ error: 'Invalid envelopeId or type' })
+  }
+  if (type === 'lease') {
+    try {
+      const result = await completeLeaseEnvelope(admin, user.id, envelopeId)
+      return res.json(result)
+    } catch (err) {
+      if (err instanceof LeaseRequestError) return res.status(err.status).json({ error: err.message })
+      console.error('DocuSign lease completion error:', err instanceof Error ? err.message : String(err))
+      return res.status(502).json({ error: 'Could not verify signing completion.' })
+    }
   }
 
   // Verify this envelope actually belongs to the calling user before trusting
@@ -4926,6 +4938,8 @@ app.patch('/api/admin/properties/:id/status', async (req, res) => {
   if (!row) return res.status(404).json({ error: 'Property not found' })
   return res.json({ ok: true, status: row.status })
 })
+
+registerLeaseRoutes(app)
 
 app.listen(PORT, () => {
   console.log(`Rental City API running on http://localhost:${PORT}`)

@@ -708,3 +708,60 @@ No new dependency. `package-lock.json` regenerated via the standard workaround t
 No migration — client-only fix, confirmed via live psql schema read (no `properties` column
 changes needed).
 live from prior runs.
+
+## 2026-11-03 — Phase 1 tenant lease signing
+
+Landlord uploads a PDF on the tenant profile for a property they own. The tenant signs it in the existing DocuSign embedded ceremony. Original and signed PDFs stay in the private `leases` bucket. Equifax and Plaid agreements are unchanged. No state templates and no lease generator.
+
+### Review pass
+
+Motion (`MOTION.md` is present; no new package):
+- Completion: yes — status pill scales briefly after a successful send (`LandlordLeaseCard.tsx`).
+- Loading: yes — Sending… / Opening… / Loading… labels.
+- Empty state fade: skipped — a full-card opacity fade left the Not sent card below readable contrast until the animation finished. The card now matches the sibling card immediately. Error text still shakes.
+- Error shake: yes — `.lease-shake` on the alert.
+
+UX beliefs:
+- UX-01 Function before decoration: yes
+- UX-02 One dominant primary action: yes — Send lease, or Sign lease. Downloads are outline buttons.
+- UX-03 Visual balance: yes
+- UX-04 Consistent margins and spacing: yes — same `p-5` card as `ProfileContentCard`
+- UX-05 Space from the scale: yes — matches the existing card spacing on this page
+- UX-06 One focal point: yes
+- UX-07 Brand color only for the primary action: yes — `btn-primary` only
+- UX-08 Consistent corner radius: yes — `rounded-xl` card, `rounded-lg` buttons
+- UX-09 Type hierarchy matches existing screens: yes
+- UX-10 Components behave like their siblings: yes
+- UX-11 One hero per screen: yes — the tenant name remains the page hero
+- UX-12 Motion explains state: yes — error shake and send confirmation only
+- UX-13 Clear what happened, what is next, and where the person is: yes — status labels Not sent, Sent, Viewed, Signed, Declined, Voided
+- UX-14 Accessibility: yes — `min-h-11` targets, alert roles, readable text on white
+- UX-15 Simplest solution: yes — one upload, fixed signature tabs, no field editor
+
+Stress:
+- empty input: yes — empty and non-PDF rejected before an envelope; Send stays disabled until a file is chosen
+- long strings: yes — email subject capped at 100 characters; file name truncates
+- special characters: yes — line breaks stripped from the subject; email HTML escaped
+- rapid repeated calls: yes — button disabled while sending; one open lease per landlord+tenant+property; a failed save voids the new envelope
+- null responses: yes — a missed DocuSign status refresh keeps the stored status; the page shows the error
+- missing environment variables: yes — missing Supabase returns 500; DocuSign failures return 502 and do not leave a sent row
+
+### QA — two-instance loop (reconciled)
+
+Instance A (happy path) passed AC-01 through AC-12 with test output and file:line evidence.
+Instance B (adversarial) passed every AC except AC-10: a sent lease hid an older signed download because the tenant prompt used if/else.
+Fix: the sign banner and the signed download render as separate blocks (`TenantLeasePrompt.tsx`). Both instances re-checked AC-10 and passed.
+Confirmed. `acConfirmed` is true. No live DocuSign envelope was created.
+
+### PM Visual Verification
+
+Both visual checks found no remaining issue after the card fade was removed. The Not sent card matches the Bio sibling (white surface, same title color). Tenant prompt uses the existing amber banner and `btn-primary`.
+
+PM VISUAL VERIFICATION APPROVED
+
+### Build gate
+`node node_modules/typescript/bin/tsc --noEmit` and `node node_modules/typescript/bin/tsc -p client/tsconfig.json --noEmit`: zero errors.
+`node node_modules/tsx/dist/cli.mjs --test server/leaseSigning.test.ts`: 10 passed. Equifax envelope test still passed.
+
+### Database
+Applied `supabase/migrations/20261103163000_leases.sql` to the configured database, then re-read `information_schema`. `public.leases` has the new columns, RLS is on with no policies, `anon` and `authenticated` have no grants, and the private `leases` bucket exists (not public, PDF only, 8 MB).

@@ -21,14 +21,14 @@ export function DocusignReturnPage() {
       const envelopeId = searchParams.get('envelopeId')
       const event = searchParams.get('event')
 
-      if (event && event !== 'signing_complete') {
-        window.parent?.postMessage({ source: 'docusign-return', type, completed: false, event }, window.location.origin)
-        setMessage('Signing was not completed. You can close this window.')
+      if (type !== 'equifax' && type !== 'plaid' && type !== 'lease' || !envelopeId) {
+        setMessage('Missing information — you can close this window.')
         return
       }
 
-      if (!type || !envelopeId || (type !== 'equifax' && type !== 'plaid')) {
-        setMessage('Missing information — you can close this window.')
+      if (event && event !== 'signing_complete' && type !== 'lease') {
+        window.parent?.postMessage({ source: 'docusign-return', type, completed: false, event }, window.location.origin)
+        setMessage('Signing was not completed. You can close this window.')
         return
       }
 
@@ -46,7 +46,9 @@ export function DocusignReturnPage() {
           { source: 'docusign-return', type, completed: result.completed },
           window.location.origin,
         )
-        setMessage(result.completed ? 'Done! You can close this window.' : 'Still processing…')
+        if (result.completed) setMessage('Done! You can close this window.')
+        else if (type === 'lease') setMessage('Signing was not completed. You can close this window.')
+        else setMessage('Still processing…')
       } catch {
         if (!cancelled) setMessage('Could not confirm signing — you can close this window.')
       }

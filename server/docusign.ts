@@ -196,6 +196,11 @@ export type CreateEmbeddedEnvelopeArgs = {
   }
   /** Where DocuSign redirects the browser after the signing ceremony completes. */
   returnUrl: string
+  /**
+   * Uploaded lease PDFs pass false so AcroForm widgets are not converted.
+   * Omit it for the existing Equifax and Plaid envelopes.
+   */
+  transformPdfFields?: false
 }
 
 function buildTabs(tabs: AnchorTab[], choices: RadioChoice[] = []) {
@@ -243,10 +248,13 @@ function buildTabs(tabs: AnchorTab[], choices: RadioChoice[] = []) {
   return { signHereTabs, initialHereTabs, textTabs, listTabs, checkboxTabs, dateSignedTabs, radioGroupTabs }
 }
 
-/** Replace an incomplete agreement with the updated version; never void a completed one. */
-export async function voidEnvelope(envelopeId: string): Promise<void> {
+/** Replace an incomplete envelope; never void a completed one. The default reason is the Equifax agreement copy. */
+export async function voidEnvelope(
+  envelopeId: string,
+  reason = 'Replaced with updated Equifax agreement',
+): Promise<void> {
   const { api, accountId } = await getEnvelopesApi()
-  await api.update(accountId, envelopeId, { envelope: { status: 'voided', voidedReason: 'Replaced with updated Equifax agreement' } })
+  await api.update(accountId, envelopeId, { envelope: { status: 'voided', voidedReason: reason } })
 }
 
 /** Pure payload builder, also used for validating an unsent draft in DocuSign. */
@@ -256,6 +264,7 @@ export function buildEmbeddedEnvelopeDefinition(args: CreateEmbeddedEnvelopeArgs
     name: args.documentName,
     fileExtension: args.fileExtension,
     documentId: '1',
+    ...(args.transformPdfFields === false ? { transformPdfFields: 'false' } : {}),
   }
   const documents: DsDocument[] = [document]
   if (args.additionalDocument) {
