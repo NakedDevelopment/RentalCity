@@ -13,3 +13,4 @@
 - [Property share invite intent](property-share-invites.md) — property link identifies the starting listing, but acceptance grants 14 days of access to all active listings of that landlord.
 - [Imported release verification](imported-release-verification.md) — check live schema and runtime provider access; imported passing reports do not verify cloud activation.
 - [Non-Google location policy](report-location-policy.md) — RentCast for exact addresses; approximate centers only for area search; keep Street View and address suggestions.
+- [Supabase read-only safety](supabase-read-only-safety.md) — use explicit read-only transactions; connection startup options may not survive the pooler.
