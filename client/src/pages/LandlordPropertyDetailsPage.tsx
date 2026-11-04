@@ -1,3 +1,4 @@
+import { PROPERTY_PHOTO_ACCEPT } from '../lib/preparePropertyPhoto'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -630,7 +631,7 @@ export function LandlordPropertyDetailsPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".jpg,.jpeg,.png,.heic,image/jpeg,image/png,image/heic"
+                accept={PROPERTY_PHOTO_ACCEPT}
                 multiple
                 className="hidden"
                 disabled={!isEditMode}
@@ -703,7 +704,8 @@ export function LandlordPropertyDetailsPage() {
                   : 'Retry or remove incomplete photos before saving.'}
               </p>
             ) : null}
-            {isEditMode && uploads.error ? <p className="mt-2 text-sm text-red-600" role="alert">{uploads.error}</p> : null}
+            {isEditMode && <p className="mt-2 text-xs text-gray-500">JPG, PNG, HEIC, HEIF. Photos are automatically converted and resized before upload (10 MB limit after compression).</p>}
+            {isEditMode && uploads.error ? <p className="mt-2 whitespace-pre-line text-sm text-red-600" role="alert">{uploads.error}</p> : null}
           </InfoPanel>
         </div>
 

@@ -1,18 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 import type { PropertyDraftPhoto } from './propertyDraft'
+import { preparePropertyPhoto, propertyPhotoError as fileError } from './preparePropertyPhoto'
 
 const BUCKET = 'property-images'
 export const MAX_PROPERTY_PHOTOS = 5
-const MAX_SIZE = 10 * 1024 * 1024
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/heic']
-
-function fileError(file: File): string | null {
-  if (!ACCEPTED_TYPES.includes(file.type) && !file.name.toLowerCase().endsWith('.heic')) {
-    return `${file.name} is not supported. Use JPG, PNG, or HEIC.`
-  }
-  return file.size > MAX_SIZE ? `${file.name} is over 10MB.` : null
-}
 
 function restoredPhotos(photos: PropertyDraftPhoto[]): PropertyDraftPhoto[] {
   return photos.map((photo) => photo.url
@@ -32,6 +24,8 @@ export function usePropertyPhotoUploads(
   const persistRef = useRef(persist)
   persistRef.current = persist
   const runs = useRef(new Map<string, UploadRun>())
+  // Avoid decoding several large iPhone photos simultaneously on mobile.
+  const preparationQueue = useRef<Promise<unknown>>(Promise.resolve())
   const [error, setError] = useState<string | null>(null)
   const [persistenceError, setPersistenceError] = useState<string | null>(null)
 
@@ -71,7 +65,7 @@ export function usePropertyPhotoUploads(
       return
     }
     if (!userId) {
-      setError('You must be signed in to upload photos.')
+      setError(`${file.name}: You must be signed in to upload photos.`)
       return
     }
     const previous = runs.current.get(id)
@@ -83,14 +77,19 @@ export function usePropertyPhotoUploads(
     runs.current.set(id, run)
     patchPhoto(id, { file, uploadStatus: 'uploading', uploadProgress: 0, uploadError: undefined })
     try {
+      const preparation = preparationQueue.current.then(() => run.cancelled ? null : preparePropertyPhoto(file))
+      preparationQueue.current = preparation.catch(() => undefined)
+      const prepared = await preparation
+      if (run.cancelled || !prepared) return
+      const previousPreview = photosRef.current.find((photo) => photo.id === id)?.previewUrl
+      if (previousPreview) URL.revokeObjectURL(previousPreview)
+      patchPhoto(id, { previewUrl: URL.createObjectURL(prepared) })
       const { data, error: sessionError } = await supabase.auth.getSession()
       if (run.cancelled) return
       if (sessionError || !data.session || data.session.user.id !== userId) {
         throw new Error('Your session has expired. Sign in again, then retry.')
       }
-      const extension = file.type === 'image/png' ? 'png'
-        : file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic') ? 'heic' : 'jpg'
-      const path = `${userId}/${id}.${extension}`
+      const path = `${userId}/${id}.jpg`
       // XHR exposes real byte progress; Supabase's fetch uploader does not.
       // Use the same Storage endpoint, session authorization, and own-folder RLS.
       await new Promise<void>((resolve, reject) => {
@@ -115,7 +114,7 @@ export function usePropertyPhotoUploads(
         xhr.onabort = () => reject(new Error('Photo upload interrupted. Please retry.'))
         const body = new FormData()
         body.append('cacheControl', '3600')
-        body.append('', file.type ? file : new File([file], file.name, { type: 'image/heic' }))
+        body.append('', prepared)
         xhr.send(body)
       })
       if (run.cancelled) return
@@ -128,7 +127,7 @@ export function usePropertyPhotoUploads(
       if (!run.cancelled) {
         patchPhoto(id, {
           uploadStatus: 'error',
-          uploadError: uploadError instanceof Error ? uploadError.message : 'Photo upload failed. Please retry.',
+          uploadError: `${file.name}: ${uploadError instanceof Error ? uploadError.message : 'Photo upload failed. Please retry.'}`,
         })
       }
     } finally {
@@ -140,19 +139,20 @@ export function usePropertyPhotoUploads(
     if (!files?.length) return
     setError(null)
     if (!userId) {
-      setError('You must be signed in to upload photos.')
+      setError(Array.from(files, (file) => `${file.name}: You must be signed in to upload photos.`).join('\n'))
       return
     }
     const accepted: PropertyDraftPhoto[] = []
+    const skipped: string[] = []
     for (const file of Array.from(files)) {
       const validationError = fileError(file)
       if (validationError) {
-        setError(validationError)
+        skipped.push(validationError)
         continue
       }
       if (photosRef.current.length + accepted.length >= MAX_PROPERTY_PHOTOS) {
-        setError('You can add up to 5 photos. Remove a photo before adding another.')
-        break
+        skipped.push(`${file.name}: Not added. You can add up to 5 photos; remove a photo first.`)
+        continue
       }
       accepted.push({
         id: crypto.randomUUID(),
@@ -162,6 +162,7 @@ export function usePropertyPhotoUploads(
         uploadStatus: 'uploading', uploadProgress: 0,
       })
     }
+    setError(skipped.length ? skipped.join('\n') : null)
     setPhotos((current) => [...current, ...accepted])
     accepted.forEach((photo) => void uploadPhoto(photo.id, photo.file!))
   }
@@ -206,7 +207,7 @@ export function usePropertyPhotoUploads(
 
   return {
     photos, setPhotos, addFiles, removePhoto, retryPhoto, incomplete, uploading,
-    error: persistenceError ?? error,
+    error: [persistenceError, error].filter(Boolean).join('\n') || null,
     persistPhotos: () => {
       setPhotos((current) => current)
       // Persistence is synchronous; callers can stop rather than claim success.

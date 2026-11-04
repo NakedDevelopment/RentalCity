@@ -1,4 +1,5 @@
 import type { PropertyDraftPhoto } from '../lib/propertyDraft'
+import { PROPERTY_PHOTO_ACCEPT } from '../lib/preparePropertyPhoto'
 
 export function PropertyPhotoUploadStatus({
   photo, onRetry,
@@ -10,7 +11,7 @@ export function PropertyPhotoUploadStatus({
   if (photo.uploadStatus === 'uploading') {
     return (
       <div className="bg-white px-2 py-2" role="status">
-        <p className="text-xs text-gray-700">Uploading {photo.uploadProgress ?? 0}%</p>
+        <p className="text-xs text-gray-700">{photo.uploadProgress ? `Uploading ${photo.uploadProgress}%` : 'Preparing / uploading photo…'}</p>
         <progress className="mt-1 h-2 w-full" max={100} value={photo.uploadProgress ?? 0} aria-label={`Uploading ${photo.label}`} />
       </div>
     )
@@ -27,7 +28,7 @@ export function PropertyPhotoUploadStatus({
           Select photo to retry
           <input
             type="file"
-            accept=".jpg,.jpeg,.png,.heic,image/jpeg,image/png,image/heic"
+            accept={PROPERTY_PHOTO_ACCEPT}
             className="sr-only"
             onChange={(event) => {
               const file = event.target.files?.[0]

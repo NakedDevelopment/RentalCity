@@ -4,6 +4,7 @@ import { loadPropertyDraft, savePropertyDraft } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { usePropertyPhotoUploads } from '../lib/usePropertyPhotoUploads'
 import { PropertyPhotoUploadStatus } from '../components/PropertyPhotoUploadStatus'
+import { PROPERTY_PHOTO_ACCEPT } from '../lib/preparePropertyPhoto'
 
 /** Old default placeholder ids – filter these out when loading draft */
 const LEGACY_PLACEHOLDER_IDS = new Set(['living-room', 'kitchen', 'bedroom'])
@@ -92,7 +93,7 @@ export function AddPropertyPhotosPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".jpg,.jpeg,.png,.heic,image/jpeg,image/png,image/heic"
+              accept={PROPERTY_PHOTO_ACCEPT}
               multiple
               className="hidden"
               onChange={(e) => {
@@ -123,8 +124,8 @@ export function AddPropertyPhotosPage() {
                 Browse Files
               </button>
 
-              <p className="mt-5 text-xs text-gray-500">Supported formats: JPG, PNG, HEIC (Max 10MB each)</p>
-              {uploadError ? <p className="mt-3 text-sm text-red-600">{uploadError}</p> : null}
+              <p className="mt-5 text-xs text-gray-500">JPG, PNG, HEIC, HEIF. Photos are automatically converted and resized before upload (10 MB limit after compression).</p>
+              {uploadError ? <p role="alert" className="mt-3 whitespace-pre-line text-sm text-red-600">{uploadError}</p> : null}
             </div>
           </div>
 
