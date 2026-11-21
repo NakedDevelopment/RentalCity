@@ -19,10 +19,11 @@ import { lookupPropertyLocation } from './geocode'
 import { searchLocation } from './locationSearch'
 import { rentCastCoordinates } from '../shared/reportCoordinates'
 import {
+  landlordCatalogRentScore,
   matchAffordabilityFromStatedIncome,
-  parseStatedMonthlyIncome,
+  matchesForLandlordRentScore,
+  matchesForTenantRentScore,
   rentalBudgetMonthlyRent,
-  rentScoreFromQuestionnaireRow,
 } from '../shared/rentScore'
 import { haversineMiles, DEFAULT_MATCH_RADIUS_MILES, firstKnownLocation } from './geo'
 import type { PlaidApi } from 'plaid'
@@ -177,42 +178,6 @@ async function requireAdmin(req: express.Request, res: express.Response): Promis
     return null
   }
   return user.id
-}
-
-/**
- * Same 0–100 rent score as the tenant matches page and landlord profile.
- * Stated income feeds affordability whether or not it is verified. A stored
- * overall_score is not used, so a stale column cannot disagree with that page.
- */
-function tenantDisplayScoreFromQuestionnaire(t: {
-  overall_score?: number | null
-  answers?: unknown
-  affordability_score?: number | null
-  stability_score?: number | null
-  payment_risk_score?: number | null
-  lifestyle_score?: number | null
-  space_fit_score?: number | null
-}): number | null {
-  const hasDimension = [
-    t.affordability_score,
-    t.stability_score,
-    t.payment_risk_score,
-    t.lifestyle_score,
-    t.space_fit_score,
-  ].some((v) => v != null && Number.isFinite(Number(v)))
-  const answers =
-    t.answers != null && typeof t.answers === 'object' && !Array.isArray(t.answers)
-      ? (t.answers as Record<string, unknown>)
-      : null
-  const statedIncomeCounts =
-    parseStatedMonthlyIncome(answers?.monthly_income) != null && rentalBudgetMonthlyRent(answers?.rental_budget) > 0
-  if (!hasDimension && !statedIncomeCounts) {
-    if (t.overall_score != null && Number.isFinite(Number(t.overall_score))) {
-      return Math.round(Number(t.overall_score))
-    }
-    return null
-  }
-  return rentScoreFromQuestionnaireRow(t, false).score
 }
 
 const UUID_PARAM_RE =
@@ -381,7 +346,7 @@ async function buildLandlordCatalogRows(
         paymentRisk: Number(tenantData.payment_risk_score) ?? 5,
         lifestyle: Number(tenantData.lifestyle_score) ?? 5,
       }
-      const tenantScore = tenantDisplayScoreFromQuestionnaire(tenantData)
+      const tenantScore = landlordCatalogRentScore(tenantData, false).score
 
       let m: MatchResult & { tenantScore?: number | null }
       if (!landlordPrefs) {
@@ -2451,7 +2416,7 @@ app.post('/api/matches/for-tenant', async (req, res) => {
   const radiusMiles = typeof radiusRaw === 'number' && Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : DEFAULT_MATCH_RADIUS_MILES
 
   const [tenantRow, propertiesRows, inviteRow, tenantPrefsRow, tenantAppProfileRow] = await Promise.all([
-    admin.from('tenant_questionnaire').select('answers, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program').eq('user_id', tenantId).maybeSingle(),
+    admin.from('tenant_questionnaire').select('answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program').eq('user_id', tenantId).maybeSingle(),
     admin.from('properties').select('id, landlord_id, monthly_rent_cents, lat, lng').in('id', uniqueIds),
     admin.from('tenant_invite_restrictions').select('landlord_id').eq('tenant_id', tenantId).gt('ends_at', new Date().toISOString()).maybeSingle(),
     admin.from('tenant_preferences').select('location_lat, location_lng').eq('user_id', tenantId).maybeSingle(),
@@ -2473,10 +2438,12 @@ app.post('/api/matches/for-tenant', async (req, res) => {
   const tenantLat = tenantLocation?.lat ?? null
   const tenantLng = tenantLocation?.lng ?? null
   if (!tenantData) {
-    const empty: Record<string, MatchResult & { tenantScore?: number }> = {}
-    uniqueIds.forEach((id) => { empty[id] = { eligible: false, reasons: ['Tenant questionnaire not completed.'], overall: 0, dimensions: { affordability: 0, stability: 0, risk: 0, lifestyle: 0, policy: 0 } } })
+    const empty: Record<string, MatchResult & { tenantScore: number | null }> = {}
+    uniqueIds.forEach((id) => { empty[id] = { eligible: false, reasons: ['Tenant questionnaire not completed.'], overall: 0, dimensions: { affordability: 0, stability: 0, risk: 0, lifestyle: 0, policy: 0 }, tenantScore: null } })
     return res.json({ matches: empty })
   }
+
+  const tenantScore = matchesForTenantRentScore(tenantData, false).score
 
   const tenantAnswers = (tenantData as { answers?: Record<string, unknown> }).answers ?? {}
   const baseTenantHistory = tenantAnswersToHistory(tenantAnswers)
@@ -2502,7 +2469,7 @@ app.post('/api/matches/for-tenant', async (req, res) => {
   })
 
   const dimZero = { affordability: 0, stability: 0, risk: 0, lifestyle: 0, policy: 0 }
-  const matches: Record<string, MatchResult> = {}
+  const matches: Record<string, MatchResult & { tenantScore: number | null }> = {}
   for (const prop of properties) {
     if (inviteLandlordId != null && prop.landlord_id !== inviteLandlordId) {
       matches[prop.id] = {
@@ -2510,13 +2477,14 @@ app.post('/api/matches/for-tenant', async (req, res) => {
         reasons: ['Only listings from your invited host are available until your invite period ends.'],
         overall: 0,
         dimensions: dimZero,
+        tenantScore,
       }
       continue
     }
     if (tenantLat != null && tenantLng != null && prop.lat != null && prop.lng != null) {
       const distance = haversineMiles(tenantLat, tenantLng, prop.lat, prop.lng)
       if (distance > radiusMiles) {
-        matches[prop.id] = { eligible: false, reasons: ['Outside your search radius.'], overall: 0, dimensions: dimZero, distanceMiles: Math.round(distance) }
+        matches[prop.id] = { eligible: false, reasons: ['Outside your search radius.'], overall: 0, dimensions: dimZero, distanceMiles: Math.round(distance), tenantScore }
         continue
       }
     }
@@ -2534,7 +2502,7 @@ app.post('/api/matches/for-tenant', async (req, res) => {
         : null
     const landlord = landlordByUserId.get(prop.landlord_id)
     if (!landlord) {
-      matches[prop.id] = { eligible: true, reasons: [], overall: 50, dimensions: { affordability: tenantDims.affordability, stability: tenantDims.stability, risk: 5, lifestyle: 5, policy: 5 }, distanceMiles }
+      matches[prop.id] = { eligible: true, reasons: [], overall: 50, dimensions: { affordability: tenantDims.affordability, stability: tenantDims.stability, risk: 5, lifestyle: 5, policy: 5 }, distanceMiles, tenantScore }
       continue
     }
     const prefs = landlordAnswersToPrefs(landlord.answers ?? {})
@@ -2545,10 +2513,10 @@ app.post('/api/matches/for-tenant', async (req, res) => {
       conflictStyleScore: landlord.conflict_style_score ?? prefs.conflictStyleScore,
       acceptsHousingVouchers: landlord.accepts_housing_vouchers ?? prefs.acceptsHousingVouchers,
     }
-    matches[prop.id] = { ...computeMatch(tenantDims, prefsWithScores, tenantHistory), distanceMiles }
+    matches[prop.id] = { ...computeMatch(tenantDims, prefsWithScores, tenantHistory), distanceMiles, tenantScore }
   }
   for (const id of uniqueIds) {
-    if (!matches[id]) matches[id] = { eligible: false, reasons: ['Property not found.'], overall: 0, dimensions: { affordability: 0, stability: 0, risk: 0, lifestyle: 0, policy: 0 } }
+    if (!matches[id]) matches[id] = { eligible: false, reasons: ['Property not found.'], overall: 0, dimensions: { affordability: 0, stability: 0, risk: 0, lifestyle: 0, policy: 0 }, tenantScore }
   }
 
   if (topLimit != null) {
@@ -2557,7 +2525,7 @@ app.post('/api/matches/for-tenant', async (req, res) => {
       .filter((x) => x.m?.eligible === true)
       .sort((a, b) => (b.m.overall ?? 0) - (a.m.overall ?? 0))
       .slice(0, topLimit)
-    const trimmed: Record<string, MatchResult> = {}
+    const trimmed: Record<string, MatchResult & { tenantScore: number | null }> = {}
     for (const { id, m } of ranked) {
       trimmed[id] = m
     }
@@ -2601,7 +2569,7 @@ app.post('/api/matches/for-landlord', async (req, res) => {
 
   const matches: Record<string, MatchResult & { tenantScore?: number | null }> = {}
   for (const t of tenants) {
-    const tenantScore = tenantDisplayScoreFromQuestionnaire(t)
+    const tenantScore = matchesForLandlordRentScore(t, false).score
     if (!landlordPrefs) {
       matches[t.user_id] = { eligible: true, reasons: [], overall: 50, dimensions: { affordability: 5, stability: 5, risk: 5, lifestyle: 5, policy: 5 }, tenantScore }
       continue

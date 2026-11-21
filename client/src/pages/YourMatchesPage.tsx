@@ -24,7 +24,7 @@ import {
   type PlaidVerification,
 } from '../lib/plaidApi'
 import {
-  rentScoreFromQuestionnaireRow,
+  tenantYourMatchesRentScore,
   type TenantRentScoreDimensions,
 } from '../lib/tenantRentScore'
 
@@ -435,13 +435,13 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     setTenantQuestionnaireLoading(true)
     const { data } = await supabase
       .from('tenant_questionnaire')
-      .select('answers, affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score')
+      .select('answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score')
       .eq('user_id', user.id)
       .maybeSingle()
     if (data) {
-      // Same 0–100 figure as the landlord tenant profile. Stated income counts
-      // whether or not it is verified; overall_score is not used.
-      const scored = rentScoreFromQuestionnaireRow(data, false)
+      // Same rent score as the landlord profile, catalog, and match APIs.
+      // Verification is not an input; the badge below still shows it.
+      const scored = tenantYourMatchesRentScore(data, false)
       setTenantDimensionScores(scored.dimensions)
       setTenantOverallScore(scored.score)
     } else {

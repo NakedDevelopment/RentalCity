@@ -36,7 +36,7 @@ import {
   type UniversalApplicationRecord,
 } from '../lib/universalApplicationDisplay'
 import {
-  rentScoreFromQuestionnaireRow,
+  landlordTenantProfileRentScore,
   type TenantRentScoreDimensions,
 } from '../lib/tenantRentScore'
 import { getTenantQuestionnaireChoiceLabel } from '../lib/tenantQuestionnaire'
@@ -401,7 +401,7 @@ export function LandlordTenantProfilePage() {
         supabase
           .from('tenant_questionnaire')
           .select(
-            'affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score, answers, participates_in_voucher_program, voucher_coverage_percentage',
+            'overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score, answers, participates_in_voucher_program, voucher_coverage_percentage',
           )
           .eq('user_id', id)
           .maybeSingle(),
@@ -448,8 +448,8 @@ export function LandlordTenantProfilePage() {
       }
       if (questionnaireData) {
         const answers = (questionnaireData as { answers?: Record<string, unknown> }).answers ?? {}
-        // Verification is intentionally not an input. The badge below still shows it.
-        const scored = rentScoreFromQuestionnaireRow(questionnaireData, false)
+        // Same rent score as Your Matches and the match APIs. Verification is not an input.
+        const scored = landlordTenantProfileRentScore(questionnaireData, false)
         setTenantRentDimensions(scored.dimensions)
         setTenantRentScore(scored.score)
         setTenantQuestionnaireAnswers(answers)
