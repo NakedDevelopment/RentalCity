@@ -1,19 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { rentalBudgetMonthlyRent } from '../../../shared/rentScore'
 import { scoreTenantDimensions } from '../lib/tenantScoring'
 import { tenantQuestions } from '../lib/tenantQuestionnaire'
 import type { TenantQuestionId, TenantChoiceId } from '../lib/tenantQuestionnaire'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
-
-const RENTAL_BUDGET_TO_RENT: Record<TenantChoiceId, number> = {
-  a: 1200,
-  b: 1325,
-  c: 1575,
-  d: 1850,
-  e: 2250,
-  f: 2750,
-}
 
 function rentalBudgetChoiceFromRange(
   minBudgetCents: number | null,
@@ -90,7 +82,7 @@ export function TenantQuestionnairePage() {
   const progressPercent = totalSteps > 0 ? Math.round((step / totalSteps) * 10) * 10 : 0
   const incomeNum = monthlyIncome.trim() ? parseFloat(monthlyIncome.replace(/[^0-9.]/g, '')) : 0
   const rentChoice = answers['rental_budget']
-  const rent = rentChoice && rentChoice in RENTAL_BUDGET_TO_RENT ? RENTAL_BUDGET_TO_RENT[rentChoice] : 0
+  const rent = rentalBudgetMonthlyRent(rentChoice)
   const canProceed = isBioStep ? true : isIncomeStep ? incomeNum > 0 : !!selectedAnswer
 
   function handleSelect(choiceId: TenantChoiceId) {

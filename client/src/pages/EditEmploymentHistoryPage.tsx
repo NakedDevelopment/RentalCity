@@ -1,19 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { parseStatedMonthlyIncome, rentalBudgetMonthlyRent } from '../../../shared/rentScore'
 import { scoreTenantDimensions } from '../lib/tenantScoring'
 import { tenantQuestions } from '../lib/tenantQuestionnaire'
 import type { TenantQuestionId, TenantChoiceId } from '../lib/tenantQuestionnaire'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
-
-const RENTAL_BUDGET_TO_RENT: Record<string, number> = {
-  a: 1200,
-  b: 1325,
-  c: 1575,
-  d: 1850,
-  e: 2250,
-  f: 2750,
-}
 
 const employmentQuestion = tenantQuestions.find((q) => q.id === 'employment_duration')
 
@@ -48,9 +40,8 @@ export function EditEmploymentHistoryPage() {
     setLoading(true)
     setError(null)
     const merged = { ...(existingAnswers || {}), employment_duration: answer } as Record<string, unknown>
-    const rentChoice = merged.rental_budget as string | undefined
-    const rent = rentChoice && rentChoice in RENTAL_BUDGET_TO_RENT ? RENTAL_BUDGET_TO_RENT[rentChoice] : 0
-    const monthlyIncome = typeof merged.monthly_income === 'number' ? merged.monthly_income : 1
+    const rent = rentalBudgetMonthlyRent(merged.rental_budget)
+    const monthlyIncome = parseStatedMonthlyIncome(merged.monthly_income) ?? 0
     const dims = scoreTenantDimensions(
       merged as Record<TenantQuestionId, TenantChoiceId | null | undefined>,
       rent,
