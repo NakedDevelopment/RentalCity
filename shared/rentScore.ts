@@ -108,17 +108,71 @@ export function withStatedIncomeAffordability(
   }
 }
 
-export function rentScoreFromQuestionnaireRow(
-  row: {
-    answers?: unknown
-    affordability_score?: unknown
-    stability_score?: unknown
-    payment_risk_score?: unknown
-    lifestyle_score?: unknown
-    space_fit_score?: unknown
-  },
+export type QuestionnaireRentScoreRow = {
+  overall_score?: unknown
+  answers?: unknown
+  affordability_score?: unknown
+  stability_score?: unknown
+  payment_risk_score?: unknown
+  lifestyle_score?: unknown
+  space_fit_score?: unknown
+}
+
+/**
+ * Affordability input for the rent score. Stated income and a rental-budget
+ * choice replace the stored column. Verification is not an input. When either
+ * figure is missing, the caller keeps the stored column so a blank income
+ * does not zero a score that already counted.
+ */
+export function statedIncomeAffordability(
+  row: QuestionnaireRentScoreRow,
   incomeVerified: boolean,
-): { score: number; dimensions: RentScoreDimensions } {
+): number | null {
+  const record = answersRecord(row.answers)
+  const stated = parseStatedMonthlyIncome(record?.monthly_income)
+  const rent = rentalBudgetMonthlyRent(record?.rental_budget)
+  if (stated == null || rent <= 0) return null
+  return affordabilityFromStatedIncome({
+    rent,
+    statedMonthlyIncome: stated,
+    incomeVerified,
+  })
+}
+
+/**
+ * Tenant rent score, 0–100, or null when nothing has been scored.
+ *
+ * Same rules as tenantDisplayScoreFromQuestionnaire before PR #2: a finite
+ * overall_score is returned as-is, otherwise the equal average of
+ * affordability, stability, payment risk, and lifestyle (a missing value
+ * counts as 5) times 10. Space fit is not an input. The one exception is
+ * affordability: a stated income and rental budget replace that column,
+ * whether or not the income is verified.
+ */
+export function tenantRentScoreFromQuestionnaire(
+  row: QuestionnaireRentScoreRow,
+  incomeVerified: boolean,
+): number | null {
+  if (row.overall_score != null && Number.isFinite(Number(row.overall_score))) {
+    return Math.round(Number(row.overall_score))
+  }
+  const stated = statedIncomeAffordability(row, incomeVerified)
+  const a = Number(stated != null ? stated : row.affordability_score)
+  const s = Number(row.stability_score)
+  const p = Number(row.payment_risk_score)
+  const l = Number(row.lifestyle_score)
+  const vals = [a, s, p, l].map((v) => (Number.isFinite(v) ? v : null))
+  if (vals.some((v) => v != null)) {
+    const nums = vals.map((v) => (v != null ? v : 5))
+    return Math.round(((nums[0] + nums[1] + nums[2] + nums[3]) / 4) * 10)
+  }
+  return null
+}
+
+export function rentScoreFromQuestionnaireRow(
+  row: QuestionnaireRentScoreRow,
+  incomeVerified: boolean,
+): { score: number | null; dimensions: RentScoreDimensions } {
   const dimensions = withStatedIncomeAffordability(
     {
       affordability: normalizeRentScoreDimension(row.affordability_score),
@@ -130,8 +184,18 @@ export function rentScoreFromQuestionnaireRow(
     row.answers,
     incomeVerified,
   )
-  return { score: computeRentScore(dimensions), dimensions }
+  return { score: tenantRentScoreFromQuestionnaire(row, incomeVerified), dimensions }
 }
+
+/**
+ * Every tenant and landlord rent-score surface calls the same function.
+ * The names are the call sites; they are not separate formulas.
+ */
+export const tenantYourMatchesRentScore = rentScoreFromQuestionnaireRow
+export const landlordTenantProfileRentScore = rentScoreFromQuestionnaireRow
+export const landlordCatalogRentScore = rentScoreFromQuestionnaireRow
+export const matchesForLandlordRentScore = rentScoreFromQuestionnaireRow
+export const matchesForTenantRentScore = rentScoreFromQuestionnaireRow
 
 /**
  * Per-listing match affordability. Uses stated income against that listing's

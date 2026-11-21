@@ -1,7 +1,8 @@
 /**
- * Tenant “Rent Score” (0–100) shown on matches and landlord tenant profile.
- * Derived from questionnaire dimension columns so it stays in sync when overall_score is stale.
- * Affordability is recomputed from stated income; verification does not change it.
+ * Tenant “Rent Score” (0–100) shown on matches and the landlord tenant profile.
+ * The headline number comes from tenantRentScoreFromQuestionnaire: stored
+ * overall_score when it is set, otherwise the pre-PR #2 four-dimension average.
+ * Affordability still uses stated income, verified or not.
  */
 
 import {
@@ -10,7 +11,11 @@ import {
   type RentScoreDimensions,
 } from '../../../shared/rentScore'
 
-export { rentScoreFromQuestionnaireRow } from '../../../shared/rentScore'
+export {
+  landlordTenantProfileRentScore,
+  rentScoreFromQuestionnaireRow,
+  tenantYourMatchesRentScore,
+} from '../../../shared/rentScore'
 
 export type TenantRentScoreDimensions = RentScoreDimensions
 
