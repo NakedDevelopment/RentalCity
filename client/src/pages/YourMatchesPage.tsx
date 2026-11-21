@@ -24,8 +24,7 @@ import {
   type PlaidVerification,
 } from '../lib/plaidApi'
 import {
-  computeTenantRentScoreFromDimensions,
-  dimensionsFromTenantQuestionnaireRow,
+  rentScoreFromQuestionnaireRow,
   type TenantRentScoreDimensions,
 } from '../lib/tenantRentScore'
 
@@ -436,14 +435,15 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     setTenantQuestionnaireLoading(true)
     const { data } = await supabase
       .from('tenant_questionnaire')
-      .select('overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score')
+      .select('answers, affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score')
       .eq('user_id', user.id)
       .maybeSingle()
     if (data) {
-      const dimensions = dimensionsFromTenantQuestionnaireRow(data)
-      setTenantDimensionScores(dimensions)
-      // Same 0–100 figure as landlord tenant profile; ignores stale overall_score column.
-      setTenantOverallScore(computeTenantRentScoreFromDimensions(dimensions))
+      // Same 0–100 figure as the landlord tenant profile. Stated income counts
+      // whether or not it is verified; overall_score is not used.
+      const scored = rentScoreFromQuestionnaireRow(data, false)
+      setTenantDimensionScores(scored.dimensions)
+      setTenantOverallScore(scored.score)
     } else {
       setTenantOverallScore(null)
       setTenantDimensionScores(null)

@@ -3,6 +3,8 @@
  * and derivation from landlord/tenant questionnaire answers.
  */
 
+export { scoreRentToIncome } from '../shared/rentScore'
+
 const BOOST_SAFE_TENANT_FOR_FLEXIBLE_LANDLORD = true
 
 function hasChoice(
@@ -69,16 +71,6 @@ export function landlordAnswersToPrefs(answers: Record<string, unknown> & {
     riskToleranceScore: answers?.risk_tolerance_score ?? 5,
     acceptsHousingVouchers,
   }
-}
-
-/** Rent vs income: ≤30% = 10, ≤35% = 7, ≤40% = 5, else 0. Rent and monthlyIncome in same units (e.g. dollars). */
-export function scoreRentToIncome(rent: number, monthlyIncome: number): number {
-  if (!rent || !monthlyIncome || monthlyIncome <= 0) return 0
-  const ratio = rent / monthlyIncome
-  if (ratio <= 0.3) return 10
-  if (ratio <= 0.35) return 7
-  if (ratio <= 0.4) return 5
-  return 0
 }
 
 export function tenantAnswersToHistory(answers: Record<string, unknown>) {

@@ -1,4 +1,7 @@
+import { affordabilityFromStatedIncome } from '../../../shared/rentScore'
 import { tenantQuestions, type TenantQuestionId, type TenantChoiceId } from './tenantQuestionnaire'
+
+export { scoreRentToIncome } from '../../../shared/rentScore'
 
 export type TenantAnswers = Record<TenantQuestionId, TenantChoiceId | null | undefined>
 
@@ -62,16 +65,6 @@ export function scoreOccupancy(householdChoice: TenantChoiceId | null | undefine
   return 4
 }
 
-export function scoreRentToIncome(rent: number, monthlyIncome: number): number {
-  if (!rent || !monthlyIncome || monthlyIncome <= 0) return 0
-  const ratio = rent / monthlyIncome
-
-  if (ratio <= 0.3) return 10
-  if (ratio <= 0.35) return 7
-  if (ratio <= 0.4) return 5
-  return 0
-}
-
 function scoreFromChoice(questionId: TenantQuestionId, answers: TenantAnswers): number | null {
   const answer = answers[questionId]
   if (!answer) return null
@@ -87,7 +80,11 @@ export function scoreTenantDimensions(
   rent: number,
   monthlyIncome: number,
 ): TenantDimensionScores {
-  const rentScore = scoreRentToIncome(rent, monthlyIncome)
+  const rentScore = affordabilityFromStatedIncome({
+    rent,
+    statedMonthlyIncome: monthlyIncome > 0 ? monthlyIncome : null,
+    incomeVerified: false,
+  })
   const occupancyScore = scoreOccupancy(answers['household_size'] ?? null, answers['bedrooms_needed'] ?? null)
 
   // Stability: previous landlord + employment duration

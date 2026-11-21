@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { usePlaidLink } from 'react-plaid-link'
+import { rentalBudgetMonthlyRent } from '../../../shared/rentScore'
 import { scoreTenantDimensions } from '../lib/tenantScoring'
 import type { TenantQuestionId, TenantChoiceId } from '../lib/tenantQuestionnaire'
 import { useAuth } from '../lib/useAuth'
@@ -12,15 +13,6 @@ import {
   refreshPlaidVerification,
   type PlaidVerification,
 } from '../lib/plaidApi'
-
-const RENTAL_BUDGET_TO_RENT: Record<string, number> = {
-  a: 1200,
-  b: 1325,
-  c: 1575,
-  d: 1850,
-  e: 2250,
-  f: 2750,
-}
 
 function formatMoney(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
@@ -199,7 +191,7 @@ export function EditIncomePage() {
 
     const merged = { ...(existingAnswers || {}), monthly_income: incomeNum } as Record<string, unknown>
     const rentChoice = merged.rental_budget as string | undefined
-    const rent = rentChoice && rentChoice in RENTAL_BUDGET_TO_RENT ? RENTAL_BUDGET_TO_RENT[rentChoice] : 0
+    const rent = rentalBudgetMonthlyRent(rentChoice)
     const dims = scoreTenantDimensions(
       merged as Record<TenantQuestionId, TenantChoiceId | null | undefined>,
       rent,

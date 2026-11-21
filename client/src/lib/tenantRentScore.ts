@@ -1,21 +1,22 @@
 /**
  * Tenant “Rent Score” (0–100) shown on matches and landlord tenant profile.
  * Derived from questionnaire dimension columns so it stays in sync when overall_score is stale.
+ * Affordability is recomputed from stated income; verification does not change it.
  */
 
-export type TenantRentScoreDimensions = {
-  affordability: number
-  stability: number
-  risk: number
-  lifestyle: number
-  policy: number
-}
+import {
+  computeRentScore,
+  normalizeRentScoreDimension,
+  type RentScoreDimensions,
+} from '../../../shared/rentScore'
+
+export { rentScoreFromQuestionnaireRow } from '../../../shared/rentScore'
+
+export type TenantRentScoreDimensions = RentScoreDimensions
 
 /** DB columns may be 0–10 or legacy 0–100. */
 export function normalizeTenantQuestionnaireDimension(v: unknown): number {
-  const raw = Number(v) || 0
-  const normalized = raw > 10 ? raw / 10 : raw
-  return Math.max(0, Math.min(10, normalized))
+  return normalizeRentScoreDimension(v)
 }
 
 export function dimensionsFromTenantQuestionnaireRow(row: {
@@ -35,13 +36,7 @@ export function dimensionsFromTenantQuestionnaireRow(row: {
 }
 
 export function computeTenantRentScoreFromDimensions(dimensions: TenantRentScoreDimensions): number {
-  const overall0to1 =
-    0.35 * (dimensions.affordability / 10) +
-    0.25 * (dimensions.stability / 10) +
-    0.25 * (dimensions.risk / 10) +
-    0.1 * (dimensions.lifestyle / 10) +
-    0.05 * (dimensions.policy / 10)
-  return Math.round(Math.max(0, Math.min(1, overall0to1)) * 100)
+  return computeRentScore(dimensions)
 }
 
 /** Bar weights in the score breakdown UI (matches Your Matches dialog; sum = 1). */

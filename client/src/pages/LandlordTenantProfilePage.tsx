@@ -36,8 +36,7 @@ import {
   type UniversalApplicationRecord,
 } from '../lib/universalApplicationDisplay'
 import {
-  computeTenantRentScoreFromDimensions,
-  dimensionsFromTenantQuestionnaireRow,
+  rentScoreFromQuestionnaireRow,
   type TenantRentScoreDimensions,
 } from '../lib/tenantRentScore'
 import { getTenantQuestionnaireChoiceLabel } from '../lib/tenantQuestionnaire'
@@ -449,9 +448,10 @@ export function LandlordTenantProfilePage() {
       }
       if (questionnaireData) {
         const answers = (questionnaireData as { answers?: Record<string, unknown> }).answers ?? {}
-        const dims = dimensionsFromTenantQuestionnaireRow(questionnaireData)
-        setTenantRentDimensions(dims)
-        setTenantRentScore(computeTenantRentScoreFromDimensions(dims))
+        // Verification is intentionally not an input. The badge below still shows it.
+        const scored = rentScoreFromQuestionnaireRow(questionnaireData, false)
+        setTenantRentDimensions(scored.dimensions)
+        setTenantRentScore(scored.score)
         setTenantQuestionnaireAnswers(answers)
         setTenantVoucher({
           participates: Boolean((questionnaireData as { participates_in_voucher_program?: boolean }).participates_in_voucher_program),

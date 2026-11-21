@@ -12,13 +12,18 @@ import ws from 'ws'
 import {
   landlordAnswersToPrefs,
   tenantAnswersToHistory,
-  scoreRentToIncome,
   computeMatch,
   type MatchResult,
 } from './match'
 import { lookupPropertyLocation } from './geocode'
 import { searchLocation } from './locationSearch'
 import { rentCastCoordinates } from '../shared/reportCoordinates'
+import {
+  matchAffordabilityFromStatedIncome,
+  parseStatedMonthlyIncome,
+  rentalBudgetMonthlyRent,
+  rentScoreFromQuestionnaireRow,
+} from '../shared/rentScore'
 import { haversineMiles, DEFAULT_MATCH_RADIUS_MILES, firstKnownLocation } from './geo'
 import type { PlaidApi } from 'plaid'
 import {
@@ -174,27 +179,40 @@ async function requireAdmin(req: express.Request, res: express.Response): Promis
   return user.id
 }
 
-/** 0–100 for UI when overall_score is unset but dimension scores exist */
+/**
+ * Same 0–100 rent score as the tenant matches page and landlord profile.
+ * Stated income feeds affordability whether or not it is verified. A stored
+ * overall_score is not used, so a stale column cannot disagree with that page.
+ */
 function tenantDisplayScoreFromQuestionnaire(t: {
   overall_score?: number | null
+  answers?: unknown
   affordability_score?: number | null
   stability_score?: number | null
   payment_risk_score?: number | null
   lifestyle_score?: number | null
+  space_fit_score?: number | null
 }): number | null {
-  if (t.overall_score != null && Number.isFinite(Number(t.overall_score))) {
-    return Math.round(Number(t.overall_score))
+  const hasDimension = [
+    t.affordability_score,
+    t.stability_score,
+    t.payment_risk_score,
+    t.lifestyle_score,
+    t.space_fit_score,
+  ].some((v) => v != null && Number.isFinite(Number(v)))
+  const answers =
+    t.answers != null && typeof t.answers === 'object' && !Array.isArray(t.answers)
+      ? (t.answers as Record<string, unknown>)
+      : null
+  const statedIncomeCounts =
+    parseStatedMonthlyIncome(answers?.monthly_income) != null && rentalBudgetMonthlyRent(answers?.rental_budget) > 0
+  if (!hasDimension && !statedIncomeCounts) {
+    if (t.overall_score != null && Number.isFinite(Number(t.overall_score))) {
+      return Math.round(Number(t.overall_score))
+    }
+    return null
   }
-  const a = Number(t.affordability_score)
-  const s = Number(t.stability_score)
-  const p = Number(t.payment_risk_score)
-  const l = Number(t.lifestyle_score)
-  const vals = [a, s, p, l].map((v) => (Number.isFinite(v) ? v : null))
-  if (vals.some((v) => v != null)) {
-    const nums = vals.map((v) => (v != null ? v : 5))
-    return Math.round(((nums[0] + nums[1] + nums[2] + nums[3]) / 4) * 10)
-  }
-  return null
+  return rentScoreFromQuestionnaireRow(t, false).score
 }
 
 const UUID_PARAM_RE =
@@ -247,7 +265,7 @@ async function buildLandlordCatalogRows(
   const { data: tenantRows } = await admin
     .from('tenant_questionnaire')
     .select(
-      'user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program, voucher_coverage_percentage',
+      'user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score, participates_in_voucher_program, voucher_coverage_percentage',
     )
     .order('updated_at', { ascending: false })
     .limit(450)
@@ -260,6 +278,7 @@ async function buildLandlordCatalogRows(
     stability_score?: number | null
     payment_risk_score?: number | null
     lifestyle_score?: number | null
+    space_fit_score?: number | null
     participates_in_voucher_program?: boolean | null
     voucher_coverage_percentage?: number | null
   }
@@ -348,13 +367,14 @@ async function buildLandlordCatalogRows(
         ...baseTenantHistory,
         participatesInVoucherProgram: tenantData.participates_in_voucher_program ?? baseTenantHistory.participatesInVoucherProgram,
       }
-      const tenantMonthlyIncome = typeof tenantAnswers.monthly_income === 'number' ? tenantAnswers.monthly_income : null
       const fallbackAffordability = Number(tenantData.affordability_score) ?? 5
       const rentDollars = (prop.monthly_rent_cents != null ? Number(prop.monthly_rent_cents) : 0) / 100
-      const affordability =
-        tenantMonthlyIncome != null && tenantMonthlyIncome > 0 && rentDollars > 0
-          ? scoreRentToIncome(rentDollars, tenantMonthlyIncome)
-          : fallbackAffordability
+      const affordability = matchAffordabilityFromStatedIncome({
+        rent: rentDollars,
+        statedMonthlyIncome: tenantAnswers.monthly_income,
+        storedAffordability: fallbackAffordability,
+        incomeVerified: false,
+      })
       const tenantDims = {
         affordability,
         stability: Number(tenantData.stability_score) ?? 5,
@@ -2466,7 +2486,6 @@ app.post('/api/matches/for-tenant', async (req, res) => {
       (tenantData as { participates_in_voucher_program?: boolean | null }).participates_in_voucher_program ??
       baseTenantHistory.participatesInVoucherProgram,
   }
-  const tenantMonthlyIncome = typeof tenantAnswers.monthly_income === 'number' ? tenantAnswers.monthly_income : null
   const fallbackAffordability = Number(tenantData.affordability_score) ?? 5
   const baseTenantDims = {
     affordability: fallbackAffordability,
@@ -2502,9 +2521,12 @@ app.post('/api/matches/for-tenant', async (req, res) => {
       }
     }
     const rentDollars = (prop.monthly_rent_cents != null ? Number(prop.monthly_rent_cents) : 0) / 100
-    const affordability = tenantMonthlyIncome != null && tenantMonthlyIncome > 0 && rentDollars > 0
-      ? scoreRentToIncome(rentDollars, tenantMonthlyIncome)
-      : fallbackAffordability
+    const affordability = matchAffordabilityFromStatedIncome({
+      rent: rentDollars,
+      statedMonthlyIncome: tenantAnswers.monthly_income,
+      storedAffordability: fallbackAffordability,
+      incomeVerified: false,
+    })
     const tenantDims = { ...baseTenantDims, affordability }
     const distanceMiles =
       tenantLat != null && tenantLng != null && prop.lat != null && prop.lng != null
@@ -2561,10 +2583,10 @@ app.post('/api/matches/for-landlord', async (req, res) => {
 
   const [landlordRow, tenantRows] = await Promise.all([
     admin.from('landlord_questionnaire').select('answers, policy_strictness_score, risk_tolerance_score, conflict_style_score, accepts_housing_vouchers').eq('user_id', landlordId).maybeSingle(),
-    admin.from('tenant_questionnaire').select('user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, participates_in_voucher_program').in('user_id', uniqueTenantIds),
+    admin.from('tenant_questionnaire').select('user_id, answers, overall_score, affordability_score, stability_score, payment_risk_score, lifestyle_score, space_fit_score, participates_in_voucher_program').in('user_id', uniqueTenantIds),
   ])
   const landlordData = landlordRow.data as { answers?: Record<string, unknown>; policy_strictness_score?: number; risk_tolerance_score?: number; conflict_style_score?: number; accepts_housing_vouchers?: boolean | null } | null
-  const tenants = (tenantRows.data ?? []) as Array<{ user_id: string; answers?: Record<string, unknown>; overall_score?: number; affordability_score?: number; stability_score?: number; payment_risk_score?: number; lifestyle_score?: number; participates_in_voucher_program?: boolean | null }>
+  const tenants = (tenantRows.data ?? []) as Array<{ user_id: string; answers?: Record<string, unknown>; overall_score?: number; affordability_score?: number; stability_score?: number; payment_risk_score?: number; lifestyle_score?: number; space_fit_score?: number | null; participates_in_voucher_program?: boolean | null }>
 
   let landlordPrefs: ReturnType<typeof landlordAnswersToPrefs> | null = null
   if (landlordData) {
@@ -2585,7 +2607,12 @@ app.post('/api/matches/for-landlord', async (req, res) => {
       continue
     }
     const tenantDims = {
-      affordability: Number(t.affordability_score) ?? 5,
+      affordability: matchAffordabilityFromStatedIncome({
+        rent: rentalBudgetMonthlyRent(t.answers?.rental_budget),
+        statedMonthlyIncome: t.answers?.monthly_income,
+        storedAffordability: Number(t.affordability_score) ?? 5,
+        incomeVerified: false,
+      }),
       stability: Number(t.stability_score) ?? 5,
       paymentRisk: Number(t.payment_risk_score) ?? 5,
       lifestyle: Number(t.lifestyle_score) ?? 5,
