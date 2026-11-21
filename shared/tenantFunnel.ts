@@ -32,6 +32,18 @@ export type FunnelEventRow = {
   anonymous_id: string | null
 }
 
+export type FunnelIdentityLinkInsert = {
+  anonymous_id: string
+  user_id: string
+  user_type: 'tenant'
+}
+
+export type FunnelIdentityLink = {
+  anonymous_id: string
+  user_id: string
+  user_type: 'tenant' | 'landlord'
+}
+
 export type FunnelStepStat = {
   id: TenantFunnelStepId
   label: string
@@ -83,22 +95,64 @@ export async function recordTenantFunnelStep(
   }
 }
 
-function actorKey(row: FunnelEventRow): string | null {
+/**
+ * Insert one anonymous-id to user-id link. Failures resolve to false and never throw.
+ * The inserted row is only the two ids and the user type.
+ */
+export async function recordTenantFunnelLink(
+  identity: { userId?: string | null; anonymousId?: string | null },
+  insert: (row: FunnelIdentityLinkInsert) => Promise<InsertResult>,
+): Promise<boolean> {
+  try {
+    const userId = cleanId(identity.userId, 64)
+    const anonymousId = cleanId(identity.anonymousId, 64)
+    if (!userId || !anonymousId) return false
+    const row: FunnelIdentityLinkInsert = {
+      anonymous_id: anonymousId,
+      user_id: userId,
+      user_type: 'tenant',
+    }
+    const result = await insert(row)
+    return !result?.error
+  } catch {
+    return false
+  }
+}
+
+function anonymousUserIds(links: FunnelIdentityLink[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const link of links) {
+    if (link.user_type !== 'tenant') continue
+    const anonymousId = cleanId(link.anonymous_id, 64)
+    const userId = cleanId(link.user_id, 64)
+    if (!anonymousId || !userId || map.has(anonymousId)) continue
+    map.set(anonymousId, userId)
+  }
+  return map
+}
+
+function actorKey(row: FunnelEventRow, anonToUser: Map<string, string>): string | null {
   const userId = cleanId(row.user_id, 64)
   if (userId) return `user:${userId}`
   const anonymousId = cleanId(row.anonymous_id, 64)
-  if (anonymousId) return `anon:${anonymousId}`
-  return null
+  if (!anonymousId) return null
+  const linkedUserId = anonToUser.get(anonymousId)
+  if (linkedUserId) return `user:${linkedUserId}`
+  return `anon:${anonymousId}`
 }
 
 /** Distinct tenants who reached each step, and how many stopped at that step. */
-export function aggregateTenantFunnel(rows: FunnelEventRow[]): FunnelStepStat[] {
+export function aggregateTenantFunnel(
+  rows: FunnelEventRow[],
+  links: FunnelIdentityLink[] = [],
+): FunnelStepStat[] {
+  const anonToUser = anonymousUserIds(links)
   const reached = TENANT_FUNNEL_STEPS.map(() => new Set<string>())
   const furthest = new Map<string, number>()
 
   for (const row of rows) {
     const index = STEP_INDEX.get(row.step)
-    const actor = actorKey(row)
+    const actor = actorKey(row, anonToUser)
     if (index == null || !actor) continue
     reached[index].add(actor)
     const previous = furthest.get(actor)

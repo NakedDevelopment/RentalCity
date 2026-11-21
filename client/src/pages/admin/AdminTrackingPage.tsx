@@ -1,6 +1,11 @@
 import { Fragment, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { aggregateTenantFunnel, type FunnelEventRow, type FunnelStepStat } from '../../../../shared/tenantFunnel'
+import {
+  aggregateTenantFunnel,
+  type FunnelEventRow,
+  type FunnelIdentityLink,
+  type FunnelStepStat,
+} from '../../../../shared/tenantFunnel'
 import { AdminPageHeader, admin } from './adminUi'
 
 const PAGE_SIZE = 1000
@@ -12,9 +17,28 @@ async function loadTenantFunnelEvents(): Promise<FunnelEventRow[]> {
       .from('funnel_events')
       .select('step, user_id, anonymous_id')
       .eq('user_type', 'tenant')
+      .order('occurred_at', { ascending: true })
+      .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
     if (error) throw new Error('Could not load tracking')
     const page = (data ?? []) as FunnelEventRow[]
+    rows.push(...page)
+    if (page.length < PAGE_SIZE) return rows
+  }
+}
+
+async function loadTenantIdentityLinks(): Promise<FunnelIdentityLink[]> {
+  const rows: FunnelIdentityLink[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('funnel_identity_links')
+      .select('anonymous_id, user_id, user_type')
+      .eq('user_type', 'tenant')
+      .order('linked_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) throw new Error('Could not load tracking')
+    const page = (data ?? []) as FunnelIdentityLink[]
     rows.push(...page)
     if (page.length < PAGE_SIZE) return rows
   }
@@ -27,9 +51,9 @@ export function AdminTrackingPage() {
 
   useEffect(() => {
     let cancelled = false
-    loadTenantFunnelEvents()
-      .then((rows) => {
-        if (!cancelled) setStats(aggregateTenantFunnel(rows))
+    Promise.all([loadTenantFunnelEvents(), loadTenantIdentityLinks()])
+      .then(([rows, links]) => {
+        if (!cancelled) setStats(aggregateTenantFunnel(rows, links))
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load tracking')
