@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { fetchSiteSettingsMerged } from '../lib/siteSettings'
 import { supabase } from '../lib/supabase'
+import { rememberedSignupRole, trackTenantStep } from '../lib/trackTenantStep'
 
 type LocationState = {
   email?: string
@@ -14,6 +15,10 @@ export function VerifyEmailPage() {
   const [resending, setResending] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [supportEmail, setSupportEmail] = useState('support@rentalcity.com')
+
+  useEffect(() => {
+    if (rememberedSignupRole() === 'tenant') trackTenantStep('signup_verify_email', null)
+  }, [])
 
   useEffect(() => {
     let cancelled = false

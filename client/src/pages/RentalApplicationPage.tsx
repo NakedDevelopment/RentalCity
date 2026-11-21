@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase'
 import { getConsentStatus, saveConsentData } from '../lib/equifaxApi'
 import { createPlaidLinkToken, exchangePlaidPublicToken, getPlaidVerification, type PlaidVerification } from '../lib/plaidApi'
 import { geocodeAddress, addressKey } from '../lib/geocodeClient'
+import { trackTenantStep } from '../lib/trackTenantStep'
+import type { TenantFunnelStepId } from '../../../shared/tenantFunnel'
 
 type Profile = {
   display_name: string; phone: string; bio: string; city: string
@@ -17,6 +19,7 @@ type Profile = {
 type Universal = { id: string; status: string; valid_until: string; created_at: string; wizard_completed_at: string | null; triggering_property_id: string | null }
 type Form = Profile & { bio: string; leaseIntent: string; moveInDate: string; budget: string }
 const steps = ['Personal information', 'Emergency contact', 'Your plans', 'Authorization', 'Income verification']
+const applicationStepEvent: TenantFunnelStepId[] = ['application_personal', 'application_emergency', 'application_plans', 'application_authorization', 'application_income']
 const states = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']
 const budgetRanges: Record<string, { min: number; max: number }> = {
   under_1200: { min: 0, max: 120000 },
@@ -127,6 +130,18 @@ export function RentalApplicationPage() {
   const propertyId = universal?.triggering_property_id ?? params.get('propertyId') ?? null
   const title = completed && !reviewing ? 'Your application is ready' : 'A clearer way to apply'
   const sub = completed && !reviewing ? 'Your application is on file and ready to share with properties.' : 'Complete this once, then apply to homes with confidence.'
+
+  useEffect(() => {
+    if (!user || loading || roleLoading || role !== 'tenant') return
+    if (!isActive && !completed) return
+    if (completed && !reviewing) {
+      trackTenantStep('application_complete', user.id)
+      return
+    }
+    const stepId = applicationStepEvent[step]
+    if (!stepId || (stepId === 'application_income' && !needsIncome)) return
+    trackTenantStep(stepId, user.id)
+  }, [user, loading, roleLoading, role, isActive, completed, reviewing, step, needsIncome])
 
   useEffect(() => {
     if (!linkToken) return
@@ -269,6 +284,7 @@ export function RentalApplicationPage() {
         const body = await res.json().catch(() => ({}))
         throw new Error((body as { error?: string }).error || 'We could not finish your application. Please try again.')
       }
+      if (user) trackTenantStep('application_complete', user.id)
       navigate('/matches?tab=applied')
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not complete your application.') } finally { setSaving(false) }
   }
