@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import { useTrackTenantStep } from '../lib/trackTenantStep'
 
 type Timing = 'immediate' | 'future'
 
@@ -10,6 +11,7 @@ export function RentalNeedsPage() {
   const [loading, setLoading] = useState(false)
   const { user } = useAuth()
   const navigate = useNavigate()
+  useTrackTenantStep('rental_needs', user?.id, user?.user_metadata?.role as string | undefined)
 
   async function handleSave() {
     if (!timing || !user) return

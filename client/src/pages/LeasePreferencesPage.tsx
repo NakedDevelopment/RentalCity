@@ -1,6 +1,10 @@
+import { useAuth } from '../lib/useAuth'
+import { useTrackTenantStep } from '../lib/trackTenantStep'
 import { EditLeasePreferencesPage } from './EditLeasePreferencesPage'
 
 export function LeasePreferencesPage() {
+  const { user } = useAuth()
+  useTrackTenantStep('lease_preferences', user?.id, user?.user_metadata?.role as string | undefined)
   return (
     <EditLeasePreferencesPage
       backPath="/matches"

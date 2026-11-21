@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
+import { trackTenantStep } from '../lib/trackTenantStep'
 
 type Role = 'tenant' | 'landlord' | 'listing_agent'
 
@@ -22,6 +23,7 @@ export function RoleSelectionPage() {
       setError('Could not save your role. Please try again.')
       return
     }
+    if (role === 'tenant') trackTenantStep('onboarding_role', user.id)
     // Tenants → rental needs in app shell; Landlords → profile setup
     navigate(role === 'tenant' ? '/rental-needs' : '/onboarding/profile')
   }

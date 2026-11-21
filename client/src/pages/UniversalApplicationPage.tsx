@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import StripeCheckoutModal from '../components/StripeCheckoutModal'
 import { stripeConfigured } from '../lib/stripe'
 import { trackMetaEvent, trackMetaEventOnce } from '../lib/metaPixel'
+import { useTrackTenantStep } from '../lib/trackTenantStep'
 
 const NEW_APPLICATION_FEE = 50
 const UPDATE_APPLICATION_FEE = 50
@@ -22,6 +23,7 @@ function formatValidUntil(iso: string) {
 export function UniversalApplicationPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  useTrackTenantStep('application_start', user?.id, user?.user_metadata?.role as string | undefined)
   const [searchParams] = useSearchParams()
   // Older published-property links used "property" rather than "propertyId".
   // Either spelling identifies a listing, not an invite or a fee waiver.

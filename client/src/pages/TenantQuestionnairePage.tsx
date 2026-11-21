@@ -5,6 +5,7 @@ import { tenantQuestions } from '../lib/tenantQuestionnaire'
 import type { TenantQuestionId, TenantChoiceId } from '../lib/tenantQuestionnaire'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import { useTrackTenantStep } from '../lib/trackTenantStep'
 
 const RENTAL_BUDGET_TO_RENT: Record<TenantChoiceId, number> = {
   a: 1200,
@@ -36,6 +37,7 @@ function rentalBudgetChoiceFromRange(
 export function TenantQuestionnairePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  useTrackTenantStep('tenant_questionnaire', user?.id, user?.user_metadata?.role as string | undefined)
   const [step, setStep] = useState(1)
   const [answers, setAnswers] = useState<Record<TenantQuestionId, TenantChoiceId | null | undefined>>({} as Record<TenantQuestionId, TenantChoiceId | null | undefined>)
   const [monthlyIncome, setMonthlyIncome] = useState('')

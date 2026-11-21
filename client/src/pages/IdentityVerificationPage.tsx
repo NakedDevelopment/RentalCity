@@ -9,6 +9,7 @@ import {
   type PlaidIdentityVerificationStatus,
 } from '../lib/plaidApi'
 import { supabase } from '../lib/supabase'
+import { useTrackTenantStep } from '../lib/trackTenantStep'
 
 async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
@@ -51,6 +52,7 @@ function StatusBadge({ status }: { status: PlaidIdentityVerificationStatus | nul
 export function IdentityVerificationPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  useTrackTenantStep('identity_verification', user?.id, user?.user_metadata?.role as string | undefined)
 
   const [status, setStatus] = useState<PlaidIdentityVerificationStatus | null>(null)
   const [linkToken, setLinkToken] = useState<string | null>(null)

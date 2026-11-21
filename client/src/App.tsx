@@ -69,6 +69,7 @@ import { TenantAccountReviewsPage } from './pages/TenantAccountReviewsPage'
 import { LandlordRatingsGivenPage } from './pages/LandlordRatingsGivenPage'
 import { LandlordRatingsReceivedPage } from './pages/LandlordRatingsReceivedPage'
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'
+import { AdminTrackingPage } from './pages/admin/AdminTrackingPage'
 import { AdminUsersPage } from './pages/admin/AdminUsersPage'
 import { AdminUserDetailPage } from './pages/admin/AdminUserDetailPage'
 import { AdminPropertiesPage } from './pages/admin/AdminPropertiesPage'
@@ -192,6 +193,7 @@ export default function App() {
       </Route>
       <Route path="/admin" element={user ? <AdminLayout /> : <Navigate to="/login" replace />}>
         <Route index element={<AdminDashboardPage />} />
+        <Route path="tracking" element={<AdminTrackingPage />} />
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="users/:id" element={<AdminUserDetailPage />} />
         <Route path="properties" element={<AdminPropertiesPage />} />

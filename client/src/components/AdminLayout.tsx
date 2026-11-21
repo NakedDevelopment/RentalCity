@@ -1,5 +1,5 @@
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
-import { LayoutGrid, Users, AlertTriangle, Bell, Settings, User, Building2, type LucideIcon } from 'lucide-react'
+import { LayoutGrid, Users, AlertTriangle, Bell, Settings, User, Building2, BarChart3, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { UserMenu } from './UserMenu'
@@ -8,6 +8,7 @@ type NavItem = { path: string; label: string; icon: LucideIcon; exact: boolean }
 
 const navItems: NavItem[] = [
   { path: '/admin', label: 'Dashboard', icon: LayoutGrid, exact: true },
+  { path: '/admin/tracking', label: 'Tracking', icon: BarChart3, exact: false },
   { path: '/admin/users', label: 'Users', icon: Users, exact: false },
   { path: '/admin/properties', label: 'Properties', icon: Building2, exact: false },
   { path: '/admin/issues', label: 'Issues', icon: AlertTriangle, exact: false },

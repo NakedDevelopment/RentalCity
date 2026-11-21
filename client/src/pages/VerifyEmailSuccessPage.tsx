@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
+import { rememberedSignupRole, trackTenantStep } from '../lib/trackTenantStep'
 
 type LocationState = {
   email?: string
@@ -17,6 +18,7 @@ export function VerifyEmailSuccessPage() {
 
   useEffect(() => {
     if (!user) {
+      if (rememberedSignupRole() === 'tenant') trackTenantStep('signup_verified', null)
       setRedirectChecked(true)
       return
     }
@@ -38,6 +40,7 @@ export function VerifyEmailSuccessPage() {
         navigate('/onboarding/profile', { replace: true })
         return
       }
+      if (!isLandlord) trackTenantStep('signup_verified', user.id)
       setRedirectChecked(true)
     }
     checkAndRedirect()

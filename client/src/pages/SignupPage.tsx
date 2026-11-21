@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { trackMetaEvent } from '../lib/metaPixel'
+import { rememberSignupRole, trackTenantStep } from '../lib/trackTenantStep'
 
 type Role = 'tenant' | 'landlord' | 'listing_agent'
 
@@ -142,10 +143,16 @@ export function SignupPage() {
 
   const [step, setStep] = useState<1 | 2>(1)
 
+  useEffect(() => {
+    if (step === 2 && role === 'tenant') trackTenantStep('signup_account', null)
+  }, [step, role])
+
   function chooseRole(nextRole: Role) {
     setRole(nextRole)
     setStep(2)
     setError(null)
+    rememberSignupRole(nextRole)
+    if (nextRole === 'tenant') trackTenantStep('signup_role', null)
   }
 
   if (step === 1) {
