@@ -5,9 +5,31 @@ import { createElement } from 'react'
 import { TenantQuestionnaireIntro } from '../client/src/components/TenantQuestionnaireIntro'
 import {
   FIRST_QUESTIONNAIRE_STEP,
+  actionAfterExplainerStart,
   entryAfterStartSurvey,
+  explainerContinuedToOnboarding,
+  explainerGatesOnboarding,
+  markExplainerContinuedToOnboarding,
+  markExplainerFirstInOnboarding,
+  newTenantOnboardingPath,
+  pathAfterExplainerStart,
   questionnaireEntry,
+  shouldShowQuestionnaireIntro,
+  type ExplainerFlagStore,
 } from './tenantQuestionnaireIntro'
+
+function memoryStore(): ExplainerFlagStore {
+  const values = new Map<string, string>()
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value)
+    },
+    removeItem: (key) => {
+      values.delete(key)
+    },
+  }
+}
 
 const fresh = { answers: null, bio: null }
 
@@ -31,10 +53,43 @@ test('a new tenant sees the explainer and the only action opens the first step',
   assert.equal((html.match(/<button/g) ?? []).length, 1)
   assert.equal((html.match(/<a[\s>]/g) ?? []).length, 0)
   assert.doesNotMatch(html, /\$|fee|payment|price/i)
+  assert.match(html, /overflow:\s*visible/)
+  assert.match(html, /padding-bottom:\s*0\.35em/)
+  assert.match(html, /line-height:\s*1\.35/)
+  assert.doesNotMatch(html, /leading-\[1\.05\]/)
+  assert.doesNotMatch(html, /fixed inset-0/)
+  assert.doesNotMatch(html, /overflow-hidden/)
 
   const next = entryAfterStartSurvey()
   assert.deepEqual(next, { screen: 'questions', step: FIRST_QUESTIONNAIRE_STEP })
   assert.equal(next.step, 1)
+})
+
+test('a new account lands on the explainer before the immediate or future need step', () => {
+  assert.equal(newTenantOnboardingPath(), '/tenant-questionnaire')
+  assert.equal(pathAfterExplainerStart(), '/rental-needs')
+  assert.notEqual(newTenantOnboardingPath(), pathAfterExplainerStart())
+
+  const store = memoryStore()
+  markExplainerFirstInOnboarding(store)
+  assert.equal(explainerGatesOnboarding(store), true)
+  assert.equal(explainerContinuedToOnboarding(store), false)
+  assert.equal(shouldShowQuestionnaireIntro(fresh, false), true)
+  assert.deepEqual(actionAfterExplainerStart(true), { type: 'onboarding', path: '/rental-needs' })
+
+  markExplainerContinuedToOnboarding(store)
+  assert.equal(explainerGatesOnboarding(store), false)
+  assert.equal(explainerContinuedToOnboarding(store), true)
+  assert.equal(shouldShowQuestionnaireIntro(fresh, true), false)
+  assert.equal(
+    shouldShowQuestionnaireIntro({ answers: { monthly_income: 4200 }, bio: '' }, false),
+    false,
+  )
+  assert.deepEqual(questionnaireEntry({ answers: { previous_landlord_duration: 'b' }, bio: null }), {
+    screen: 'questions',
+    step: FIRST_QUESTIONNAIRE_STEP,
+  })
+  assert.deepEqual(actionAfterExplainerStart(false), { type: 'questions', step: FIRST_QUESTIONNAIRE_STEP })
 })
 
 test('a tenant with saved progress skips the explainer and stays on the existing first step', () => {

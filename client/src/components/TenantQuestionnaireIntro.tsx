@@ -28,7 +28,7 @@ const cards = [
 export function TenantQuestionnaireIntro({ onStart }: { onStart: () => void }) {
   return (
     <div
-      className="fixed inset-0 z-[80] overflow-y-auto font-sans text-[#0F1E3D]"
+      className="overflow-visible font-sans text-[#0F1E3D]"
       style={{
         background:
           'radial-gradient(ellipse 70% 55% at 0% 0%, rgba(0, 187, 255, 0.18), rgba(255, 255, 255, 0) 58%), #fbfcfe',
@@ -42,9 +42,14 @@ export function TenantQuestionnaireIntro({ onStart }: { onStart: () => void }) {
             Before your questionnaire
           </p>
 
-          <h1 className="mt-4 text-left text-[2.75rem] font-bold leading-[1.05] tracking-[-0.03em] md:text-center md:text-5xl lg:text-6xl">
+          <h1 className="mt-4 overflow-visible text-left text-[2.75rem] font-bold leading-[1.35] tracking-[-0.03em] md:text-center md:text-5xl lg:text-6xl">
             <span className="block text-[#0F1E3D]">Find the landlord</span>
-            <span className="block bg-gradient-primary bg-clip-text text-transparent">who&apos;s right for you.</span>
+            <span
+              className="questionnaire-intro-accent block overflow-visible bg-gradient-primary bg-clip-text pb-[0.35em] leading-[1.35] text-transparent"
+              style={{ overflow: 'visible', lineHeight: 1.35, paddingBottom: '0.35em' }}
+            >
+              who&apos;s right for you.
+            </span>
           </h1>
 
           <p className="mt-4 max-w-md text-left text-base leading-7 text-[#64748B] md:mx-auto md:max-w-3xl md:text-center md:text-lg">
