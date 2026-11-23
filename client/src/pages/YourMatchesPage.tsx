@@ -423,9 +423,11 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [loading, setLoading] = useState(true)
   const [, setError] = useState<string | null>(null)
   const MATCHES_PAGE_SIZE = 6
+  const TENANT_MATCHES_PAGE_SIZE = 6
   /** Eligible tenant ↔ property matches (questionnaire complete), by match score */
   const MAX_TENANT_TOP_MATCHES = 10
   const [landlordPage, setLandlordPage] = useState(1)
+  const [tenantPage, setTenantPage] = useState(1)
   const [tenantOverallScore, setTenantOverallScore] = useState<number | null>(null)
   const [tenantDimensionScores, setTenantDimensionScores] = useState<MatchDimensions | null>(null)
   const [tenantQuestionnaireLoading, setTenantQuestionnaireLoading] = useState(false)
@@ -1227,8 +1229,14 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   )
   const tenantBaseMatches =
     profileRole === 'tenant' && tenantOverallScore != null ? matchesToShow : filteredMatches
+  const tenantTotalPages = Math.max(1, Math.ceil(tenantBaseMatches.length / TENANT_MATCHES_PAGE_SIZE))
+  const tenantPageStart = (tenantPage - 1) * TENANT_MATCHES_PAGE_SIZE
+  const paginatedTenantMatches = tenantBaseMatches.slice(
+    tenantPageStart,
+    tenantPageStart + TENANT_MATCHES_PAGE_SIZE,
+  )
   const tenantMapCards = useMemo<TenantMapCard[]>(() => (
-    tenantBaseMatches.map((match) => {
+    paginatedTenantMatches.map((match) => {
       const score = matchByPropertyId[match.id]
       const baths = Number(match.bathrooms) || 0
       return {
@@ -1258,7 +1266,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         saved: savedIds.has(match.id),
       }
     })
-  ), [tenantBaseMatches, matchByPropertyId, appliedIds, applicationIdByPropertyId, location.pathname, location.search, savedIds])
+  ), [paginatedTenantMatches, matchByPropertyId, appliedIds, applicationIdByPropertyId, location.pathname, location.search, savedIds])
 
   useEffect(() => {
     setLandlordPage(1)
@@ -1267,6 +1275,14 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   useEffect(() => {
     if (landlordPage > landlordTotalPages) setLandlordPage(landlordTotalPages)
   }, [landlordPage, landlordTotalPages])
+
+  useEffect(() => {
+    setTenantPage(1)
+  }, [activeTab, bedrooms, priceRange, amenities])
+
+  useEffect(() => {
+    if (tenantPage > tenantTotalPages) setTenantPage(tenantTotalPages)
+  }, [tenantPage, tenantTotalPages])
 
   if (roleLoading || profileRole === null) {
     return (
@@ -1783,7 +1799,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {!tenantSurveyCompletedAt ? (
         !tenantSurveyRefetched ? (
           <div className="flex min-h-[40vh] items-center justify-center px-4 py-8">
@@ -2077,7 +2093,8 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       </div>
 
       {hasMatches ? (
-        <div className="min-h-[70vh] md:h-[calc(100dvh-8.5rem)] md:min-h-[560px]">
+        <div className="order-first flex flex-col gap-4 md:order-none">
+        <div className="md:h-[calc(100dvh-8.5rem)] md:min-h-[560px]">
         <TenantMatchesMap
           cards={tenantMapCards}
           onApply={(id) => {
@@ -2093,6 +2110,32 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             />
           )}
         />
+        </div>
+        {tenantBaseMatches.length > TENANT_MATCHES_PAGE_SIZE ? (
+          <div className="flex justify-center">
+            <div className="mt-1 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setTenantPage((p) => Math.max(1, p - 1))}
+                disabled={tenantPage === 1}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {tenantPage} of {tenantTotalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setTenantPage((p) => Math.min(tenantTotalPages, p + 1))}
+                disabled={tenantPage === tenantTotalPages}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
         </div>
       ) : null}
 

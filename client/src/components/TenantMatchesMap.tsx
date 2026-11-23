@@ -58,15 +58,26 @@ function pinIcon(pin: ListingPin, selected: boolean) {
 function FitPins({ pinsKey, positions }: { pinsKey: string; positions: [number, number][] }) {
   const map = useMap()
   useEffect(() => {
-    if (positions.length === 0) {
-      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM)
-      return
+    const fit = () => {
+      const size = map.getSize()
+      if (size.x < 20 || size.y < 20) return
+      if (positions.length === 0) {
+        map.setView(DEFAULT_CENTER, DEFAULT_ZOOM)
+        return
+      }
+      if (positions.length === 1) {
+        map.setView(positions[0], 13)
+        return
+      }
+      map.fitBounds(latLngBounds(positions), {
+        paddingTopLeft: [176, 44],
+        paddingBottomRight: [48, 140],
+        maxZoom: 14,
+      })
     }
-    if (positions.length === 1) {
-      map.setView(positions[0], 13)
-      return
-    }
-    map.fitBounds(latLngBounds(positions), { padding: [42, 42], maxZoom: 14 })
+    fit()
+    const retry = window.setTimeout(fit, 80)
+    return () => window.clearTimeout(retry)
   }, [map, pinsKey, positions])
   return null
 }
@@ -210,7 +221,6 @@ export function TenantMatchesMap({
   renderScore: (id: string) => ReactNode
 }) {
   const desktop = useIsDesktop()
-  const [mobileView, setMobileView] = useState<'map' | 'list'>('map')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [mapShare, setMapShare] = useState(0.5)
   const splitRef = useRef<HTMLDivElement>(null)
@@ -243,14 +253,13 @@ export function TenantMatchesMap({
       }
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [selectedId, mobileView])
+  }, [selectedId])
 
-  const showMap = desktop || mobileView === 'map'
-  const mapHeight = !desktop && mobileView === 'map' ? `${Math.round(mapShare * 100)}%` : undefined
-  const sheetHeight = !desktop && mobileView === 'map' ? `${Math.round((1 - mapShare) * 100)}%` : undefined
+  const mapHeight = desktop ? undefined : `${Math.round(mapShare * 100)}%`
+  const sheetHeight = desktop ? undefined : `${Math.round((1 - mapShare) * 100)}%`
 
   function onDragStart(event: PointerEvent<HTMLButtonElement>) {
-    if (desktop || mobileView !== 'map') return
+    if (desktop) return
     dragOrigin.current = { y: event.clientY, share: mapShare }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -268,15 +277,15 @@ export function TenantMatchesMap({
   }
 
   return (
-    <div className="relative h-full">
+    <div className="relative h-[calc(100dvh-141px)] md:h-full">
       <div
         ref={splitRef}
-        className={`flex h-full overflow-hidden rounded-2xl border border-gray-200 bg-white ${
-          !desktop && mobileView === 'list' ? 'min-h-[calc(100dvh-8rem)] flex-col' : 'h-[calc(100dvh-8rem)] flex-col'
-        } md:h-full md:min-h-0 md:flex-row`}
+        className="flex h-full min-h-0 flex-col overflow-hidden md:flex-row md:rounded-2xl md:border md:border-gray-200 md:bg-white"
       >
-        {showMap ? (
-          <div className="relative min-h-0 md:h-full md:w-[60%]" style={mapHeight ? { height: mapHeight } : undefined}>
+          <div
+            className="relative min-h-0 w-full shrink-0 overflow-hidden md:h-full md:w-[60%] md:shrink"
+            style={mapHeight ? { height: mapHeight, flexBasis: mapHeight } : undefined}
+          >
             <MapContainer
               center={DEFAULT_CENTER}
               zoom={DEFAULT_ZOOM}
@@ -290,7 +299,7 @@ export function TenantMatchesMap({
               />
               <ZoomControl position="topright" />
               <FitPins pinsKey={pinsKey} positions={positions} />
-              <InvalidateSize token={`${desktop}-${mobileView}-${mapShare.toFixed(2)}-${pinsKey}`} />
+              <InvalidateSize token={`${desktop}-${mapShare.toFixed(2)}-${pinsKey}`} />
               <LocateButton desktop={desktop} />
               {pins.map((pin) => {
                 const card = cardById.get(pin.id)
@@ -318,13 +327,12 @@ export function TenantMatchesMap({
               </ul>
             </div>
           </div>
-        ) : null}
 
         <section
-          className={`flex min-h-0 flex-col md:h-full md:w-[40%] ${showMap ? '' : 'flex-1'}`}
-          style={sheetHeight ? { height: sheetHeight } : undefined}
+          className="z-10 flex min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-t-2xl border-x border-t border-gray-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.12)] md:h-full md:w-[40%] md:shrink md:rounded-none md:border-0 md:shadow-none"
+          style={sheetHeight ? { height: sheetHeight, flexBasis: sheetHeight } : undefined}
         >
-          {!desktop && mobileView === 'map' ? (
+          {!desktop ? (
             <button
               type="button"
               aria-label="Drag to resize the list"
@@ -332,18 +340,16 @@ export function TenantMatchesMap({
               onPointerMove={onDragMove}
               onPointerUp={onDragEnd}
               onPointerCancel={onDragEnd}
-              className="flex w-full cursor-ns-resize touch-none justify-center bg-white py-2.5"
+              className="flex w-full shrink-0 cursor-ns-resize touch-none justify-center bg-white py-2.5"
             >
               <span className="h-1.5 w-12 rounded-full bg-gray-300" />
             </button>
-          ) : (
-            <div className="h-2 md:hidden" />
-          )}
-          <div className="px-4 pb-2">
+          ) : null}
+          <div className="shrink-0 px-4 pb-2">
             <h2 className="text-lg font-bold text-gray-900">{cards.length} matches</h2>
             <p className="text-xs text-gray-500">Based on your preferences and compatibility.</p>
           </div>
-          <div data-match-scroller className="min-h-0 flex-1 overflow-y-auto px-3 pb-24 md:pb-4">
+          <div data-match-scroller className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
             {cards.length === 0 ? (
               <p className="px-1 py-8 text-sm text-gray-500">No matches in this view.</p>
             ) : (
@@ -453,25 +459,6 @@ export function TenantMatchesMap({
             )}
           </div>
         </section>
-      </div>
-
-      <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 md:hidden">
-        <div className="flex rounded-full bg-[#0F1E3D] p-1 text-sm font-semibold text-white shadow-lg">
-          <button
-            type="button"
-            onClick={() => setMobileView('map')}
-            className={`rounded-full px-4 py-1.5 ${mobileView === 'map' ? 'bg-white text-[#0F1E3D]' : ''}`}
-          >
-            Map
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileView('list')}
-            className={`rounded-full px-4 py-1.5 ${mobileView === 'list' ? 'bg-white text-[#0F1E3D]' : ''}`}
-          >
-            List
-          </button>
-        </div>
       </div>
     </div>
   )
