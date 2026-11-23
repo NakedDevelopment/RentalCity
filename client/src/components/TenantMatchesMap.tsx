@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from 'react-leaflet'
 import { divIcon, latLngBounds, type Marker as LeafletMarker } from 'leaflet'
@@ -26,6 +26,8 @@ export type TenantMapCard = {
   statusHref: string | null
   landlordHref: string | null
   landlordName: string | null
+  title: string
+  saved: boolean
 }
 
 const DEFAULT_CENTER: [number, number] = [39.8283, -98.5795]
@@ -168,10 +170,15 @@ function CardPhoto({
       {show ? (
         <img src={url as string} alt={alt} className="h-full w-full object-cover" loading="lazy" onError={() => setBroken(true)} />
       ) : streetViewUrl ? (
-        <img src={streetViewUrl} alt={alt} className="h-full w-full object-cover" loading="lazy" />
+        <div className="relative h-full w-full">
+          <img src={streetViewUrl} alt={alt} className="h-full w-full object-cover" loading="lazy" />
+          <span className="absolute bottom-2 left-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+            Street View
+          </span>
+        </div>
       ) : (
         <div className="flex h-full min-h-[72px] w-full items-center justify-center">
-          <span className="text-xs text-gray-500">No photos yet</span>
+          <span className="text-sm text-gray-500">No photos yet</span>
         </div>
       )}
     </div>
@@ -194,9 +201,13 @@ function useIsDesktop() {
 export function TenantMatchesMap({
   cards,
   onApply,
+  onToggleSaved,
+  renderScore,
 }: {
   cards: TenantMapCard[]
   onApply: (id: string) => void
+  onToggleSaved: (id: string) => void
+  renderScore: (id: string) => ReactNode
 }) {
   const desktop = useIsDesktop()
   const [mobileView, setMobileView] = useState<'map' | 'list'>('map')
@@ -257,12 +268,12 @@ export function TenantMatchesMap({
   }
 
   return (
-    <div className="relative">
+    <div className="relative h-full">
       <div
         ref={splitRef}
-        className={`flex overflow-hidden rounded-2xl border border-gray-200 bg-white ${
-          !desktop && mobileView === 'list' ? 'min-h-[calc(100dvh-6rem)] flex-col' : 'h-[100dvh] flex-col'
-        } md:h-[min(820px,calc(100vh-15rem))] md:flex-row`}
+        className={`flex h-full overflow-hidden rounded-2xl border border-gray-200 bg-white ${
+          !desktop && mobileView === 'list' ? 'min-h-[calc(100dvh-8rem)] flex-col' : 'h-[calc(100dvh-8rem)] flex-col'
+        } md:h-full md:min-h-0 md:flex-row`}
       >
         {showMap ? (
           <div className="relative min-h-0 md:h-full md:w-[60%]" style={mapHeight ? { height: mapHeight } : undefined}>
@@ -341,6 +352,7 @@ export function TenantMatchesMap({
                   const selected = selectedId === card.id
                   const score = card.matchScore
                   const bar = scoreBarColor(score ?? 0)
+                  const showScore = score != null
                   return (
                     <article
                       id={`match-card-${card.id}`}
@@ -349,55 +361,88 @@ export function TenantMatchesMap({
                         selected ? 'border-[#3A7AFE] ring-2 ring-[#3A7AFE]/30' : 'border-gray-200'
                       }`}
                     >
-                      <Link to={`/property/${card.id}?from=matches`} className="block">
-                        <div className="relative">
+                      <div className="relative">
+                        <Link to={`/property/${card.id}?from=matches`} className="block">
                           <CardPhoto
                             url={card.photoUrl}
                             alt={card.photoAlt}
                             fallbackAddress={card.photoAddress}
                             className="aspect-[4/3] w-full"
                           />
-                          <span className="absolute left-2 top-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-900 shadow">
-                            {score == null ? 'Match' : `${score}% match`}
-                          </span>
-                        </div>
-                        <div className="space-y-1 px-3 py-2.5">
-                          <p className="text-sm font-bold text-gray-900">{card.price}</p>
-                          <p className="text-xs text-gray-600">{card.bedsBaths}</p>
-                          <p className="truncate text-xs text-gray-500">{card.address}</p>
-                          <div className="pt-1">
+                          {showScore ? (
+                            <span className="absolute left-2 top-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-900 shadow">
+                              {score}% match
+                            </span>
+                          ) : null}
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => onToggleSaved(card.id)}
+                          className="absolute right-2 top-2 z-10 rounded-full bg-white/90 p-1.5 text-gray-400 shadow hover:text-gray-700"
+                          aria-label={card.saved ? 'Unsave' : 'Save'}
+                        >
+                          {card.saved ? (
+                            <svg className="h-5 w-5 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 21s-6.716-4.535-9.193-8.12C.99 10.257 1.37 6.84 4.127 4.963c2.168-1.476 5.02-1.05 6.873 1.027 1.853-2.076 4.705-2.503 6.873-1.027 2.757 1.877 3.137 5.294 1.32 7.917C18.716 16.465 12 21 12 21z" />
+                            </svg>
+                          ) : (
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                      <Link to={`/property/${card.id}?from=matches`} className="block space-y-1 px-3 pt-2.5">
+                        <p className="truncate text-sm font-semibold text-gray-900">{card.title}</p>
+                        <p className="text-sm font-bold text-gray-900">{card.price}</p>
+                        <p className="text-xs text-gray-600">{card.bedsBaths}</p>
+                        <p className="truncate text-xs text-gray-500">{card.address}</p>
+                      </Link>
+                      {card.landlordHref ? (
+                        <p className="px-3 pt-1 text-xs text-gray-600">
+                          Listed by{' '}
+                          <Link to={card.landlordHref} className="font-medium text-gray-900 underline">
+                            {card.landlordName?.trim() || 'View landlord profile'}
+                          </Link>
+                        </p>
+                      ) : null}
+                      <div className="space-y-2 px-3 py-2">
+                        {renderScore(card.id)}
+                        {showScore ? (
+                          <div>
                             <div className="mb-1 flex items-center justify-between text-[11px] text-gray-500">
                               <span>Match</span>
-                              <span>{score == null ? '—' : `${score}%`}</span>
+                              <span>{score}%</span>
                             </div>
                             <div className="h-1.5 overflow-hidden rounded-full bg-gray-200">
-                              <div
-                                className={`h-full rounded-full ${bar.bg}`}
-                                style={{ width: `${score ?? 0}%` }}
-                              />
+                              <div className={`h-full rounded-full ${bar.bg}`} style={{ width: `${score}%` }} />
                             </div>
                           </div>
-                        </div>
-                      </Link>
-                      <div className="flex items-center justify-between gap-2 px-3 pb-3">
+                        ) : null}
+                      </div>
+                      <div className="px-3 pb-3">
                         {card.applied ? (
-                          <span className="text-xs font-semibold text-gray-700">Applied</span>
+                          <span className="flex items-center justify-center gap-2 rounded-lg bg-[#3A7AFE] px-4 py-2.5 text-sm font-medium text-white">
+                            Applied
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
                         ) : (
                           <button
                             type="button"
                             onClick={() => onApply(card.id)}
-                            className="text-xs font-semibold text-[#3A7AFE] hover:underline"
+                            className="w-full rounded-lg bg-[#3A7AFE] px-4 py-2.5 text-sm font-medium text-white"
                           >
-                            Apply
+                            Apply Now
                           </button>
                         )}
                         {card.statusHref ? (
-                          <Link to={card.statusHref} className="text-xs font-medium text-gray-900 underline">
+                          <Link
+                            to={card.statusHref}
+                            className="mt-2 block text-center text-sm font-medium text-gray-900 underline"
+                          >
                             Application status
-                          </Link>
-                        ) : card.landlordHref ? (
-                          <Link to={card.landlordHref} className="truncate text-xs text-gray-500 underline">
-                            {card.landlordName || 'Landlord'}
                           </Link>
                         ) : null}
                       </div>

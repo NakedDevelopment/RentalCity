@@ -194,6 +194,10 @@ function loadSavedIds(): Set<string> {
   }
 }
 
+function saveSavedIds(ids: Set<string>) {
+  localStorage.setItem(SAVED_IDS_KEY, JSON.stringify([...ids]))
+}
+
 type MatchDimensions = TenantRentScoreDimensions
 
 const DIMENSION_LABELS: { key: keyof MatchDimensions; emoji: string; label: string }[] = [
@@ -300,6 +304,73 @@ function MatchScoreDisplay({
   )
 }
 
+function TenantMatchScoreSlot({
+  matchData,
+  loading,
+  compatibility,
+}: {
+  matchData: MatchResult | undefined
+  loading: boolean
+  compatibility: string
+}) {
+  const [open, setOpen] = useState(false)
+  if (loading && !matchData) {
+    return <p className="text-sm text-gray-500">Loading match score…</p>
+  }
+  if (matchData) {
+    const isQuestionnaireMissing = matchData.reasons?.some((reason) =>
+      reason.toLowerCase().includes('tenant questionnaire not completed'),
+    ) ?? false
+    if (isQuestionnaireMissing) {
+      return (
+        <div>
+          <p className="text-sm text-gray-600">
+            Complete the short questionnaire to see your match score with this property.
+          </p>
+          <Link
+            to="/tenant-questionnaire"
+            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-[#3A7AFE] hover:text-[#2558CC]"
+          >
+            Complete questionnaire
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
+      )
+    }
+    if (matchData.eligible && matchData.dimensions) {
+      return (
+        <div>
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            className="text-xs font-semibold text-[#3A7AFE] hover:underline"
+          >
+            {open ? 'Hide score breakdown' : 'Score breakdown'}
+          </button>
+          {open ? (
+            <div className="mt-2">
+              <MatchScoreDisplay overall={matchData.overall} dimensions={matchData.dimensions} compact />
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+    return (
+      <span className="text-sm text-amber-700">
+        Not eligible — {matchData.reasons.join(' ')}
+      </span>
+    )
+  }
+  return (
+    <p className="text-sm text-gray-700">
+      <span className="font-semibold text-gray-900">Compatibility:</span>{' '}
+      {compatibility}
+    </p>
+  )
+}
+
 export function YourMatchesPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -331,7 +402,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     laundry: 'Laundry',
     gym: 'Gym',
   }
-  const [savedIds] = useState<Set<string>>(loadSavedIds)
+  const [savedIds, setSavedIds] = useState<Set<string>>(loadSavedIds)
   const [applicationIdByPropertyId, setApplicationIdByPropertyId] = useState<Record<string, string>>({})
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set())
   const [hasActiveUniversalApplication, setHasActiveUniversalApplication] = useState<boolean | null>(null)
@@ -997,6 +1068,16 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     setLocationError(null)
   }
 
+  const toggleSaved = (id: string) => {
+    setSavedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      saveSavedIds(next)
+      return next
+    })
+  }
+
   const handleApplyNow = async (match: MatchCard) => {
     if (!user) return
 
@@ -1173,9 +1254,11 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
           returnTo: `${location.pathname}${location.search}`,
         }),
         landlordName: match.landlordDisplayName,
+        title: match.title,
+        saved: savedIds.has(match.id),
       }
     })
-  ), [tenantBaseMatches, matchByPropertyId, appliedIds, applicationIdByPropertyId, location.pathname, location.search])
+  ), [tenantBaseMatches, matchByPropertyId, appliedIds, applicationIdByPropertyId, location.pathname, location.search, savedIds])
 
   useEffect(() => {
     setLandlordPage(1)
@@ -1994,13 +2077,23 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       </div>
 
       {hasMatches ? (
+        <div className="min-h-[70vh] md:h-[calc(100dvh-8.5rem)] md:min-h-[560px]">
         <TenantMatchesMap
           cards={tenantMapCards}
           onApply={(id) => {
             const match = tenantBaseMatches.find((item) => item.id === id)
             if (match) void handleApplyNow(match)
           }}
+          onToggleSaved={toggleSaved}
+          renderScore={(id) => (
+            <TenantMatchScoreSlot
+              matchData={matchByPropertyId[id]}
+              loading={matchLoading}
+              compatibility={tenantBaseMatches.find((item) => item.id === id)?.compatibility ?? ''}
+            />
+          )}
         />
+        </div>
       ) : null}
 
       {profileRole === 'tenant' && tenantOverallScore != null && (loading || matchLoading) && matchesToShow.length === 0 ? (
@@ -2020,7 +2113,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             <>
               <h2 className="text-xl font-semibold text-gray-900 mb-2">No Saved Properties Yet</h2>
               <p className="text-gray-600 text-center max-w-md mb-8">
-                Saved properties will show up here.
+                Tap the heart on any match to save it here for later.
               </p>
               <button
                 type="button"
