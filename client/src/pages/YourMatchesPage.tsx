@@ -412,6 +412,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [locationRadiusMiles, setLocationRadiusMiles] = useState(50)
   const [locationLoading, setLocationLoading] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
+  const [phoneFiltersOpen, setPhoneFiltersOpen] = useState(false)
   const [landlordRadiusMiles, setLandlordRadiusMiles] = useState(50)
   const [submissionModal, setSubmissionModal] = useState<{ propertyTitle: string } | null>(null)
   const [landlordProperty, setLandlordProperty] = useState('')
@@ -423,9 +424,11 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [loading, setLoading] = useState(true)
   const [, setError] = useState<string | null>(null)
   const MATCHES_PAGE_SIZE = 6
+  const TENANT_MATCHES_PAGE_SIZE = 6
   /** Eligible tenant ↔ property matches (questionnaire complete), by match score */
   const MAX_TENANT_TOP_MATCHES = 10
   const [landlordPage, setLandlordPage] = useState(1)
+  const [tenantPage, setTenantPage] = useState(1)
   const [tenantOverallScore, setTenantOverallScore] = useState<number | null>(null)
   const [tenantDimensionScores, setTenantDimensionScores] = useState<MatchDimensions | null>(null)
   const [tenantQuestionnaireLoading, setTenantQuestionnaireLoading] = useState(false)
@@ -1227,8 +1230,14 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   )
   const tenantBaseMatches =
     profileRole === 'tenant' && tenantOverallScore != null ? matchesToShow : filteredMatches
+  const tenantTotalPages = Math.max(1, Math.ceil(tenantBaseMatches.length / TENANT_MATCHES_PAGE_SIZE))
+  const tenantPageStart = (tenantPage - 1) * TENANT_MATCHES_PAGE_SIZE
+  const paginatedTenantMatches = tenantBaseMatches.slice(
+    tenantPageStart,
+    tenantPageStart + TENANT_MATCHES_PAGE_SIZE,
+  )
   const tenantMapCards = useMemo<TenantMapCard[]>(() => (
-    tenantBaseMatches.map((match) => {
+    paginatedTenantMatches.map((match) => {
       const score = matchByPropertyId[match.id]
       const baths = Number(match.bathrooms) || 0
       return {
@@ -1258,7 +1267,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         saved: savedIds.has(match.id),
       }
     })
-  ), [tenantBaseMatches, matchByPropertyId, appliedIds, applicationIdByPropertyId, location.pathname, location.search, savedIds])
+  ), [paginatedTenantMatches, matchByPropertyId, appliedIds, applicationIdByPropertyId, location.pathname, location.search, savedIds])
 
   useEffect(() => {
     setLandlordPage(1)
@@ -1267,6 +1276,14 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   useEffect(() => {
     if (landlordPage > landlordTotalPages) setLandlordPage(landlordTotalPages)
   }, [landlordPage, landlordTotalPages])
+
+  useEffect(() => {
+    setTenantPage(1)
+  }, [activeTab, bedrooms, priceRange, amenities])
+
+  useEffect(() => {
+    if (tenantPage > tenantTotalPages) setTenantPage(tenantTotalPages)
+  }, [tenantPage, tenantTotalPages])
 
   if (roleLoading || profileRole === null) {
     return (
@@ -1783,7 +1800,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-3 md:gap-6">
       {!tenantSurveyCompletedAt ? (
         !tenantSurveyRefetched ? (
           <div className="flex min-h-[40vh] items-center justify-center px-4 py-8">
@@ -1851,7 +1868,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       ) : null}
       {tenantSurveyCompletedAt ? (
       <>
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+      <div className={`flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between ${hasMatches ? 'order-last md:order-none' : ''}`}>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Your Matches</h1>
           <p className="text-gray-600 mt-1">
@@ -1915,6 +1932,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         )}
       </div>
 
+      <div className="order-1 flex flex-col gap-3 md:contents">
       <div className="flex flex-wrap gap-1 border-b border-gray-200">
         <button
           type="button"
@@ -1951,13 +1969,25 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
         </button>
       </div>
 
+      <button
+        type="button"
+        className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-900 md:hidden"
+        aria-expanded={phoneFiltersOpen}
+        onClick={() => setPhoneFiltersOpen((open) => !open)}
+      >
+        Search and filters
+        <svg className={`h-4 w-4 text-gray-500 transition-transform ${phoneFiltersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div className={`${phoneFiltersOpen ? 'flex' : 'hidden'} flex-col gap-6 md:flex`}>
       {hasActiveUniversalApplication === false && !locationLatLng ? (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Search by location below to see properties near you — we don&apos;t have a saved address for you yet.
         </div>
       ) : null}
 
-      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4">
         <div className="min-w-[220px] flex-1">
           <label htmlFor="location-search" className="block text-xs font-medium text-gray-500 mb-1">
             Search by city, state or ZIP
@@ -2075,11 +2105,15 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
           ))}
         </div>
       </div>
+      </div>
+      </div>
 
       {hasMatches ? (
-        <div className="min-h-[70vh] md:h-[calc(100dvh-8.5rem)] md:min-h-[560px]">
+        <div className="order-2 flex flex-col gap-4 md:order-none">
+        <div className="md:h-[calc(100dvh-8.5rem)] md:min-h-[560px]">
         <TenantMatchesMap
           cards={tenantMapCards}
+          matchCount={tenantBaseMatches.length}
           onApply={(id) => {
             const match = tenantBaseMatches.find((item) => item.id === id)
             if (match) void handleApplyNow(match)
@@ -2093,6 +2127,32 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
             />
           )}
         />
+        </div>
+        {tenantBaseMatches.length > TENANT_MATCHES_PAGE_SIZE ? (
+          <div className="flex justify-center">
+            <div className="mt-1 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setTenantPage((p) => Math.max(1, p - 1))}
+                disabled={tenantPage === 1}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {tenantPage} of {tenantTotalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setTenantPage((p) => Math.min(tenantTotalPages, p + 1))}
+                disabled={tenantPage === tenantTotalPages}
+                className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
         </div>
       ) : null}
 

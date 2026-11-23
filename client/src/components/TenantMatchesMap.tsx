@@ -58,15 +58,26 @@ function pinIcon(pin: ListingPin, selected: boolean) {
 function FitPins({ pinsKey, positions }: { pinsKey: string; positions: [number, number][] }) {
   const map = useMap()
   useEffect(() => {
-    if (positions.length === 0) {
-      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM)
-      return
+    const fit = () => {
+      const size = map.getSize()
+      if (size.x < 20 || size.y < 20) return
+      if (positions.length === 0) {
+        map.setView(DEFAULT_CENTER, DEFAULT_ZOOM)
+        return
+      }
+      if (positions.length === 1) {
+        map.setView(positions[0], 13)
+        return
+      }
+      map.fitBounds(latLngBounds(positions), {
+        paddingTopLeft: [176, 44],
+        paddingBottomRight: [48, 140],
+        maxZoom: 14,
+      })
     }
-    if (positions.length === 1) {
-      map.setView(positions[0], 13)
-      return
-    }
-    map.fitBounds(latLngBounds(positions), { padding: [42, 42], maxZoom: 14 })
+    fit()
+    const retry = window.setTimeout(fit, 80)
+    return () => window.clearTimeout(retry)
   }, [map, pinsKey, positions])
   return null
 }
@@ -200,11 +211,13 @@ function useIsDesktop() {
 
 export function TenantMatchesMap({
   cards,
+  matchCount,
   onApply,
   onToggleSaved,
   renderScore,
 }: {
   cards: TenantMapCard[]
+  matchCount: number
   onApply: (id: string) => void
   onToggleSaved: (id: string) => void
   renderScore: (id: string) => ReactNode
@@ -243,14 +256,14 @@ export function TenantMatchesMap({
       }
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [selectedId, mobileView])
+  }, [selectedId])
 
   const showMap = desktop || mobileView === 'map'
-  const mapHeight = !desktop && mobileView === 'map' ? `${Math.round(mapShare * 100)}%` : undefined
-  const sheetHeight = !desktop && mobileView === 'map' ? `${Math.round((1 - mapShare) * 100)}%` : undefined
+  const mapHeight = showMap && !desktop ? `${Math.round(mapShare * 100)}%` : undefined
+  const sheetHeight = desktop ? undefined : showMap ? `${Math.round((1 - mapShare) * 100)}%` : '100%'
 
   function onDragStart(event: PointerEvent<HTMLButtonElement>) {
-    if (desktop || mobileView !== 'map') return
+    if (!showMap || desktop) return
     dragOrigin.current = { y: event.clientY, share: mapShare }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -268,15 +281,16 @@ export function TenantMatchesMap({
   }
 
   return (
-    <div className="relative h-full">
+    <div className="relative h-[calc(100dvh-141px)] md:h-full">
       <div
         ref={splitRef}
-        className={`flex h-full overflow-hidden rounded-2xl border border-gray-200 bg-white ${
-          !desktop && mobileView === 'list' ? 'min-h-[calc(100dvh-8rem)] flex-col' : 'h-[calc(100dvh-8rem)] flex-col'
-        } md:h-full md:min-h-0 md:flex-row`}
+        className="flex h-full min-h-0 flex-col overflow-hidden md:flex-row md:rounded-2xl md:border md:border-gray-200 md:bg-white"
       >
-        {showMap ? (
-          <div className="relative min-h-0 md:h-full md:w-[60%]" style={mapHeight ? { height: mapHeight } : undefined}>
+          {showMap ? (
+          <div
+            className="relative min-h-[300px] w-full shrink-0 overflow-hidden md:h-full md:min-h-0 md:w-[60%] md:shrink"
+            style={mapHeight ? { height: mapHeight, flexBasis: mapHeight } : undefined}
+          >
             <MapContainer
               center={DEFAULT_CENTER}
               zoom={DEFAULT_ZOOM}
@@ -318,13 +332,15 @@ export function TenantMatchesMap({
               </ul>
             </div>
           </div>
-        ) : null}
+          ) : null}
 
         <section
-          className={`flex min-h-0 flex-col md:h-full md:w-[40%] ${showMap ? '' : 'flex-1'}`}
-          style={sheetHeight ? { height: sheetHeight } : undefined}
+          className={`z-10 flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-white md:h-full md:w-[40%] md:shrink md:rounded-none md:border-0 md:shadow-none ${
+            showMap && !desktop ? 'rounded-t-2xl border-x border-t border-gray-200 shadow-[0_-8px_24px_rgba(15,23,42,0.12)]' : ''
+          }`}
+          style={sheetHeight ? { height: sheetHeight, flexBasis: sheetHeight } : undefined}
         >
-          {!desktop && mobileView === 'map' ? (
+          {showMap && !desktop ? (
             <button
               type="button"
               aria-label="Drag to resize the list"
@@ -332,15 +348,13 @@ export function TenantMatchesMap({
               onPointerMove={onDragMove}
               onPointerUp={onDragEnd}
               onPointerCancel={onDragEnd}
-              className="flex w-full cursor-ns-resize touch-none justify-center bg-white py-2.5"
+              className="flex w-full shrink-0 cursor-ns-resize touch-none justify-center bg-white py-2.5"
             >
               <span className="h-1.5 w-12 rounded-full bg-gray-300" />
             </button>
-          ) : (
-            <div className="h-2 md:hidden" />
-          )}
-          <div className="px-4 pb-2">
-            <h2 className="text-lg font-bold text-gray-900">{cards.length} matches</h2>
+          ) : null}
+          <div className="shrink-0 px-4 pb-2">
+            <h2 className="text-lg font-bold text-gray-900">{matchCount} matches</h2>
             <p className="text-xs text-gray-500">Based on your preferences and compatibility.</p>
           </div>
           <div data-match-scroller className="min-h-0 flex-1 overflow-y-auto px-3 pb-24 md:pb-4">
