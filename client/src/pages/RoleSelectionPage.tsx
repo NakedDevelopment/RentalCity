@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/useAuth'
 import { trackTenantStep } from '../lib/trackTenantStep'
+import { markExplainerFirstInOnboarding, newTenantOnboardingPath } from '../../../shared/tenantQuestionnaireIntro'
+import { explainerFlagStore } from '../lib/explainerFlagStore'
 
 type Role = 'tenant' | 'landlord' | 'listing_agent'
 
@@ -24,8 +26,9 @@ export function RoleSelectionPage() {
       return
     }
     if (role === 'tenant') trackTenantStep('onboarding_role', user.id)
-    // Tenants → rental needs in app shell; Landlords → profile setup
-    navigate(role === 'tenant' ? '/rental-needs' : '/onboarding/profile')
+    // Tenants see the questionnaire explainer before preference steps. Landlords → profile setup.
+    if (role === 'tenant') markExplainerFirstInOnboarding(explainerFlagStore())
+    navigate(role === 'tenant' ? newTenantOnboardingPath() : '/onboarding/profile')
   }
 
   return (

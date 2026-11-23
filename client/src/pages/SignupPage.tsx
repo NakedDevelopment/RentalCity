@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { trackMetaEvent } from '../lib/metaPixel'
 import { rememberSignupRole, trackTenantStep } from '../lib/trackTenantStep'
+import { markExplainerFirstInOnboarding, newTenantOnboardingPath } from '../../../shared/tenantQuestionnaireIntro'
+import { explainerFlagStore } from '../lib/explainerFlagStore'
 
 type Role = 'tenant' | 'landlord' | 'listing_agent'
 
@@ -100,7 +102,8 @@ export function SignupPage() {
       if (role === 'landlord' || role === 'listing_agent') {
         navigate('/onboarding/profile', { replace: true })
       } else {
-        navigate('/rental-needs', { replace: true })
+        markExplainerFirstInOnboarding(explainerFlagStore())
+        navigate(newTenantOnboardingPath(), { replace: true })
       }
       return
     }

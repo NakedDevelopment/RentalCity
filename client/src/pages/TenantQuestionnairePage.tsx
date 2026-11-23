@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { rentalBudgetMonthlyRent } from '../../../shared/rentScore'
-import { entryAfterStartSurvey, questionnaireEntry } from '../../../shared/tenantQuestionnaireIntro'
+import {
+  actionAfterExplainerStart,
+  explainerContinuedToOnboarding,
+  explainerGatesOnboarding,
+  markExplainerContinuedToOnboarding,
+  shouldShowQuestionnaireIntro,
+} from '../../../shared/tenantQuestionnaireIntro'
+import { explainerFlagStore } from '../lib/explainerFlagStore'
 import { scoreTenantDimensions } from '../lib/tenantScoring'
 import { tenantQuestions } from '../lib/tenantQuestionnaire'
 import type { TenantQuestionId, TenantChoiceId } from '../lib/tenantQuestionnaire'
@@ -77,13 +83,14 @@ export function TenantQuestionnairePage() {
         else if (typeof savedIncome === 'string' && savedIncome.trim()) setMonthlyIncome(savedIncome.trim())
       }
 
-      const entry = questionnaireEntry({
+      const progress = {
         answers: questionnaireData?.answers && typeof questionnaireData.answers === 'object' && !Array.isArray(questionnaireData.answers)
           ? raw
           : null,
         bio: profileData?.bio ?? null,
-      })
-      setShowIntro((current) => (current === false ? false : entry.screen === 'intro'))
+      }
+      const continued = explainerContinuedToOnboarding(explainerFlagStore())
+      setShowIntro((current) => (current === false ? false : shouldShowQuestionnaireIntro(progress, continued)))
     }).catch(() => {
       if (!cancelled) setShowIntro(false)
     })
@@ -93,8 +100,14 @@ export function TenantQuestionnairePage() {
   }, [user])
 
   function startSurvey() {
-    const next = entryAfterStartSurvey()
-    setStep(next.step)
+    const store = explainerFlagStore()
+    const action = actionAfterExplainerStart(explainerGatesOnboarding(store))
+    if (action.type === 'onboarding') {
+      markExplainerContinuedToOnboarding(store)
+      navigate(action.path)
+      return
+    }
+    setStep(action.step)
     setShowIntro(false)
   }
 
@@ -175,14 +188,14 @@ export function TenantQuestionnairePage() {
   }
 
   if (!user || showIntro !== false) {
-    const shell = !user || showIntro === null
-      ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#fbfcfe]">
+    if (!user || showIntro === null) {
+      return (
+        <div className="flex items-center justify-center py-24">
           <span className="text-gray-500">Loading...</span>
         </div>
       )
-      : <TenantQuestionnaireIntro onStart={startSurvey} />
-    return createPortal(shell, document.body)
+    }
+    return <TenantQuestionnaireIntro onStart={startSurvey} />
   }
 
   return (
