@@ -1,0 +1,74 @@
+.listing-map-root.leaflet-container {
+  height: 100%;
+  width: 100%;
+  font-family: Inter, sans-serif;
+  background: #e7eef6;
+  border-radius: inherit;
+}
+
+.listing-price-pin {
+  background: transparent;
+  border: none;
+}
+
+.listing-pin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  box-sizing: border-box;
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+  font-family: Inter, sans-serif;
+}
+
+.listing-pin-pill.is-selected {
+  background: #3a7afe;
+  color: #fff;
+  border-color: #3a7afe;
+}
+
+.listing-pin-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.listing-pin-popup .leaflet-popup-content-wrapper {
+  border-radius: 14px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.listing-pin-popup .leaflet-popup-content {
+  margin: 0;
+  width: 210px !important;
+}
+
+.listing-pin-popup .leaflet-popup-content a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (max-width: 767px) {
+  .listing-map-root .leaflet-control-zoom {
+    display: none;
+  }
+
+  .listing-pin-popup .leaflet-popup-content {
+    width: 168px !important;
+  }
+
+  .listing-popup-photo {
+    max-height: 72px;
+  }
+}
