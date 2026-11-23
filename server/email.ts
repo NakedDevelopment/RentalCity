@@ -5,12 +5,17 @@
 // FROM_EMAIL missing) it logs a warning and returns false instead of throwing,
 // so the /api/estimate response is never blocked on email delivery.
 
-const MAILERSEND_API_KEY = process.env.MAILERSEND_API_KEY || ''
-const FROM_EMAIL = process.env.FROM_EMAIL || process.env.MAILERSEND_FROM_EMAIL || ''
-const FROM_NAME = process.env.FROM_NAME || 'Rental City'
+function mailerConfig() {
+  return {
+    apiKey: process.env.MAILERSEND_API_KEY || '',
+    fromEmail: process.env.FROM_EMAIL || process.env.MAILERSEND_FROM_EMAIL || '',
+    fromName: process.env.FROM_NAME || 'Rental City',
+  }
+}
 
 export function isEmailConfigured(): boolean {
-  return Boolean(MAILERSEND_API_KEY && FROM_EMAIL)
+  const { apiKey, fromEmail } = mailerConfig()
+  return Boolean(apiKey && fromEmail)
 }
 
 export interface EmailAttachment {
@@ -24,12 +29,14 @@ export interface SendEmailArgs {
   html: string
   text?: string
   attachments?: EmailAttachment[]
+  replyTo?: { email: string; name?: string }
 }
 
 // Returns true if the email was accepted by the provider, false otherwise.
 // Never throws.
-export async function sendReportEmail({ to, subject, html, text, attachments }: SendEmailArgs): Promise<boolean> {
-  if (!isEmailConfigured()) {
+export async function sendReportEmail({ to, subject, html, text, attachments, replyTo }: SendEmailArgs): Promise<boolean> {
+  const { apiKey, fromEmail, fromName } = mailerConfig()
+  if (!apiKey || !fromEmail) {
     console.warn(
       'Email not sent: MAILERSEND_API_KEY / FROM_EMAIL not configured. Skipping report email to',
       to,
@@ -40,6 +47,10 @@ export async function sendReportEmail({ to, subject, html, text, attachments }: 
     console.warn('Email not sent: invalid recipient address', to)
     return false
   }
+  const reply =
+    replyTo && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo.email)
+      ? { email: replyTo.email, ...(replyTo.name ? { name: replyTo.name } : {}) }
+      : null
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 8000)
@@ -47,16 +58,17 @@ export async function sendReportEmail({ to, subject, html, text, attachments }: 
     const res = await fetch('https://api.mailersend.com/v1/email', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${MAILERSEND_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        from: { email: FROM_EMAIL, name: FROM_NAME },
+        from: { email: fromEmail, name: fromName },
         to: [{ email: to }],
         subject,
         html,
         text: text || stripHtml(html),
+        ...(reply ? { reply_to: reply } : {}),
         ...(attachments?.length
           ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.contentBase64, disposition: 'attachment' })) }
           : {}),

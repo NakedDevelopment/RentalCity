@@ -87,6 +87,7 @@ import {
   buildSupportNotificationEmail,
   type LandlordLifecycleKind,
 } from './email'
+import { submitListingTourRequest, supabaseTourStore } from './tourRequest'
 import Stripe from 'stripe'
 import type { Request, Response } from 'express'
 
@@ -2119,6 +2120,29 @@ app.post('/api/support/notify', async (req, res) => {
     user.email || null,
   )
   return res.json({ sent })
+})
+
+app.post('/api/listing-tour-requests', async (req, res) => {
+  const admin = getSupabaseAdmin()
+  if (!admin) return res.status(500).json({ error: 'Server configuration error' })
+
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null
+  const user = await authUser(token)
+  if (!user) return res.status(401).json({ error: 'Authentication required' })
+
+  try {
+    const result = await submitListingTourRequest(
+      supabaseTourStore(admin),
+      { id: user.id },
+      req.body,
+      sendReportEmail,
+      lifecycleAppUrl(),
+    )
+    return res.status(result.status).json(result.body)
+  } catch (err) {
+    console.error('tour request failed:', err instanceof Error ? err.message : String(err))
+    return res.status(500).json({ error: "We couldn't send your request. Please try again." })
+  }
 })
 
 type SupportNotifyRow = { id: string; subject: string; message: string; user_id: string }
