@@ -1,4 +1,8 @@
+import React from 'react'
 import { ArrowRight, Clock, House, Star } from 'lucide-react'
+
+// Classic JSX (`tsx --test` without the client tsconfig) compiles elements to React.createElement.
+void React
 
 const cards = [
   {
