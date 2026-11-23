@@ -3,12 +3,15 @@ import { createPortal } from 'react-dom'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { PawPrint, Car, WashingMachine, Dumbbell } from 'lucide-react'
 import { usePlaidLink } from 'react-plaid-link'
+import { TenantMatchesMap, type TenantMapCard } from '../components/TenantMatchesMap'
+import { formatBedsBaths } from '../lib/listingMapPins'
+import { scoreBarColor } from '../lib/matchScoreColor'
 import { formatBedrooms, formatCurrency } from '../lib/propertyDraft'
 import { useAuth } from '../lib/useAuth'
 import { useProfileRole } from '../lib/useProfileRole'
 import { supabase } from '../lib/supabase'
 import { trackMetaEvent } from '../lib/metaPixel'
-import { buildFallbackAddress, useStreetViewFallback } from '../lib/streetViewFallback'
+import { buildFallbackAddress } from '../lib/streetViewFallback'
 import {
   fetchLandlordMatchCatalog,
   fetchMatchesForTenant,
@@ -37,7 +40,11 @@ type MatchCard = {
   compatibility: string
   tags: string[]
   bedrooms: number
+  bathrooms: number
   monthly_rent_cents: number
+  lat: number | null
+  lng: number | null
+  address: string
   amenitiesList: string[]
   landlordId: string
   landlordDisplayName: string | null
@@ -93,36 +100,6 @@ function formatRelativeTime(createdAt: string) {
   if (diffDays === 1) return 'Applied 1 day ago'
   if (diffDays < 7) return `Applied ${diffDays} days ago`
   return `Applied ${Math.floor(diffDays / 7)} weeks ago`
-}
-
-function MatchCardPhoto({ url, alt, fallbackAddress }: { url: string | null; alt: string; fallbackAddress?: string }) {
-  const [broken, setBroken] = useState(false)
-  const show = Boolean(url) && !broken
-  const streetViewUrl = useStreetViewFallback(show ? null : fallbackAddress || null)
-  return (
-    <div className="mb-4 aspect-[16/7] overflow-hidden rounded-lg bg-gray-100">
-      {show ? (
-        <img
-          src={url as string}
-          alt={alt}
-          className="h-full w-full object-cover"
-          loading="lazy"
-          onError={() => setBroken(true)}
-        />
-      ) : streetViewUrl ? (
-        <div className="relative h-full w-full">
-          <img src={streetViewUrl} alt={alt} className="h-full w-full object-cover" loading="lazy" />
-          <span className="absolute bottom-2 left-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
-            Street View
-          </span>
-        </div>
-      ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <span className="text-sm text-gray-500">No photos yet</span>
-        </div>
-      )}
-    </div>
-  )
 }
 
 /** Tenant `tenant_preferences.lease_length_months` — same shaping as Account lease duration. */
@@ -239,14 +216,6 @@ const DIMENSION_WEIGHTS: Record<keyof MatchDimensions, number> = {
   policy: 0.1,
 }
 
-// 0 = red, 1 = green (pct is 0–100). Returns bg- and border- class names.
-function scoreBarColor(pct: number): { bg: string; border: string } {
-  if (pct <= 25) return { bg: 'bg-[#BAD1FF]', border: 'border-[#BAD1FF]' }
-  if (pct <= 50) return { bg: 'bg-[#85AAFF]', border: 'border-[#85AAFF]' }
-  if (pct <= 75) return { bg: 'bg-[#5C8AFF]', border: 'border-[#5C8AFF]' }
-  return { bg: 'bg-[#3A7AFE]', border: 'border-[#3A7AFE]' }
-}
-
 function ScoreBar({ value, max = 10 }: { value: number; max?: number }) {
   const pct = Math.min(100, Math.max(0, (value / max) * 100))
   const { bg } = scoreBarColor(pct)
@@ -335,6 +304,73 @@ function MatchScoreDisplay({
   )
 }
 
+function TenantMatchScoreSlot({
+  matchData,
+  loading,
+  compatibility,
+}: {
+  matchData: MatchResult | undefined
+  loading: boolean
+  compatibility: string
+}) {
+  const [open, setOpen] = useState(false)
+  if (loading && !matchData) {
+    return <p className="text-sm text-gray-500">Loading match score…</p>
+  }
+  if (matchData) {
+    const isQuestionnaireMissing = matchData.reasons?.some((reason) =>
+      reason.toLowerCase().includes('tenant questionnaire not completed'),
+    ) ?? false
+    if (isQuestionnaireMissing) {
+      return (
+        <div>
+          <p className="text-sm text-gray-600">
+            Complete the short questionnaire to see your match score with this property.
+          </p>
+          <Link
+            to="/tenant-questionnaire"
+            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-[#3A7AFE] hover:text-[#2558CC]"
+          >
+            Complete questionnaire
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
+      )
+    }
+    if (matchData.eligible && matchData.dimensions) {
+      return (
+        <div>
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            className="text-xs font-semibold text-[#3A7AFE] hover:underline"
+          >
+            {open ? 'Hide score breakdown' : 'Score breakdown'}
+          </button>
+          {open ? (
+            <div className="mt-2">
+              <MatchScoreDisplay overall={matchData.overall} dimensions={matchData.dimensions} compact />
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+    return (
+      <span className="text-sm text-amber-700">
+        Not eligible — {matchData.reasons.join(' ')}
+      </span>
+    )
+  }
+  return (
+    <p className="text-sm text-gray-700">
+      <span className="font-semibold text-gray-900">Compatibility:</span>{' '}
+      {compatibility}
+    </p>
+  )
+}
+
 export function YourMatchesPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -387,11 +423,9 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   const [loading, setLoading] = useState(true)
   const [, setError] = useState<string | null>(null)
   const MATCHES_PAGE_SIZE = 6
-  const TENANT_MATCHES_PAGE_SIZE = 6
   /** Eligible tenant ↔ property matches (questionnaire complete), by match score */
   const MAX_TENANT_TOP_MATCHES = 10
   const [landlordPage, setLandlordPage] = useState(1)
-  const [tenantPage, setTenantPage] = useState(1)
   const [tenantOverallScore, setTenantOverallScore] = useState<number | null>(null)
   const [tenantDimensionScores, setTenantDimensionScores] = useState<MatchDimensions | null>(null)
   const [tenantQuestionnaireLoading, setTenantQuestionnaireLoading] = useState(false)
@@ -572,7 +606,7 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
     const { data, error } = await supabase
       .from('properties')
       .select(
-        'id, title, address_line1, city, state, postal_code, bedrooms, bathrooms, amenities, monthly_rent_cents, landlord_id, photo_urls, photo_labels, landlord:landlord_id(display_name, avatar_url)',
+        'id, title, address_line1, city, state, postal_code, lat, lng, bedrooms, bathrooms, amenities, monthly_rent_cents, landlord_id, photo_urls, photo_labels, landlord:landlord_id(display_name, avatar_url)',
       )
       .eq('status', 'active')
       .order('created_at', { ascending: false })
@@ -589,6 +623,8 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       city: string
       state: string | null
       postal_code?: string | null
+      lat?: number | null
+      lng?: number | null
       bedrooms: number
       bathrooms: number
       amenities: unknown
@@ -615,7 +651,11 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
           compatibility: 'Property matched based on your preferences.',
           tags: [formatBedrooms(p.bedrooms), ...amenityDisplay.slice(0, 3)].filter(Boolean),
           bedrooms: Number(p.bedrooms) || 0,
+          bathrooms: Number(p.bathrooms) || 0,
           monthly_rent_cents: Number(p.monthly_rent_cents) || 0,
+          lat: p.lat == null ? null : Number(p.lat),
+          lng: p.lng == null ? null : Number(p.lng),
+          address: [p.address_line1, p.city, p.state].filter(Boolean).join(', '),
           amenitiesList: amenityList,
           landlordId: p.landlord_id,
           landlordDisplayName: landlord?.display_name?.trim() || null,
@@ -1187,12 +1227,38 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   )
   const tenantBaseMatches =
     profileRole === 'tenant' && tenantOverallScore != null ? matchesToShow : filteredMatches
-  const tenantTotalPages = Math.max(1, Math.ceil(tenantBaseMatches.length / TENANT_MATCHES_PAGE_SIZE))
-  const tenantPageStart = (tenantPage - 1) * TENANT_MATCHES_PAGE_SIZE
-  const paginatedTenantMatches = tenantBaseMatches.slice(
-    tenantPageStart,
-    tenantPageStart + TENANT_MATCHES_PAGE_SIZE,
-  )
+  const tenantMapCards = useMemo<TenantMapCard[]>(() => (
+    tenantBaseMatches.map((match) => {
+      const score = matchByPropertyId[match.id]
+      const baths = Number(match.bathrooms) || 0
+      return {
+        id: match.id,
+        price: match.price,
+        pricePin: formatCurrency(match.monthly_rent_cents),
+        priceMo: `${formatCurrency(match.monthly_rent_cents)}/mo`,
+        bedsBaths: formatBedsBaths(match.bedrooms, baths, '|'),
+        bedsBathsPopup: formatBedsBaths(match.bedrooms, baths, '·'),
+        address: match.address,
+        photoUrl: match.photoUrl,
+        photoAlt: match.photoAlt,
+        photoAddress: match.photoAddress,
+        lat: match.lat,
+        lng: match.lng,
+        matchScore: score?.eligible ? score.overall : null,
+        applied: appliedIds.has(match.id),
+        statusHref: applicationIdByPropertyId[match.id]
+          ? `/account/application/${applicationIdByPropertyId[match.id]}`
+          : null,
+        landlordHref: tenantLandlordProfilePath(match.landlordId, {
+          propertyId: match.id,
+          returnTo: `${location.pathname}${location.search}`,
+        }),
+        landlordName: match.landlordDisplayName,
+        title: match.title,
+        saved: savedIds.has(match.id),
+      }
+    })
+  ), [tenantBaseMatches, matchByPropertyId, appliedIds, applicationIdByPropertyId, location.pathname, location.search, savedIds])
 
   useEffect(() => {
     setLandlordPage(1)
@@ -1201,14 +1267,6 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
   useEffect(() => {
     if (landlordPage > landlordTotalPages) setLandlordPage(landlordTotalPages)
   }, [landlordPage, landlordTotalPages])
-
-  useEffect(() => {
-    setTenantPage(1)
-  }, [activeTab, bedrooms, priceRange, amenities])
-
-  useEffect(() => {
-    if (tenantPage > tenantTotalPages) setTenantPage(tenantTotalPages)
-  }, [tenantPage, tenantTotalPages])
 
   if (roleLoading || profileRole === null) {
     return (
@@ -2019,171 +2077,22 @@ const { role: profileRole, displayName, landlordSurveyCompletedAt, tenantSurveyC
       </div>
 
       {hasMatches ? (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          {paginatedTenantMatches.map((match) => {
-            const isSaved = savedIds.has(match.id)
-            const isApplied = appliedIds.has(match.id)
-            return (
-              <div
-                key={match.id}
-                className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-[0_14px_32px_rgba(0,0,0,0.03)] transition-shadow hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)]"
-              >
-                <div className="mb-4 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link
-                      to={`/property/${match.id}?from=matches`}
-                      className="font-semibold text-gray-900 hover:underline"
-                    >
-                      {match.title}
-                    </Link>
-                    <p className="mt-1 text-[2rem] font-medium leading-none text-gray-900">{match.price}</p>
-                    <p className="mt-2 text-sm text-gray-600">
-                      Listed by{' '}
-                      <Link
-                        to={tenantLandlordProfilePath(match.landlordId, {
-                          propertyId: match.id,
-                          returnTo: `${location.pathname}${location.search}`,
-                        })}
-                        className="font-medium text-gray-900 underline decoration-gray-300 underline-offset-2 hover:text-gray-950"
-                      >
-                        {match.landlordDisplayName?.trim() || 'View landlord profile'}
-                      </Link>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleSaved(match.id)}
-                    className="rounded-full p-1.5 text-gray-400 hover:bg-gray-50 hover:text-gray-700"
-                    aria-label={isSaved ? 'Unsave' : 'Save'}
-                  >
-                    {isSaved ? (
-                      <svg className="h-5 w-5 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 21s-6.716-4.535-9.193-8.12C.99 10.257 1.37 6.84 4.127 4.963c2.168-1.476 5.02-1.05 6.873 1.027 1.853-2.076 4.705-2.503 6.873-1.027 2.757 1.877 3.137 5.294 1.32 7.917C18.716 16.465 12 21 12 21z" />
-                      </svg>
-                    ) : (
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-
-                <MatchCardPhoto url={match.photoUrl} alt={match.photoAlt} fallbackAddress={match.photoAddress} />
-
-                <div className="flex-1 flex flex-col">
-                  {(() => {
-                    const matchData = matchByPropertyId[match.id]
-                    if (matchLoading && !matchData) {
-                      return (
-                        <p className="mb-4 text-sm text-gray-500">Loading match score…</p>
-                      )
-                    }
-                    if (matchData) {
-                      const isQuestionnaireMissing = matchData.reasons?.some((r) =>
-                            r.toLowerCase().includes('tenant questionnaire not completed')
-                          ) ?? false
-                      if (isQuestionnaireMissing) {
-                        return (
-                          <div className="mb-4">
-                            <p className="text-sm text-gray-600">
-                              Complete the short questionnaire to see your match score with this property.
-                            </p>
-                            <Link
-                              to="/tenant-questionnaire"
-                              className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-[#3A7AFE] hover:text-[#2558CC]"
-                            >
-                              Complete questionnaire
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </Link>
-                          </div>
-                        )
-                      }
-                      return (
-                        <div className="mb-3">
-                          {matchData.eligible && matchData.dimensions ? (
-                            <MatchScoreDisplay
-                              overall={matchData.overall}
-                              dimensions={matchData.dimensions}
-                            />
-                          ) : (
-                            <span className="text-sm text-amber-700">
-                              Not eligible — {matchData.reasons.join(' ')}
-                            </span>
-                          )}
-                        </div>
-                      )
-                    }
-                    return (
-                      <p className="mb-4 text-sm text-gray-700">
-                        <span className="font-semibold text-gray-900">Compatibility:</span>{' '}
-                        {match.compatibility}
-                      </p>
-                    )
-                  })()}
-                  <div className="mt-2 mb-3 flex items-center gap-4 text-xs text-gray-500 whitespace-nowrap overflow-hidden">
-                    {match.tags.map((tag) => (
-                      <span key={tag}>{tag}</span>
-                    ))}
-                  </div>
-                  <div className="mt-auto flex gap-3">
-                    {isApplied ? (
-                      <span className="flex flex-1 items-center justify-center gap-2 rounded-lg gradient-primary px-4 py-3 text-sm font-medium text-white">
-                        Applied
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleApplyNow(match)}
-                        className="w-full rounded-lg btn-primary px-4 py-3 text-sm font-medium text-white"
-                      >
-                        Apply Now
-                      </button>
-                    )}
-                  </div>
-                  {isApplied && applicationIdByPropertyId[match.id] ? (
-                    <Link
-                      to={`/account/application/${applicationIdByPropertyId[match.id]}`}
-                      className="mt-2 block text-center text-sm font-medium text-gray-900 underline decoration-gray-300 underline-offset-2 hover:text-gray-950"
-                    >
-                      Application status
-                    </Link>
-                  ) : null}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
-
-      {hasMatches &&
-        tenantBaseMatches.length > TENANT_MATCHES_PAGE_SIZE ? (
-        <div className="flex justify-center">
-          <div className="mt-1 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setTenantPage((p) => Math.max(1, p - 1))}
-              disabled={tenantPage === 1}
-              className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <span className="text-sm text-gray-600">
-              Page {tenantPage} of {tenantTotalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setTenantPage((p) => Math.min(tenantTotalPages, p + 1))}
-              disabled={tenantPage === tenantTotalPages}
-              className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
+        <div className="min-h-[70vh] md:h-[calc(100dvh-8.5rem)] md:min-h-[560px]">
+        <TenantMatchesMap
+          cards={tenantMapCards}
+          onApply={(id) => {
+            const match = tenantBaseMatches.find((item) => item.id === id)
+            if (match) void handleApplyNow(match)
+          }}
+          onToggleSaved={toggleSaved}
+          renderScore={(id) => (
+            <TenantMatchScoreSlot
+              matchData={matchByPropertyId[id]}
+              loading={matchLoading}
+              compatibility={tenantBaseMatches.find((item) => item.id === id)?.compatibility ?? ''}
+            />
+          )}
+        />
         </div>
       ) : null}
 
