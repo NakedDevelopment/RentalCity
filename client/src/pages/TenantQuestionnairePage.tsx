@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { rentalBudgetMonthlyRent } from '../../../shared/rentScore'
+import { entryAfterStartSurvey, questionnaireEntry } from '../../../shared/tenantQuestionnaireIntro'
 import { scoreTenantDimensions } from '../lib/tenantScoring'
 import { tenantQuestions } from '../lib/tenantQuestionnaire'
 import type { TenantQuestionId, TenantChoiceId } from '../lib/tenantQuestionnaire'
 import { useAuth } from '../lib/useAuth'
 import { supabase } from '../lib/supabase'
 import { useTrackTenantStep } from '../lib/trackTenantStep'
+import { TenantQuestionnaireIntro } from '../components/TenantQuestionnaireIntro'
 
 function rentalBudgetChoiceFromRange(
   minBudgetCents: number | null,
@@ -36,9 +39,11 @@ export function TenantQuestionnairePage() {
   const [completeError, setCompleteError] = useState<string | null>(null)
 
   const [bio, setBio] = useState('')
+  const [showIntro, setShowIntro] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (!user) return
+    let cancelled = false
     Promise.all([
       supabase.from('profiles').select('bio').eq('id', user.id).maybeSingle(),
       supabase.from('tenant_questionnaire').select('answers').eq('user_id', user.id).maybeSingle(),
@@ -48,9 +53,10 @@ export function TenantQuestionnairePage() {
         .eq('user_id', user.id)
         .maybeSingle(),
     ]).then(([{ data: profileData }, { data: questionnaireData }, { data: preferencesData }]) => {
+      if (cancelled) return
       if (profileData?.bio?.trim()) setBio(profileData.bio.trim())
       const raw =
-        questionnaireData?.answers && typeof questionnaireData.answers === 'object'
+        questionnaireData?.answers && typeof questionnaireData.answers === 'object' && !Array.isArray(questionnaireData.answers)
           ? (questionnaireData.answers as Record<string, unknown>)
           : {}
       const budgetDefault = rentalBudgetChoiceFromRange(
@@ -70,8 +76,27 @@ export function TenantQuestionnairePage() {
         if (savedIncome != null && typeof savedIncome === 'number') setMonthlyIncome(String(savedIncome))
         else if (typeof savedIncome === 'string' && savedIncome.trim()) setMonthlyIncome(savedIncome.trim())
       }
+
+      const entry = questionnaireEntry({
+        answers: questionnaireData?.answers && typeof questionnaireData.answers === 'object' && !Array.isArray(questionnaireData.answers)
+          ? raw
+          : null,
+        bio: profileData?.bio ?? null,
+      })
+      setShowIntro((current) => (current === false ? false : entry.screen === 'intro'))
+    }).catch(() => {
+      if (!cancelled) setShowIntro(false)
     })
+    return () => {
+      cancelled = true
+    }
   }, [user])
+
+  function startSurvey() {
+    const next = entryAfterStartSurvey()
+    setStep(next.step)
+    setShowIntro(false)
+  }
 
   const visibleQuestions = tenantQuestions.filter(
     (q) => !q.showIf || answers[q.showIf.questionId] === q.showIf.equals,
@@ -149,12 +174,15 @@ export function TenantQuestionnairePage() {
     navigate('/onboarding/identity-verification')
   }
 
-  if (!user) {
-    return (
-      <div className="flex flex-1 items-center justify-center px-4 py-12">
-        <span className="text-gray-500">Loading...</span>
-      </div>
-    )
+  if (!user || showIntro !== false) {
+    const shell = !user || showIntro === null
+      ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#fbfcfe]">
+          <span className="text-gray-500">Loading...</span>
+        </div>
+      )
+      : <TenantQuestionnaireIntro onStart={startSurvey} />
+    return createPortal(shell, document.body)
   }
 
   return (
