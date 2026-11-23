@@ -20,6 +20,7 @@ import {
 import { formatBedrooms, formatBathrooms, formatCurrency } from '../lib/propertyDraft'
 import { supabase } from '../lib/supabase'
 import { buildFallbackAddress, useStreetViewFallback } from '../lib/streetViewFallback'
+import { TourRequestButton } from '../components/TourRequestButton'
 
 type PropertyDetails = {
   id: string
@@ -413,6 +414,7 @@ export function PropertyDetailsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </Link>
+            <TourRequestButton propertyId={property.id} />
             <Link
               to="/messages"
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
